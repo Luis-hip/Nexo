@@ -355,7 +355,7 @@ nexo/
 └─ README.md
 ```
 
-**Ramas:** `main` (protegida, solo por *pull request* con CI en verde) y ramas cortas `modulo/descripcion` (p. ej. `tablero/arrastrar-tarjetas`). **Commits** en español, formato `tipo(modulo): descripción` (`feat`, `fix`, `docs`, `test`, `chore`). Cada módulo tiene **un dueño** para evitar choques.
+**Ramas:** tres ramas compartidas y protegidas (solo por *pull request* con CI en verde; nadie sube directo): `dev` (integración y pruebas conjuntas), `main` (versión estable) y `produccion` (definitiva, la que se despliega). Cada integrante tiene una rama propia creada desde `dev`: `Dev_Luis`, `Dev_Jova`, `Dev_Carlos`, `Dev_Isac` (sin separar back y front). Flujo: `Dev_<Nombre>` → PR a `dev` → PR a `main` → PR a `produccion`. Las ramas cortas `modulo/descripcion` (p. ej. `tablero/arrastrar-tarjetas`) pueden seguir existiendo, pero salen de la rama `Dev_<Nombre>` de su dueño y vuelven a ella por PR. Detalle en `docs/decisiones.md`, DEC-001. **Commits** en español, formato `tipo(modulo): descripción` (`feat`, `fix`, `docs`, `test`, `chore`). Cada módulo tiene **un dueño** para evitar choques.
 
 **Módulos y dueños sugeridos:** base/BD/roles/permisos (Luis), front y tablero (Luis + Jova), chat y WhatsApp (Luis, con apoyo), artículo (Carlos, Isac, Jova), QA (todos).
 

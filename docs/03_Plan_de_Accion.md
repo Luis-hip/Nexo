@@ -20,7 +20,7 @@ Correspondencia con el cronograma del equipo (`05_Cronograma.md`): la Fase 0 es 
 
 ## 1. Reglas de ejecución (para personas y para IAs)
 
-1. **Un cambio, una rama, un *pull request*.** `main` solo recibe PR con CI en verde.
+1. **Un cambio, un *pull request*.** Cada persona trabaja en su rama `Dev_<Nombre>` (o en una rama corta que sale de ella) y el cambio avanza por PR: `Dev_<Nombre>` → `dev` → `main` → `produccion`. Nadie sube directo a `dev`, `main` ni `produccion`: solo reciben PR con CI en verde (ver `docs/decisiones.md`, DEC-001).
 2. **No inventar.** Si algo no está en `01`/`02`, se elige lo más simple, se anota en `docs/decisiones.md` y se sigue; si es irreversible, se pregunta.
 3. **No tocar el esquema aplicado.** Todo cambio de BD es una migración nueva.
 4. **Probar antes de marcar terminado.** Cada criterio de terminado se verifica ejecutando algo (pruebas, la app en el navegador), no leyendo el código.
