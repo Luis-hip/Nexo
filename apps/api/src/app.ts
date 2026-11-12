@@ -1,10 +1,13 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { registrarAutenticacion } from './autenticacion';
 import type { Config } from './config';
 import type { BaseDatos } from './db/conexion';
 import { ErrorNexo } from './errores';
 import { rutasDev } from './rutas/dev';
+import { rutasPersonal } from './rutas/personal';
+import { rutasYo } from './rutas/yo';
 
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
   const app = Fastify({
@@ -14,8 +17,13 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
         : { redact: ['req.headers.cookie', 'req.headers.authorization'] },
   });
 
-  await app.register(cors, { origin: config.APP_URL, credentials: true });
+  await app.register(cors, {
+    origin: config.APP_URL,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  });
   await app.register(cookie);
+  registrarAutenticacion(app, db);
 
   app.setErrorHandler((error, _req, res) => {
     if (error instanceof ErrorNexo) {
@@ -36,6 +44,8 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   );
 
   app.get('/salud', async () => ({ estado: 'ok' }));
+  await app.register(rutasYo, { db });
+  await app.register(rutasPersonal, { db });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });

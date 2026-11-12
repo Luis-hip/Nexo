@@ -14,6 +14,10 @@
 | DEC-008 | 2026-11-12 | Tokens de color tomados de la tabla de `01` | Provisional (Fase 1) |
 | DEC-009 | 2026-11-12 | Nombre del repositorio y licencia | Licencia pendiente |
 | DEC-010 | 2026-11-12 | Versiones fijadas al crear el repositorio | Vigente |
+| DEC-011 | 2026-11-12 | Matriz de permisos: textos y acciones del prototipo, evaluación estricta | Vigente |
+| DEC-012 | 2026-11-12 | Estados y reglas de las tareas personales | Vigente |
+| DEC-013 | 2026-11-12 | Las tareas personales no generan eventos de dominio | Vigente |
+| DEC-014 | 2026-11-12 | Una tarea personal ajena responde 404, no 403 | Vigente |
 
 ---
 
@@ -100,3 +104,28 @@ El plan sugería `nexo`; el repositorio ya existía como `Luis-hip/Nexo` y se co
 ## DEC-010 · Versiones fijadas al crear el repositorio
 
 Quedan en `pnpm-lock.yaml`. Principales: Node ≥ 22 (CI con 22), pnpm 10, React 19.3, react-router 8, Vite 8, Tailwind 4.3, Fastify 5, Kysely 0.29 + kysely-codegen 0.20, node-pg-migrate 9, Zod 4, Vitest 5, ESLint 10. `fastify`, `kysely` y `zod` son las del stack de `01`, sección 6; ninguna librería tuvo que sustituirse.
+
+## DEC-011 · Matriz de permisos: textos y acciones del prototipo, evaluación estricta
+
+`packages/shared/src/permisos.ts` implementa la matriz de `01`, sección 2.2, con una prueba parametrizada (una fila de la tabla = un caso por perfil).
+
+- Los **textos de motivo** son los de `src/lib/permisos.ts` del prototipo. Tres acciones no traían texto (`ver_resumen`, `salir_equipo`, `canal_invitados`) y usan uno genérico.
+- El prototipo define **10 acciones más** que la tabla de `01` (guardas de vistas: `archivar_equipo`, `ver_actividad`, `crear_plantilla`, `usar_plantilla`, `ver_miembros`, `ver_calendario`, `ver_archivos`, `ver_sprints`, `configurar_equipo`, `canal_invitados`). Se conservan con sus mismos valores; los nombres pasan de `kebab-case` a `snake_case`.
+- **Diferencia deliberada con el prototipo:** allí las reglas (p) y (c) se daban por cumplidas si no se pasaba contexto. Aquí `puede()` es **estricta**: (p) exige `esPropio: true` y (c) exige `esCompartido: true`. El servidor nunca supone.
+- El resultado negativo incluye `oculto` (como en el prototipo) para que la web sepa si esconder el control o mostrarlo deshabilitado con el motivo.
+
+## DEC-012 · Estados y reglas de las tareas personales
+
+- Los nombres de estado válidos son los de la BD (`propuesta`, `backlog`, `aceptada`, `habilitada`, `en_curso`, `atascada`, `completada`, `rechazada`), no los de la prosa de `01`, sección 2.4.
+- Una tarea personal no pasa por triaje ni asignación: usa `backlog`, `habilitada` (por hacer; la usa la semilla), `en_curso`, `atascada` (con motivo) y `completada`. En el espacio personal la persona puede moverla libremente entre esos estados (el tablero personal del prototipo tiene las columnas Por hacer, En curso, Atascada y Hecha).
+- Al completar: avance 100 %, `completada_en = ahora` y `resultado = con_retraso` si ya pasó `vence_en`, o `a_tiempo` en otro caso. Al reabrir se limpian `completada_en` y `resultado`.
+- `responsable_id` de una tarea personal es su dueño.
+- Las etiquetas personales no distinguen mayúsculas (`citext`) y son privadas de cada persona.
+
+## DEC-013 · Las tareas personales no generan eventos de dominio
+
+`eventos_dominio` alimenta el tiempo real, las notificaciones y WhatsApp, todos de equipo. Las tareas personales son privadas, así que solo dejan una fila en `actividad` (ámbito personal) al crearse, completarse y eliminarse, en la misma transacción.
+
+## DEC-014 · Una tarea personal ajena responde 404, no 403
+
+Para no revelar que una tarea privada existe, cualquier ruta sobre una tarea personal de otra persona responde `404 tarea_no_encontrada`. La privacidad se garantiza porque toda consulta filtra por `dueno_id`; hay una prueba automática por cada ruta.
