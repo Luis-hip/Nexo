@@ -66,28 +66,35 @@ docs/            Especificaciones, decisiones y progreso
 
 Convención completa en [`docs/decisiones.md`, DEC-001](docs/decisiones.md#dec-001--convención-de-ramas-y-pull-requests).
 
-- **`main`** es la rama protegida. Nadie hace _push_ directo a `main`.
-- Cada integrante tiene **dos ramas**, creadas desde `main`, con el formato **`Dev_<Nombre>_<Back|Front>`**:
+```
+Dev_Luis ─┐
+Dev_Jova ─┤
+Dev_Carlos┼─ PR ─► dev ─ PR ─► main ─ PR ─► produccion
+Dev_Isac ─┘
+```
 
-  | Integrante | Backend           | Frontend           |
-  | ---------- | ----------------- | ------------------ |
-  | Luis       | `Dev_Luis_Back`   | `Dev_Luis_Front`   |
-  | Jova       | `Dev_Jova_Back`   | `Dev_Jova_Front`   |
-  | Carlos     | `Dev_Carlos_Back` | `Dev_Carlos_Front` |
-  | Isac       | `Dev_Isac_Back`   | `Dev_Isac_Front`   |
+| Rama                                             | Para qué                                      | Quién sube                           |
+| ------------------------------------------------ | --------------------------------------------- | ------------------------------------ |
+| `produccion`                                     | Definitiva: la que se despliega               | Nadie directo; solo PR desde `main`  |
+| `main`                                           | Versión estable revisada                      | Nadie directo; solo PR desde `dev`   |
+| `dev`                                            | Integración y pruebas conjuntas               | Nadie directo; solo PR desde `Dev_*` |
+| `Dev_Luis`, `Dev_Jova`, `Dev_Carlos`, `Dev_Isac` | Rama de cada integrante (back y front juntos) | Solo su dueño                        |
 
-- Trabajo de API y BD en la rama `_Back`; trabajo de la web en la rama `_Front`.
-- Los **pull requests salen de una rama `Dev_*` hacia `main`** y solo se fusionan con la **CI en verde**.
-- Antes de abrir un PR, trae lo último de `main` a tu rama y resuelve ahí los conflictos.
+- **`dev`, `main` y `produccion` están protegidas:** solo se fusionan por pull request con la **CI en verde**.
+- Cada integrante trabaja en su rama `Dev_<Nombre>`, creada desde `dev`, sin separar back y front.
+- **Ramas cortas** (opcionales) con el formato `modulo/descripcion` (p. ej. `tablero/arrastrar-tarjetas`): salen de tu rama `Dev_<Nombre>` y vuelven a ella por PR. No uses `Dev_Luis/…` como nombre: Git no lo permite si ya existe `Dev_Luis`.
+- Antes de abrir un PR a `dev`, trae lo último de `dev` a tu rama y resuelve ahí los conflictos.
+- Las promociones `dev` → `main` y `main` → `produccion` se fusionan con **Create a merge commit** (no squash), para que las ramas compartan historia.
 - Commits en español: `tipo(modulo): descripción` (`feat`, `fix`, `docs`, `test`, `chore`).
 
 Flujo típico:
 
 ```bash
-git switch Dev_Luis_Back
-git pull origin main
+git switch Dev_Luis
+git pull origin dev
 # … cambios …
 git commit -m "feat(api): descripción del cambio"
-git push origin Dev_Luis_Back
-# Abrir el PR Dev_Luis_Back → main en GitHub y esperar la CI en verde
+git push origin Dev_Luis
+# En GitHub: PR Dev_Luis → dev, esperar la CI en verde y fusionar.
+# Después, PR dev → main y PR main → produccion, cada uno con la CI en verde.
 ```
