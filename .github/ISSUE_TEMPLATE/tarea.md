@@ -19,4 +19,4 @@ labels: tarea
 
 ## Dueño y rama
 
-<!-- Persona responsable y rama Dev_<Nombre>_<Back|Front> donde se trabaja. -->
+<!-- Persona responsable y rama Dev_<Nombre> (o rama corta modulo/descripcion que sale de ella) donde se trabaja. -->
