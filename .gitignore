@@ -1,0 +1,31 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Compilados
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Entorno y secretos (nunca al repositorio)
+.env
+.env.*
+!.env.example
+
+# Registros
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editores y sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Pruebas
+playwright-report/
+test-results/

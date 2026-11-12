@@ -1,0 +1,6 @@
+pnpm-lock.yaml
+dist
+coverage
+docs
+*.sql
+apps/api/src/db/tipos.ts

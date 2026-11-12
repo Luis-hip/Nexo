@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'Dev_*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Verificar (BD, tipos, lint, pruebas, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nexo
+          POSTGRES_PASSWORD: nexo
+          POSTGRES_DB: nexo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexo -d nexo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://nexo:nexo@localhost:5432/nexo
+      DEV_LOGIN_ENABLED: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrar y sembrar (BD vacía)
+        run: pnpm db:reset
+
+      - name: Pruebas SQL (deben salir 11 OK)
+        run: pnpm db:test
+
+      - name: Pruebas SQL con psql (forma literal del plan, 0.4)
+        run: |
+          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f apps/api/db/tests/pruebas.sql 2>&1 | tee salida-pruebas.txt
+          total=$(grep -c "NOTICE:  OK" salida-pruebas.txt || true)
+          echo "Líneas OK: $total"
+          test "$total" -eq 11
+
+      - name: Restablecer la BD para las pruebas de la API
+        run: pnpm db:reset
+
+      - name: Tipos de Kysely al día con la BD
+        run: |
+          pnpm db:tipos
+          git diff --exit-code -- apps/api/src/db/tipos.ts || (echo "::error::apps/api/src/db/tipos.ts no coincide con la BD. Ejecuta pnpm db:tipos y súbelo." && exit 1)
+
+      - name: Verificar tipos
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Formato
+        run: pnpm format:check
+
+      - name: Pruebas
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

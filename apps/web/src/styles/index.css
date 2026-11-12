@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme inline {
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+  --color-line: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text-primary);
+  --color-muted: var(--text-secondary);
+  --color-brand: var(--brand-primary);
+  --color-on-brand: var(--brand-on-primary);
+  --color-ok: var(--signal-ok-text);
+  --color-warn: var(--signal-warn-text);
+  --color-danger: var(--signal-danger-text);
+  --color-info: var(--signal-info-text);
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+html {
+  font-size: calc(100% * var(--font-scale));
+}
+
+body {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
