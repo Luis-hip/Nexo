@@ -4,7 +4,7 @@
 
 | ID | Fecha | Tema | Estado |
 |---|---|---|---|
-| DEC-001 | 2026-11-12 | Convención de ramas y *pull requests* | Vigente (reemplaza la de `01`, sección 9) |
+| DEC-001 | 2026-11-12 | Convención de ramas y *pull requests* (`dev`, `main`, `produccion`, `Dev_<Nombre>`) | Vigente (revisada el mismo día; actualiza `01`, sección 9, y `03`, regla 1) |
 | DEC-002 | 2026-11-12 | Primera ejecución de los scripts SQL (tarea 0.4) | Vigente |
 | DEC-003 | 2026-11-12 | La migración `0001` no tiene bajada | Vigente |
 | DEC-004 | 2026-11-12 | Cómo se ejecutan las pruebas SQL | Vigente |
@@ -19,27 +19,40 @@
 
 ## DEC-001 · Convención de ramas y *pull requests*
 
-**Contexto.** `01`, sección 9, proponía ramas cortas `modulo/descripcion`. El equipo decidió trabajar con una rama fija por persona y por capa.
+**Contexto.** `01`, sección 9, proponía solo `main` y ramas cortas `modulo/descripcion`. El equipo decidió tener ramas compartidas por etapa y una rama fija por persona. (Una primera versión de esta decisión, con dos ramas por persona `Dev_<Nombre>_<Back|Front>`, se descartó el mismo día antes de subirse: no se separa back y front.)
 
 **Decisión.**
 
-- `main` es la rama protegida e integradora. **No se hace *push* directo a `main`** (solo el commit inicial del repositorio).
-- Cada integrante tiene **dos ramas**, creadas desde `main`, con el formato `Dev_<Nombre>_<Back|Front>`:
+Ramas compartidas (protegidas: **nadie sube directo**, solo por *pull request* con la CI en verde):
 
-  | Integrante | Backend (`apps/api`, BD) | Frontend (`apps/web`) |
-  |---|---|---|
-  | Luis | `Dev_Luis_Back` | `Dev_Luis_Front` |
-  | Jova | `Dev_Jova_Back` | `Dev_Jova_Front` |
-  | Carlos | `Dev_Carlos_Back` | `Dev_Carlos_Front` |
-  | Isac | `Dev_Isac_Back` | `Dev_Isac_Front` |
+| Rama | Para qué | Recibe PR desde |
+|---|---|---|
+| `dev` | Integración y pruebas conjuntas del equipo | `Dev_<Nombre>` |
+| `main` | Versión estable revisada | `dev` |
+| `produccion` | Definitiva: **la que se despliega** (Fase 6) | `main` |
 
-- `packages/shared` y `docs/` se tocan desde la rama de la capa a la que pertenezca el cambio (Back si lo pide la API, Front si lo pide la web).
-- Los *pull requests* salen **de una rama `Dev_*` hacia `main`** y solo se fusionan con la **CI en verde** (la CI corre en cada *push* a `main` y a `Dev_*`, y en cada PR hacia `main`).
-- Antes de abrir un PR, la rama se actualiza con `main` (`git pull origin main` o *rebase*) y se resuelven los conflictos en la propia rama.
-- Después de fusionar, la rama `Dev_*` **no se borra**: se sigue usando y se vuelve a actualizar con `main`.
+Ramas personales, creadas desde `dev`, **una por integrante** (sin separar back y front):
+
+| Integrante | Rama |
+|---|---|
+| Luis | `Dev_Luis` |
+| Jova | `Dev_Jova` |
+| Carlos | `Dev_Carlos` |
+| Isac | `Dev_Isac` |
+
+**Flujo:** `Dev_<Nombre>` → PR a `dev` → PR a `main` → PR a `produccion`.
+
+- Cada quien sube (*push*) solo a su rama `Dev_<Nombre>`.
+- **Ramas cortas opcionales** (`modulo/descripcion`, p. ej. `tablero/arrastrar-tarjetas`): salen de la rama `Dev_<Nombre>` de su dueño y vuelven a ella por PR. No pueden llamarse `Dev_Luis/…`, porque Git no admite una rama `Dev_Luis` y otra `Dev_Luis/algo` a la vez.
+- Antes de abrir un PR a `dev`, la rama personal se actualiza con `dev` (`git pull origin dev`) y los conflictos se resuelven en la propia rama.
+- Las promociones `dev` → `main` y `main` → `produccion` se fusionan con **«Create a merge commit»** (no *squash* ni *rebase*), para que las tres ramas compartan historia y no aparezcan conflictos falsos en la siguiente promoción.
+- Después de fusionar, la rama `Dev_<Nombre>` **no se borra**: se sigue usando y se vuelve a actualizar con `dev`.
+- La CI corre en cada *push* a `main`, `dev`, `produccion` y `Dev_*`, y en cada PR hacia ellas. El check obligatorio es **«Verificar (BD, tipos, lint, pruebas, build)»**.
 - Commits en español con el formato `tipo(modulo): descripción` (`feat`, `fix`, `docs`, `test`, `chore`), como dice `01`, sección 9.
 
-**Consecuencia.** Las ramas son de larga vida, así que hay que traer `main` a menudo para evitar PR grandes. Mantener los PR pequeños (un cambio por PR) sigue siendo la regla de `03`, sección 1.1. En GitHub hay que proteger `main` (Settings → Branches): exigir PR, exigir el check **CI / Verificar** en verde y prohibir *push* directo.
+**Protección en GitHub** (Settings → Branches, para `main`, `dev` y `produccion`): exigir PR antes de fusionar, exigir el check de CI en verde con la rama al día, incluir a los administradores y prohibir *push* forzado y borrado. Las reglas de protección solo se aplican en repositorios **públicos** o con plan de pago: si el repositorio pasa a privado con el plan gratuito, GitHub deja de hacerlas cumplir.
+
+**Consecuencia.** Un cambio tarda tres PR en llegar a `produccion`, a cambio de probarse juntos en `dev` antes de `main`. Las ramas personales son de larga vida: hay que traer `dev` a menudo y mantener los PR pequeños (un cambio por PR, `03`, sección 1.1).
 
 ## DEC-002 · Primera ejecución de los scripts SQL (tarea 0.4)
 

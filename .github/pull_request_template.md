@@ -1,6 +1,6 @@
 ## Qué cambia
 
-<!-- Resumen breve. Rama de origen: Dev_<Nombre>_<Back|Front> → main -->
+<!-- Resumen breve. Flujo: Dev_<Nombre> → dev → main → produccion (ramas cortas → Dev_<Nombre>). -->
 
 ## Cómo probarlo
 
@@ -13,7 +13,8 @@
 ## Lista de comprobación
 
 - [ ] La CI está en verde.
-- [ ] Sale de mi rama `Dev_<Nombre>_<Back|Front>` hacia `main`, actualizada con `main`.
+- [ ] Va en el sentido del flujo (`Dev_<Nombre>` → `dev` → `main` → `produccion`) y la rama de origen está al día con la de destino.
+- [ ] Si es una promoción (`dev` → `main` o `main` → `produccion`), se fusiona con «Create a merge commit».
 - [ ] Commits en español con formato `tipo(modulo): descripción`.
 - [ ] Si toca la BD: es una migración **nueva** y regeneré los tipos (`pnpm db:tipos`).
 - [ ] Si tomé una decisión no definida en `docs/01`/`docs/02`: la anoté en `docs/decisiones.md`.
