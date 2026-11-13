@@ -14,6 +14,13 @@
 | DEC-008 | 2026-11-12 | Tokens de color tomados de la tabla de `01` | Provisional (Fase 1) |
 | DEC-009 | 2026-11-12 | Nombre del repositorio y licencia | Licencia pendiente |
 | DEC-010 | 2026-11-12 | Versiones fijadas al crear el repositorio | Vigente |
+| DEC-011 | 2026-11-12 | Matriz de permisos: textos y acciones del prototipo, evaluación estricta | Vigente |
+| DEC-012 | 2026-11-12 | Estados y reglas de las tareas personales | Vigente |
+| DEC-013 | 2026-11-12 | Las tareas personales no generan eventos de dominio | Vigente |
+| DEC-014 | 2026-11-12 | Una tarea personal ajena responde 404, no 403 | Vigente |
+| DEC-015 | 2026-11-12 | Cómo se reutilizó el prototipo en la web | Vigente |
+| DEC-016 | 2026-11-12 | Alcance de la Fase 1 frente al prototipo | Vigente |
+| DEC-017 | 2026-11-12 | Preferencias de apariencia: servidor y copia local | Vigente |
 
 ---
 
@@ -100,3 +107,55 @@ El plan sugería `nexo`; el repositorio ya existía como `Luis-hip/Nexo` y se co
 ## DEC-010 · Versiones fijadas al crear el repositorio
 
 Quedan en `pnpm-lock.yaml`. Principales: Node ≥ 22 (CI con 22), pnpm 10, React 19.3, react-router 8, Vite 8, Tailwind 4.3, Fastify 5, Kysely 0.29 + kysely-codegen 0.20, node-pg-migrate 9, Zod 4, Vitest 5, ESLint 10. `fastify`, `kysely` y `zod` son las del stack de `01`, sección 6; ninguna librería tuvo que sustituirse.
+
+## DEC-011 · Matriz de permisos: textos y acciones del prototipo, evaluación estricta
+
+`packages/shared/src/permisos.ts` implementa la matriz de `01`, sección 2.2, con una prueba parametrizada (una fila de la tabla = un caso por perfil).
+
+- Los **textos de motivo** son los de `src/lib/permisos.ts` del prototipo. Tres acciones no traían texto (`ver_resumen`, `salir_equipo`, `canal_invitados`) y usan uno genérico.
+- El prototipo define **10 acciones más** que la tabla de `01` (guardas de vistas: `archivar_equipo`, `ver_actividad`, `crear_plantilla`, `usar_plantilla`, `ver_miembros`, `ver_calendario`, `ver_archivos`, `ver_sprints`, `configurar_equipo`, `canal_invitados`). Se conservan con sus mismos valores; los nombres pasan de `kebab-case` a `snake_case`.
+- **Diferencia deliberada con el prototipo:** allí las reglas (p) y (c) se daban por cumplidas si no se pasaba contexto. Aquí `puede()` es **estricta**: (p) exige `esPropio: true` y (c) exige `esCompartido: true`. El servidor nunca supone.
+- El resultado negativo incluye `oculto` (como en el prototipo) para que la web sepa si esconder el control o mostrarlo deshabilitado con el motivo.
+
+## DEC-012 · Estados y reglas de las tareas personales
+
+- Los nombres de estado válidos son los de la BD (`propuesta`, `backlog`, `aceptada`, `habilitada`, `en_curso`, `atascada`, `completada`, `rechazada`), no los de la prosa de `01`, sección 2.4.
+- Una tarea personal no pasa por triaje ni asignación: nace en `habilitada` («Por hacer», como en la semilla y en el tablero personal del prototipo) y usa `habilitada`, `en_curso`, `atascada` (con motivo) y `completada`; `backlog` se acepta por compatibilidad y se muestra también como «Por hacer». En el espacio personal la persona puede moverla libremente entre esos estados (el tablero personal del prototipo tiene las columnas Por hacer, En curso, Atascada y Hecha).
+- Al completar: avance 100 %, `completada_en = ahora` y `resultado = con_retraso` si ya pasó `vence_en`, o `a_tiempo` en otro caso. Al reabrir se limpian `completada_en` y `resultado`.
+- `responsable_id` de una tarea personal es su dueño.
+- Las etiquetas personales no distinguen mayúsculas (`citext`) y son privadas de cada persona.
+
+## DEC-013 · Las tareas personales no generan eventos de dominio
+
+`eventos_dominio` alimenta el tiempo real, las notificaciones y WhatsApp, todos de equipo. Las tareas personales son privadas, así que solo dejan una fila en `actividad` (ámbito personal) al crearse, completarse y eliminarse, en la misma transacción.
+
+## DEC-014 · Una tarea personal ajena responde 404, no 403
+
+Para no revelar que una tarea privada existe, cualquier ruta sobre una tarea personal de otra persona responde `404 tarea_no_encontrada`. La privacidad se garantiza porque toda consulta filtra por `dueno_id`; hay una prueba automática por cada ruta.
+
+## DEC-015 · Cómo se reutilizó el prototipo en la web
+
+El zip del prototipo (Figma Make) **no se versiona**: es referencia. De él se copiaron a `apps/web`:
+
+- **Tal cual (adaptando solo tipos estrictos):** `src/index.css` (tokens y utilidades), `components/ui/` (básicos, formularios, capas), `lib/color.ts`, `lib/fechas.ts`, el logo y el recorrido.
+- **Adaptado para recibir datos por props en vez de leer el estado simulado:** `identidad.tsx` (el avatar recibe `persona`), `HillChart` (recibe `puntos`), `AppShell`, navegación, páginas públicas, personales y de bienvenida.
+- **No se copió:** `store/` (`useReducer`, `localStorage`), el Simulador, `/sistema` ni `/indice`.
+- **Nuevo, porque el prototipo no lo traía:** `Tabla` (lo pide la tarea 1.1), `EstadosDatos` (sustituye la carga simulada `Carga`), `SinConexion`, el cliente de API y las consultas con TanStack Query.
+- Los nombres de estado pasan de `en-curso`/`con-retraso` a los de la BD (`en_curso`, `con_retraso`).
+- Las reglas (permisos, validación) usan `packages/shared`, las mismas que el servidor. Los formularios validan con los esquemas Zod compartidos; **no se instaló `react-hook-form`** todavía porque los formularios de esta fase son pequeños y siguen el patrón del prototipo (se evalúa en la Fase 2 con el formulario de tarea de equipo).
+- La burbuja de WhatsApp usa los colores de WhatsApp, no los tokens (excepción deliberada, como en el prototipo).
+
+## DEC-016 · Alcance de la Fase 1 frente al prototipo
+
+- **`/entrar` es el acceso de desarrollo:** lista los usuarios de la semilla (`GET /dev/usuarios`) y entra con `POST /dev/login`. Si la API no tiene `DEV_LOGIN_ENABLED=true`, muestra un aviso. El formulario real llega en la Fase 5.
+- **Rutas aún sin construir** muestran una pantalla «Próximamente» con su fase, para que la navegación del prototipo no lleve a un 404.
+- **`EquipoGuard`** decide con la membresía que devuelve `GET /yo`. Las rutas de equipo de la Fase 2 la comprueban además en el servidor.
+- **Búsqueda (GL-01):** simple, por título, entre las tareas personales.
+- **Inicio personal:** incluye el Hill Chart en solo lectura (el plan lo situaba en la Fase 3; se adelantó porque el componente ya hacía falta para la portada). Arrastrar para actualizar el avance sigue en la Fase 3.
+- **Calendario personal (PER-04):** muestra entregas de tareas; no hay API de reuniones todavía.
+- **Sin subida de archivos:** se quitaron el adjunto de contacto y la foto del onboarding hasta que exista el almacenamiento (Fase 3).
+- **Tareas personales nuevas:** nacen en `habilitada` («Por hacer»); ver DEC-012.
+
+## DEC-017 · Preferencias de apariencia: servidor y copia local
+
+La fuente de verdad es `preferencias_usuario` (viene en `GET /yo`, se cambia con `PATCH /yo/preferencias`). La web guarda una copia en `localStorage` para pintar el tema correcto antes de cargar la sesión y en las páginas públicas; al entrar, lo del servidor manda. En las páginas públicas (sin sesión) el selector de tema solo cambia la copia local.

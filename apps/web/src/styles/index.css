@@ -1,7 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 @import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 @import './tokens.css';
 
 @theme inline {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --color-canvas: var(--bg-canvas);
   --color-surface: var(--bg-surface);
   --color-raised: var(--bg-raised);
@@ -11,28 +16,136 @@
   --color-muted: var(--text-secondary);
   --color-brand: var(--brand-primary);
   --color-on-brand: var(--brand-on-primary);
-  --color-ok: var(--signal-ok-text);
-  --color-warn: var(--signal-warn-text);
-  --color-danger: var(--signal-danger-text);
-  --color-info: var(--signal-info-text);
-  --font-sans: 'Inter', system-ui, sans-serif;
+  --color-ok: var(--signal-ok);
+  --color-warn: var(--signal-warn);
+  --color-danger: var(--signal-danger);
+  --color-info: var(--signal-info);
+  --color-ok-text: var(--signal-ok-text);
+  --color-warn-text: var(--signal-warn-text);
+  --color-danger-text: var(--signal-danger-text);
+  --color-info-text: var(--signal-info-text);
+  --shadow-soft: var(--shadow-soft);
+  --shadow-modal: var(--shadow-modal);
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
 }
 
-html {
-  font-size: calc(100% * var(--font-scale));
+@layer base {
+  html {
+    scrollbar-gutter: stable;
+    font-size: calc(16px * var(--font-scale));
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-canvas text-fg font-sans antialiased;
+    line-height: 1.5;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand-primary) 25%, transparent);
+  }
 }
 
-body {
-  background: var(--bg-canvas);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+html[data-density='compacta'] {
+  --density: 0.8;
+}
+
+@keyframes nx-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes nx-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+@keyframes nx-left {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes nx-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes nx-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+.anim-fade {
+  animation: nx-fade 160ms ease-out;
+}
+.anim-up {
+  animation: nx-up 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.anim-left {
+  animation: nx-left 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.skeleton {
+  background: var(--border-subtle);
+  animation: nx-pulse 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+.typing-dot {
+  animation: nx-dot 1.2s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
   }
+}
+html[data-motion='reducido'] *,
+html[data-motion='reducido'] *::before,
+html[data-motion='reducido'] *::after {
+  animation-duration: 1ms !important;
+  transition-duration: 1ms !important;
 }

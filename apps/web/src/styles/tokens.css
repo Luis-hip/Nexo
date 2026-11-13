@@ -1,9 +1,8 @@
 /*
- * Tokens de diseño (docs/01, sección 5.2). Únicas fuentes de color: prohibido usar colores sueltos.
- * En la Fase 1 se sustituyen por los de src/index.css del prototipo si difieren.
+ * Tokens de diseño de Nexo (docs/01, sección 5.2), copiados de src/index.css del prototipo.
+ * Únicas fuentes de color: prohibido usar colores sueltos.
  */
 :root {
-  color-scheme: light;
   --bg-canvas: #ffffff;
   --bg-surface: #f6f7f9;
   --bg-raised: #ffffff;
@@ -14,41 +13,21 @@
   --brand-primary: #4f46e5;
   --brand-on-primary: #ffffff;
   --signal-ok: #1f9d55;
-  --signal-ok-text: #15803d;
   --signal-warn: #d97706;
-  --signal-warn-text: #b45309;
   --signal-danger: #dc2626;
-  --signal-danger-text: #b91c1c;
   --signal-info: #2563eb;
+  /* Variantes de texto: ajustadas para alcanzar 4.5:1 sobre fondos claros */
+  --signal-ok-text: #15803d;
+  --signal-warn-text: #b45309;
+  --signal-danger-text: #b91c1c;
   --signal-info-text: #1d4ed8;
+  --shadow-soft: 0 1px 2px rgb(17 24 39 / 0.06), 0 1px 3px rgb(17 24 39 / 0.08);
+  --shadow-modal: 0 20px 50px -12px rgb(17 24 39 / 0.28);
   --font-scale: 1;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-    --bg-canvas: #0f1115;
-    --bg-surface: #171a21;
-    --bg-raised: #1f232b;
-    --border-subtle: #2a2f3a;
-    --border-strong: #5b6474;
-    --text-primary: #f3f4f6;
-    --text-secondary: #a3aab8;
-    --brand-primary: #818cf8;
-    --brand-on-primary: #0f1115;
-    --signal-ok: #4ade80;
-    --signal-ok-text: #4ade80;
-    --signal-warn: #fbbf24;
-    --signal-warn-text: #fbbf24;
-    --signal-danger: #f87171;
-    --signal-danger-text: #f87171;
-    --signal-info: #60a5fa;
-    --signal-info-text: #60a5fa;
-  }
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
+[data-theme='dark'] {
   --bg-canvas: #0f1115;
   --bg-surface: #171a21;
   --bg-raised: #1f232b;
@@ -59,11 +38,14 @@
   --brand-primary: #818cf8;
   --brand-on-primary: #0f1115;
   --signal-ok: #4ade80;
-  --signal-ok-text: #4ade80;
   --signal-warn: #fbbf24;
-  --signal-warn-text: #fbbf24;
   --signal-danger: #f87171;
-  --signal-danger-text: #f87171;
   --signal-info: #60a5fa;
+  --signal-ok-text: #4ade80;
+  --signal-warn-text: #fbbf24;
+  --signal-danger-text: #f87171;
   --signal-info-text: #60a5fa;
+  --shadow-soft: 0 0 0 1px var(--border-subtle);
+  --shadow-modal: 0 0 0 1px var(--border-subtle), 0 24px 60px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
 }
