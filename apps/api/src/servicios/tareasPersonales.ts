@@ -56,6 +56,8 @@ export function crear(
         responsable_id: usuarioId,
         creada_por: usuarioId,
         codigo: 0, // lo asigna el disparador trg_tareas_codigo
+        // Sin triaje: una tarea personal nace lista para hacerse («Por hacer»).
+        estado: 'habilitada',
         titulo: datos.titulo,
         descripcion: datos.descripcion,
         prioridad: datos.prioridad,

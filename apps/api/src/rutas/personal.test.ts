@@ -92,7 +92,7 @@ describe.skipIf(!DATABASE_URL)('espacio personal', () => {
       });
       expect(tarea).toMatchObject({
         titulo: 'Leer el capítulo 3',
-        estado: 'backlog',
+        estado: 'habilitada',
         version: 1,
         etiquetas: ['Lectura', 'redes'],
       });
@@ -221,7 +221,7 @@ describe.skipIf(!DATABASE_URL)('espacio personal', () => {
 
       expect(await consulta('etiqueta=filtro-xyz')).toEqual([tarea.id]);
       expect(await consulta('q=único xyz')).toEqual([tarea.id]);
-      expect(await consulta('estado=backlog')).toContain(tarea.id);
+      expect(await consulta('estado=habilitada')).toContain(tarea.id);
       expect(await consulta('estado=en_curso&estado=completada')).not.toContain(tarea.id);
     });
 

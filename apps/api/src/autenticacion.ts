@@ -29,7 +29,16 @@ export function registrarAutenticacion(app: FastifyInstance, db: BaseDatos): voi
     const fila = await db
       .selectFrom('sesiones as s')
       .innerJoin('usuarios as u', 'u.id', 's.usuario_id')
-      .select(['s.id as sesion_id', 'u.id', 'u.correo', 'u.nombre', 'u.cargo', 'u.avatar_url'])
+      .select([
+        's.id as sesion_id',
+        'u.id',
+        'u.correo',
+        'u.nombre',
+        'u.cargo',
+        'u.descripcion',
+        'u.zona_horaria',
+        'u.avatar_url',
+      ])
       .where('s.token_hash', '=', hashToken(token))
       .where('s.revocada_en', 'is', null)
       .where('s.expira_en', '>', new Date())
@@ -43,6 +52,8 @@ export function registrarAutenticacion(app: FastifyInstance, db: BaseDatos): voi
         correo: fila.correo,
         nombre: fila.nombre,
         cargo: fila.cargo,
+        descripcion: fila.descripcion,
+        zona_horaria: fila.zona_horaria,
         avatar_url: fila.avatar_url,
       },
     };
