@@ -29,3 +29,6 @@ Thumbs.db
 # Pruebas
 playwright-report/
 test-results/
+
+# Herramientas locales del asistente
+.claude/
