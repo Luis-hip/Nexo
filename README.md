@@ -2,7 +2,7 @@
 
 Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (hasta 8 miembros activos), con una aportación propia: **avisos en el grupo de WhatsApp del equipo**, configurados por el líder y con consentimiento individual.
 
-> Estado: **Fase 0 · Arranque** (ver [`docs/progreso.md`](docs/progreso.md)).
+> Estado: **Fase 1 · Base, roles y espacio personal** (ver [`docs/progreso.md`](docs/progreso.md)).
 
 ## Documentación
 
@@ -37,7 +37,7 @@ pnpm dev
 
 `pnpm db:reset` borra el esquema local, aplica las migraciones y carga la semilla. `pnpm db:test` debe terminar con **11 pruebas SQL OK**. La web queda en http://localhost:5173 y la API en http://localhost:3000.
 
-**Acceso de desarrollo.** Con `DEV_LOGIN_ENABLED=true`, `POST /dev/login` con `{ "email": "valeria@nexo.mx" }` crea una sesión para cualquier usuario de la semilla (`GET /dev/usuarios` los lista). El servidor no arranca en producción con esa variable activa.
+**Acceso de desarrollo.** Abre http://localhost:5173/entrar y elige un usuario de la semilla (por ejemplo Paola, que solo tiene espacio personal, o Valeria, líder del Equipo Nexo). Solo funciona con `DEV_LOGIN_ENABLED=true`; el servidor no arranca en producción con esa variable activa. En desarrollo, http://localhost:5173/interna/componentes muestra todos los componentes de la interfaz.
 
 ## Scripts
 
