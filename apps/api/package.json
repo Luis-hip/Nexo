@@ -21,6 +21,7 @@
     "@fastify/rate-limit": "^11.2.2",
     "@nexo/shared": "workspace:*",
     "fastify": "^5.12.8",
+    "fractional-indexing": "^4.0.0",
     "kysely": "^0.29.9",
     "pg": "^8.23.1",
     "tsx": "^4.23.15",
