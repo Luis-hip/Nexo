@@ -2,3 +2,5 @@ export * from './constantes';
 export * from './esquemas';
 export * from './permisos';
 export * from './tareas';
+export * from './estados';
+export * from './equipos';

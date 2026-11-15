@@ -3,6 +3,7 @@ import {
   Bell,
   Check,
   ChevronsUpDown,
+  Clock,
   Compass,
   HelpCircle,
   LogOut,
@@ -128,7 +129,15 @@ function Shell({ yo }: { yo: Yo }) {
   const tareaParam = sp.get('tarea');
 
   const acciones: AccionesGlobales = {
-    nuevaTarea: () => setFormTarea(true),
+    // En un equipo, el formulario y el detalle los pinta el propio equipo (ver EquipoGuard).
+    nuevaTarea: () =>
+      equipoId
+        ? setSp((previo) => {
+            const p = new URLSearchParams(previo);
+            p.set('nueva', 'tarea');
+            return p;
+          })
+        : setFormTarea(true),
     abrirTarea: (id) =>
       setSp((previo) => {
         const p = new URLSearchParams(previo);
@@ -142,8 +151,21 @@ function Shell({ yo }: { yo: Yo }) {
     setSp(p, { replace: true });
   };
 
-  // En la Fase 1 solo se crean tareas personales; en un equipo el botón llega con la Fase 2.
-  const crear = !equipoId ? { etiqueta: 'Nueva tarea', accion: () => setFormTarea(true) } : null;
+  // Acción de crear según el perfil: el líder crea, el integrante propone, el invitado no.
+  const crear =
+    perfil === 'invitado'
+      ? null
+      : {
+          etiqueta: perfil === 'integrante' ? 'Proponer tarea' : 'Nueva tarea',
+          accion: acciones.nuevaTarea,
+        };
+  const membresia = yo.equipos.find((e) => e.id === equipoId);
+  // Se fija al montar: el aviso de caducidad no necesita precisión de segundos.
+  const [ahora] = useState(() => Date.now());
+  const diasInvitado =
+    membresia?.rol === 'invitado' && membresia.caduca_en
+      ? (new Date(membresia.caduca_en).getTime() - ahora) / 86_400_000
+      : null;
 
   // Atajos de teclado globales: Ctrl/⌘+K busca, N crea.
   useEffect(() => {
@@ -295,6 +317,23 @@ function Shell({ yo }: { yo: Yo }) {
                 conexión.
               </Banner>
             )}
+            {diasInvitado !== null && diasInvitado > 0 && (
+              <Banner
+                tono={diasInvitado < 1 ? 'danger' : diasInvitado < 3 ? 'warn' : 'info'}
+                icono={<Clock />}
+                className="mb-4"
+              >
+                <span data-name="NX/IN-04-Banner-caducidad">
+                  Tu acceso como invitado caduca{' '}
+                  <strong className="tabular">
+                    {diasInvitado < 1
+                      ? `en ${Math.max(1, Math.round(diasInvitado * 24))} h`
+                      : `en ${Math.ceil(diasInvitado)} días`}
+                  </strong>
+                  . Si necesitas más tiempo, pídeselo al líder.
+                </span>
+              </Banner>
+            )}
             <Outlet />
           </main>
 
@@ -365,7 +404,7 @@ function Shell({ yo }: { yo: Yo }) {
           <Busqueda abierto={busqueda} onCerrar={() => setBusqueda(false)} />
           <Tour abierto={tour} onCerrar={cerrarTour} />
           {formTarea && <TareaForm abierto onCerrar={() => setFormTarea(false)} />}
-          {tareaParam && <DetalleTareaPanel id={tareaParam} onCerrar={cerrarTarea} />}
+          {tareaParam && !equipoId && <DetalleTareaPanel id={tareaParam} onCerrar={cerrarTarea} />}
         </div>
       </AccionesCtx.Provider>
     </SesionCtx.Provider>

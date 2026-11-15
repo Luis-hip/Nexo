@@ -9,3 +9,7 @@ export const ERRORES_BD = {
 } as const;
 
 export type CodigoErrorBd = keyof typeof ERRORES_BD;
+
+/** Mensaje para la persona cuando el equipo ya alcanzó su tope de miembros (NX001). */
+export const mensajeEquipoLleno = (max: number) =>
+  `El equipo ya tiene ${max} ${max === 1 ? 'miembro' : 'miembros'}.`;

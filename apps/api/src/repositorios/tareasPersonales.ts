@@ -5,11 +5,11 @@ import type {
   Subtarea,
   TareaPersonal,
 } from '@nexo/shared';
-import type { Kysely, Selectable } from 'kysely';
-import type { DB, VTareasSemaforo } from '../db/tipos';
+import type { Selectable } from 'kysely';
+import type { Ejecutor } from '../db/conexion';
+import type { VTareasSemaforo } from '../db/tipos';
 
-/** Conexión o transacción: los repositorios no saben en cuál corren. */
-export type Ejecutor = Kysely<DB>;
+export type { Ejecutor };
 
 type FilaTarea = Selectable<VTareasSemaforo>;
 

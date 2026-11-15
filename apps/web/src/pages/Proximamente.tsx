@@ -1,7 +1,6 @@
 import { Hammer } from 'lucide-react';
-import { Link, Outlet, useParams } from 'react-router';
-import { perfilEn, useSesion } from '@/components/shell/contexto';
-import { SinPermisos, Vacio } from '@/components/ui';
+import { Link } from 'react-router';
+import { Vacio } from '@/components/ui';
 
 /** Pantalla de una sección que el plan construye en una fase posterior (docs/progreso.md). */
 export function Proximamente({ titulo, fase }: { titulo: string; fase: number }) {
@@ -21,23 +20,4 @@ export function Proximamente({ titulo, fase }: { titulo: string; fase: number })
       }
     />
   );
-}
-
-/**
- * Guarda del espacio de equipo: la persona debe ser miembro activo. La membresía viene de
- * GET /yo (la API); cada ruta de equipo de la Fase 2 la vuelve a comprobar en el servidor.
- */
-export function EquipoGuard() {
-  const yo = useSesion();
-  const { equipo } = useParams();
-  if (!perfilEn(yo, equipo ?? null)) {
-    return (
-      <SinPermisos
-        motivo="No perteneces a este equipo o el equipo no existe. Para unirte necesitas un enlace o código de invitación del líder."
-        salida="/app/equipos/unirse"
-        textoSalida="Unirme con un código"
-      />
-    );
-  }
-  return <Outlet />;
 }

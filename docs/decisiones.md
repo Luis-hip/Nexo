@@ -21,6 +21,12 @@
 | DEC-015 | 2026-11-12 | Cómo se reutilizó el prototipo en la web | Vigente |
 | DEC-016 | 2026-11-12 | Alcance de la Fase 1 frente al prototipo | Vigente |
 | DEC-017 | 2026-11-12 | Preferencias de apariencia: servidor y copia local | Vigente |
+| DEC-018 | 2026-11-15 | Equipos: acceso por membresía y 404 a quien no pertenece | Vigente |
+| DEC-019 | 2026-11-15 | Invitaciones: código, enlace y reglas | Vigente |
+| DEC-020 | 2026-11-15 | Tareas de equipo: destino, triaje y asignación | Vigente |
+| DEC-021 | 2026-11-15 | Orden con índice fraccionario y concurrencia | Vigente |
+| DEC-022 | 2026-11-15 | Los eventos de dominio se registran; aún nadie los consume | Vigente |
+| DEC-023 | 2026-11-15 | Lo que la Fase 2 deja para la Fase 3 | Vigente |
 
 ---
 
@@ -159,3 +165,43 @@ El zip del prototipo (Figma Make) **no se versiona**: es referencia. De él se c
 ## DEC-017 · Preferencias de apariencia: servidor y copia local
 
 La fuente de verdad es `preferencias_usuario` (viene en `GET /yo`, se cambia con `PATCH /yo/preferencias`). La web guarda una copia en `localStorage` para pintar el tema correcto antes de cargar la sesión y en las páginas públicas; al entrar, lo del servidor manda. En las páginas públicas (sin sesión) el selector de tema solo cambia la copia local.
+
+## DEC-018 · Equipos: acceso por membresía y 404 a quien no pertenece
+
+Cada ruta de `/equipos/:id/*` pasa por `contextoEquipo()`: sesión → membresía **activa** en **ese** equipo → permiso de la matriz. Quien no pertenece recibe `404 equipo_no_encontrado`, igual que si el equipo no existiera, para no revelar equipos ajenos (misma idea que DEC-014). Un invitado cuyo acceso caducó recibe `403 acceso_caducado` (pantalla FALT-02). Un equipo archivado es de solo lectura para todo lo que escribe. Un invitado solo alcanza las tareas compartidas con su membresía y para él el backlog, el triaje y los conteos responden 403.
+
+## DEC-019 · Invitaciones: código, enlace y reglas
+
+- El código tiene el formato del prototipo (`NX4-821Q`) y un alfabeto sin 0/O, 1/I/L, para poder dictarlo.
+- Una invitación es de **un solo uso**: aceptarla la marca `aceptada` en la misma transacción que crea la membresía. Si el equipo está lleno, la BD rechaza el alta (`NX001`), toda la transacción se deshace y la invitación sigue pendiente.
+- Una pendiente cuyo plazo pasó se muestra como «caducada». Al abrir un código inexistente, caducado, usado o revocado la API responde 404/410 con el motivo en español (pantalla AUTH-10).
+- Con **dos personas** que se unen a la vez al último lugar, entra una y la otra recibe `409 equipo_lleno` (prueba automática con conexiones simultáneas).
+- El invitado **no ocupa lugar** y su membresía caduca a los 7, 14 o 30 días que elige el líder.
+- Se usa el mismo bloqueo por equipo que el disparador del tope para calcular el primer color libre (`fn_siguiente_color_idx`) sin carreras.
+- **Fuera de alcance:** invitar por correo (no hay envío de correos hasta la Fase 5), que el invitado pida ampliación o ser integrante (`solicitudes_invitado`) y expulsar o salir del equipo (Fase 3, AD-04 a AD-11).
+
+## DEC-020 · Tareas de equipo: destino, triaje y asignación
+
+- El **líder crea** directamente; el **integrante propone** (estado `propuesta`, sin responsable ni destino); el invitado no hace ninguna de las dos.
+- La planeación de sprints es de la Fase 3, así que el formulario no elige sprint: la tarea va al **tablero** (queda «Aceptada», ligada al sprint activo si existe) o al **backlog**. En el triaje, «Aceptar» usa el mismo destino.
+- Quien no es el líder debe **aceptar la asignación** (`asignacion_pendiente`); mientras tanto no puede mover la tarea. Si la rechaza (con motivo) la tarea vuelve a triaje como «Rechazada por el responsable» para reasignarse.
+- El integrante solo corrige **su propia propuesta** mientras está en triaje y actualiza el avance de **su** tarea ya aceptada.
+- «Pedir cambios» deja un comentario y `cambios_pedidos`; el integrante ve el estado de sus solicitudes en «Mis propuestas» (FALT-08).
+- La máquina de estados vive en `packages/shared/src/estados.ts` con su tabla de casos por rol; la API y la web usan la misma. Un cambio no permitido devuelve `422` con el motivo; un permiso que falta, `403`. El permiso se comprueba **antes** que la versión.
+
+## DEC-021 · Orden con índice fraccionario y concurrencia
+
+- «Mover la tarea entre A y B» recibe las dos vecinas y el servidor calcula la clave con `fractional-indexing`, dentro de una transacción que bloquea la tarea y la columna. Si hay claves repetidas (la semilla las trae todas en `a0`) las reparte de nuevo la primera vez.
+- Dos movimientos simultáneos de la misma tarjeta: uno gana y el otro recibe `409 conflicto_version`; la web lo explica («Alguien cambió esta tarea…») y vuelve a consultar el tablero.
+- Solo el líder **reordena** dentro de una columna (prioridad visible del equipo); cualquier responsable mueve su tarjeta entre columnas válidas.
+- Con **filtros activos** no se puede arrastrar (el orden mostrado no es el real).
+- Se usa **dnd-kit** con ratón y teclado (Tab hasta el asa, Espacio y flechas). En móvil (< 640 px) el tablero es una pestaña por columna con el menú «Mover a…», sin arrastre.
+- Las columnas vacías se pliegan, como pide `01` 2.3.11.
+
+## DEC-022 · Los eventos de dominio se registran; aún nadie los consume
+
+Cada cambio de equipo inserta su fila en `eventos_dominio` y en `actividad` **en la misma transacción** (patrón *outbox*). Hoy no hay procesador: el tiempo real, las notificaciones y WhatsApp los leerán en las Fases 3 y 4. Una prueba comprueba que los eventos quedan con `procesado_en` nulo y que un rechazo por permisos no deja ningún evento.
+
+## DEC-023 · Lo que la Fase 2 deja para la Fase 3
+
+Queda sin construir, con «Próximamente» en la web: sprints (planear, cerrar, retro), calendario, reportes, actividad, archivos, plantillas, ajustes del equipo, elección y transferencia de liderazgo, salir y expulsar, y todo el chat y WhatsApp (Fase 4). El tablero muestra todas las tareas que están en sus columnas, haya o no sprint activo. `react-hook-form` sigue sin instalarse: los formularios validan con los esquemas Zod compartidos (ver DEC-015).
