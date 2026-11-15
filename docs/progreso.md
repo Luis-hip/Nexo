@@ -27,7 +27,7 @@
 
 ## Fase 1 · Base, roles y espacio personal
 
-**Estado:** en curso.
+**Estado:** terminada (tag `fase-1`).
 
 ### Hecho
 
@@ -51,3 +51,26 @@
 - [ ] En el calendario personal solo hay entregas de tareas; reuniones y eventos llegan con el calendario del equipo (Fase 3). El Hill Chart aún no se arrastra (Fase 3, tarea 3.1).
 - [ ] El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil: la subida de archivos llega con EQ-19 (Fase 3).
 - [ ] El aviso de cookies guarda la elección en el navegador; no hay analítica instalada.
+
+## Fase 2 · Equipos, tablero y estados
+
+**Estado:** construida y verificada en local; pendiente de CI, PR y tag `fase-2`.
+
+### Hecho
+
+- **2.1 Crear y unirse.** `POST /equipos` (quien crea es líder, con color 0 y los canales fijos), `GET /equipos/:id` según el perfil, miembros, e invitaciones: crear (integrante o invitado con 7/14/30 días), listar, revocar, vista previa y aceptar. NX001 se traduce a «El equipo ya tiene N miembros»; con dos conexiones a la vez al último lugar entra una sola. Pantallas PER-06 (4 pasos), PER-07/AUTH-08/AUTH-09 (`/invitacion/:código`), AD-01 miembros, AD-02/AD-03 invitar, FALT-02 (acceso terminado), FALT-06 (equipo lleno) e IN-04 (banner de caducidad).
+- **2.2 Tareas de equipo.** Tablero (EQ-02) con columnas por estado y plegado de las vacías, arrastrar y soltar con dnd-kit (ratón y teclado) y «Mover a…»; lista (EQ-03), backlog priorizable (EQ-04), detalle (EQ-06), crear/proponer (EQ-07), triaje con aceptar/rechazar/backlog/pedir cambios (EQ-05), asignar y responder (EQ-08), compartir con invitados, subtareas y comentarios, y «Mis propuestas» (FALT-08). Resumen del equipo (EQ-01) con Hill Chart en solo lectura y resumen reducido del invitado (IN-01 a IN-03).
+- **Máquina de estados** compartida en `packages/shared/src/estados.ts`, aplicada en el servidor; la interfaz solo ofrece las transiciones válidas y explica por qué no las otras.
+- **2.3 Permisos aplicados.** Cada ruta usa la guarda de sesión, membresía y permiso de la matriz. Pruebas por rol (líder, integrante, invitado y quien no pertenece), incluida una ronda de 14 rutas que deben dar 404 a un ajeno.
+- **Concurrencia.** Mover la misma tarjeta desde dos sesiones da 200 y 409; la web explica el conflicto.
+- **Eventos de dominio y actividad** en la misma transacción de cada cambio (DEC-022).
+- **Verificado en el navegador** con la semilla: líder (crear, mover con menú y con teclado, triaje, miembros y cupo), integrante (aceptar asignación, proponer), invitada (solo lo compartido; backlog y miembros dan «sin acceso») y Paola (crear equipo con los 4 pasos, invitar, y Hilda se une con el código).
+- **Pruebas:** 150 en `shared` (la tabla de transiciones por rol), 79 en la API y 80 en la web; 11 pruebas SQL.
+
+### Pendiente o movido a otra fase
+
+- [ ] CI en verde, PR `Dev_Luis` → `dev` → `main` → `produccion` y tag `fase-2`.
+- [ ] Revisión **visual** por una persona (claro/oscuro y móvil): solo se tomó una captura del tablero (tema oscuro, escritorio estrecho). El arrastre con el **ratón** no se pudo reproducir con la herramienta de pruebas (suelta de golpe); el arrastre con teclado sí se verificó.
+- [ ] Prueba de «mover en dos navegadores a la vez» a nivel de interfaz: está probada en la API (200 y 409) y la web muestra el aviso, pero no se probó con dos navegadores reales.
+- [ ] Invitar por correo, solicitudes de ampliación del invitado, salir y expulsar (Fase 3). Chat y WhatsApp (Fase 4). Ver DEC-023.
+- [ ] Sin sprint activo no hay planeación: el tablero muestra las tareas del equipo en sus estados; sprints llegan en la Fase 3.

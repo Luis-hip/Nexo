@@ -8,7 +8,9 @@ import type { BaseDatos } from './db/conexion';
 import { ErrorNexo } from './errores';
 import { rutasContacto } from './rutas/contacto';
 import { rutasDev } from './rutas/dev';
+import { rutasEquipos } from './rutas/equipos';
 import { rutasPersonal } from './rutas/personal';
+import { rutasTareasEquipo } from './rutas/tareasEquipo';
 import { rutasYo } from './rutas/yo';
 
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
@@ -57,6 +59,8 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   await app.register(rutasYo, { db });
   await app.register(rutasPersonal, { db });
   await app.register(rutasContacto, { db });
+  await app.register(rutasEquipos, { db });
+  await app.register(rutasTareasEquipo, { db });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });
