@@ -219,7 +219,11 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaPersonalDetalle; onCerr
         </dd>
         <dt className="text-muted">Entrega</dt>
         <dd>
-          {t.vence_en ? <span className="capitalize">{fechaLarga(t.vence_en)}</span> : 'Sin fecha'}
+          {t.vence_en ? (
+            <span className="inline-block first-letter:uppercase">{fechaLarga(t.vence_en)}</span>
+          ) : (
+            'Sin fecha'
+          )}
         </dd>
         <dt className="text-muted">Prioridad</dt>
         <dd>{PRIORIDADES[t.prioridad]}</dd>

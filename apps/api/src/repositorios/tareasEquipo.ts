@@ -154,15 +154,8 @@ export async function listarTareas(
   let q = base(db, a).where('t.archivada', '=', false);
   if (vista === 'tablero') q = q.where('t.estado', 'in', ESTADOS_TABLERO);
   if (vista === 'backlog') q = q.where('t.estado', '=', 'backlog');
-  if (vista === 'triaje') {
-    // Propuestas por decidir y asignaciones rechazadas que vuelven para reasignar.
-    q = q.where((eb) =>
-      eb.or([
-        eb('t.estado', '=', 'propuesta'),
-        eb.and([eb('t.estado', '=', 'rechazada'), eb('t.rechazo_por', '=', 'responsable')]),
-      ]),
-    );
-  }
+  // Propuestas por decidir, asignaciones rechazadas (para reasignar) y lo que rechazó el líder.
+  if (vista === 'triaje') q = q.where('t.estado', 'in', ['propuesta', 'rechazada']);
   if (vista === 'mias') q = q.where('t.proponente_id', '=', usuarioId);
   const filas = await q.orderBy('t.orden').orderBy('t.codigo').execute();
   return completar(db, a.equipoId, filas);

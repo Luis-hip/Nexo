@@ -227,6 +227,8 @@ export const esquemaTriaje = z.discriminatedUnion('accion', [
   }),
 ]);
 export type Triaje = z.infer<typeof esquemaTriaje>;
+/** Lo que envía el cliente: los campos con valor por defecto son opcionales. */
+export type TriajeEntrada = z.input<typeof esquemaTriaje>;
 
 /** Cuerpo de POST …/asignar (el líder asigna o quita al responsable). */
 export const esquemaAsignar = z.object({
