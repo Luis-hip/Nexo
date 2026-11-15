@@ -2,7 +2,9 @@ import type { ComponentType } from 'react';
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 import { AppShell } from './components/shell/AppShell';
 import { Raiz } from './components/shell/Raiz';
-import { EquipoGuard, Proximamente } from './pages/Proximamente';
+import { Requiere } from './pages/equipo/contexto';
+import { EquipoGuard } from './pages/equipo/EquipoGuard';
+import { Proximamente } from './pages/Proximamente';
 
 /** Carga diferida de una pantalla: cada grupo de páginas va en su propio fragmento. */
 const diferida =
@@ -11,6 +13,8 @@ const diferida =
 
 const publico = () => import('./pages/publico');
 const auth = () => import('./pages/auth');
+const equipos = () => import('./pages/equipos');
+const equipo = () => import('./pages/equipo');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -51,8 +55,6 @@ const rutas: RouteObject[] = [
               ['restablecer', 'Restablece tu contraseña'],
               ['verificar', 'Verifica tu correo'],
               ['2fa', 'Verificación en dos pasos'],
-              ['invitacion/error', 'Invitación no válida'],
-              ['invitacion/:codigo', 'Invitación a un equipo'],
             ] as const
           ).map(([path, titulo]): RouteObject => ({
             path,
@@ -63,6 +65,8 @@ const rutas: RouteObject[] = [
           })),
         ],
       },
+      // El enlace que comparte el líder: lleva a la vista previa de la invitación.
+      { path: 'invitacion/:codigo', lazy: diferida(equipos, (m) => m.EnlaceInvitacion) },
       ...(import.meta.env.DEV
         ? [
             {
@@ -115,15 +119,65 @@ const rutas: RouteObject[] = [
             ),
           },
           { path: 'app/personal/reportes', element: proximamente('Reportes personales', 3) },
-          { path: 'app/equipos/nuevo', element: proximamente('Crear un equipo', 2) },
-          { path: 'app/equipos/unirse', element: proximamente('Unirme con un código', 2) },
+          { path: 'app/equipos/nuevo', lazy: diferida(equipos, (m) => m.CrearEquipo) },
+          { path: 'app/equipos/unirse', lazy: diferida(equipos, (m) => m.Unirse) },
           { path: 'app/notificaciones', element: proximamente('Notificaciones', 3) },
           {
             path: 'app/e/:equipo',
             Component: EquipoGuard,
             children: [
-              { index: true, element: proximamente('Resumen del equipo', 2) },
-              { path: '*', element: proximamente('Espacio del equipo', 2) },
+              { index: true, lazy: diferida(equipo, (m) => m.Resumen) },
+              {
+                path: 'tareas',
+                lazy: diferida(equipo, (m) => m.TareasLayout),
+                children: [
+                  { index: true, lazy: diferida(equipo, (m) => m.TableroRuta) },
+                  { path: 'lista', lazy: diferida(equipo, (m) => m.ListaRuta) },
+                  {
+                    path: 'backlog',
+                    lazy: async () => {
+                      const { Backlog } = await equipo();
+                      return {
+                        element: (
+                          <Requiere permiso="ver_sprints">
+                            <Backlog />
+                          </Requiere>
+                        ),
+                      };
+                    },
+                  },
+                  {
+                    path: 'triaje',
+                    lazy: async () => {
+                      const { Triaje } = await equipo();
+                      return {
+                        element: (
+                          <Requiere permiso="ver_sprints">
+                            <Triaje />
+                          </Requiere>
+                        ),
+                      };
+                    },
+                  },
+                  { path: ':id', lazy: diferida(equipo, (m) => m.TareaRuta) },
+                ],
+              },
+              {
+                path: 'equipo',
+                lazy: async () => {
+                  const { Miembros } = await equipo();
+                  return {
+                    element: (
+                      <Requiere permiso="ver_miembros">
+                        <Miembros />
+                      </Requiere>
+                    ),
+                  };
+                },
+              },
+              { path: 'chat/*', element: proximamente('Chat del equipo', 4) },
+              { path: 'whatsapp/*', element: proximamente('WhatsApp', 4) },
+              { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],
           },
           { path: 'ajustes/*', element: proximamente('Ajustes', 3) },

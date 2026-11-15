@@ -1,0 +1,201 @@
+import {
+  esquemaActualizarSubtarea,
+  esquemaAsignar,
+  esquemaCambiarEstado,
+  esquemaCompartir,
+  esquemaCrearComentario,
+  esquemaCrearSubtarea,
+  esquemaCrearTareaEquipo,
+  esquemaEditarTareaEquipo,
+  esquemaMoverTarea,
+  esquemaResponderAsignacion,
+  esquemaTriaje,
+} from '@nexo/shared';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import { exigirSesion } from '../autenticacion';
+import type { BaseDatos } from '../db/conexion';
+import { contextoEquipo, requiereEquipoActivo, requierePermiso } from '../equipos/contexto';
+import { ErrorNexo } from '../errores';
+import * as servicio from '../servicios/tareasEquipo';
+import { esquemaId, validar } from '../validacion';
+
+const parametrosEquipo = z.object({ equipoId: esquemaId });
+const parametrosTarea = z.object({ equipoId: esquemaId, tareaId: esquemaId });
+const parametrosSubtarea = parametrosTarea.extend({ subId: esquemaId });
+const parametrosComentario = parametrosTarea.extend({ comentarioId: esquemaId });
+const consultaLista = z.object({
+  vista: z.enum(['tablero', 'backlog', 'triaje', 'mias', 'todas']).default('tablero'),
+});
+
+/**
+ * Tareas de equipo (Fase 2, secciones 2.2 y 2.3). Cada ruta: sesión → membresía activa en
+ * **este** equipo → permiso de la matriz. Las reglas viven en el servicio.
+ */
+export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (app, { db }) => {
+  /** Sesión + membresía. Para escribir, además exige que el equipo no esté archivado. */
+  async function contexto(req: FastifyRequest, escribe = false) {
+    const { usuario } = exigirSesion(req);
+    const p = req.params as Record<string, string>;
+    const { equipoId } = validar(parametrosEquipo, { equipoId: p.equipoId });
+    const ctx = await contextoEquipo(db, usuario.id, equipoId);
+    if (escribe) requiereEquipoActivo(ctx);
+    return { ctx, actor: { id: usuario.id, nombre: usuario.nombre } };
+  }
+  const tareaId = (req: FastifyRequest) => validar(parametrosTarea, req.params).tareaId;
+
+  // --- Lectura -------------------------------------------------------------------------------
+
+  app.get('/equipos/:equipoId/tareas', async (req) => {
+    const { ctx } = await contexto(req);
+    const { vista } = validar(consultaLista, req.query);
+    // Un invitado ve solo lo compartido (lo filtra el servicio); no hay backlog ni triaje para él.
+    requierePermiso(ctx, 'ver_resumen', { esCompartido: true });
+    if (vista === 'backlog' || vista === 'triaje') requierePermiso(ctx, 'ver_sprints');
+    if (vista === 'mias') requierePermiso(ctx, 'ver_sprints');
+    return servicio.listar(db, ctx, vista);
+  });
+
+  app.get('/equipos/:equipoId/tareas/conteos', async (req) => {
+    const { ctx } = await contexto(req);
+    requierePermiso(ctx, 'ver_sprints');
+    return servicio.contar(db, ctx);
+  });
+
+  app.get('/equipos/:equipoId/tareas/:tareaId', async (req) => {
+    const { ctx } = await contexto(req);
+    requierePermiso(ctx, 'ver_resumen', { esCompartido: true });
+    return servicio.obtener(db, ctx, tareaId(req));
+  });
+
+  // --- Crear, editar, eliminar ---------------------------------------------------------------
+
+  app.post('/equipos/:equipoId/tareas', async (req, res) => {
+    const { ctx, actor } = await contexto(req, true);
+    // El líder crea; el integrante propone (va a triaje); el invitado, ninguna de las dos.
+    requierePermiso(ctx, ctx.rol === 'lider' ? 'crear_tarea' : 'proponer_tarea');
+    const tarea = await servicio.crear(db, ctx, actor, validar(esquemaCrearTareaEquipo, req.body));
+    return res.status(201).send(tarea);
+  });
+
+  app.patch('/equipos/:equipoId/tareas/:tareaId', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    if (ctx.rol === 'invitado') requierePermiso(ctx, 'editar_tarea_ajena');
+    return servicio.editar(
+      db,
+      ctx,
+      actor,
+      tareaId(req),
+      validar(esquemaEditarTareaEquipo, req.body),
+    );
+  });
+
+  app.delete('/equipos/:equipoId/tareas/:tareaId', async (req, res) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'editar_tarea_ajena');
+    await servicio.eliminar(db, ctx, actor, tareaId(req));
+    return res.status(204).send();
+  });
+
+  // --- Estados y tablero ---------------------------------------------------------------------
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/estado', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    // El permiso fino (¿es su tarea?) y la transición se comprueban en el servicio.
+    requierePermiso(ctx, 'cambiar_estado_tarea', { esPropio: true });
+    return servicio.cambiarEstado(
+      db,
+      ctx,
+      actor,
+      tareaId(req),
+      validar(esquemaCambiarEstado, req.body),
+    );
+  });
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/mover', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'cambiar_estado_tarea', { esPropio: true });
+    return servicio.mover(db, ctx, actor, tareaId(req), validar(esquemaMoverTarea, req.body));
+  });
+
+  // --- Triaje y asignación -------------------------------------------------------------------
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/triaje', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'triaje');
+    return servicio.triaje(db, ctx, actor, tareaId(req), validar(esquemaTriaje, req.body));
+  });
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/asignar', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'asignar_responsable');
+    return servicio.asignar(db, ctx, actor, tareaId(req), validar(esquemaAsignar, req.body));
+  });
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/asignacion', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'responder_asignacion');
+    return servicio.responderAsignacion(
+      db,
+      ctx,
+      actor,
+      tareaId(req),
+      validar(esquemaResponderAsignacion, req.body),
+    );
+  });
+
+  app.put('/equipos/:equipoId/tareas/:tareaId/compartida', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'invitar_personas');
+    const { membresia_ids } = validar(esquemaCompartir, req.body);
+    return servicio.compartir(db, ctx, actor, tareaId(req), membresia_ids);
+  });
+
+  // --- Subtareas y comentarios ---------------------------------------------------------------
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/subtareas', async (req, res) => {
+    const { ctx } = await contexto(req, true);
+    requierePermiso(ctx, 'cambiar_estado_tarea', { esPropio: true });
+    const { titulo } = validar(esquemaCrearSubtarea, req.body);
+    return res.status(201).send(await servicio.crearSubtarea(db, ctx, tareaId(req), titulo));
+  });
+
+  app.patch('/equipos/:equipoId/tareas/:tareaId/subtareas/:subId', async (req) => {
+    const { ctx } = await contexto(req, true);
+    requierePermiso(ctx, 'cambiar_estado_tarea', { esPropio: true });
+    const { tareaId: id, subId } = validar(parametrosSubtarea, req.params);
+    return servicio.actualizarSubtarea(
+      db,
+      ctx,
+      id,
+      subId,
+      validar(esquemaActualizarSubtarea, req.body),
+    );
+  });
+
+  app.delete('/equipos/:equipoId/tareas/:tareaId/subtareas/:subId', async (req, res) => {
+    const { ctx } = await contexto(req, true);
+    requierePermiso(ctx, 'cambiar_estado_tarea', { esPropio: true });
+    const { tareaId: id, subId } = validar(parametrosSubtarea, req.params);
+    await servicio.eliminarSubtarea(db, ctx, id, subId);
+    return res.status(204).send();
+  });
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/comentarios', async (req, res) => {
+    const { ctx, actor } = await contexto(req, true);
+    // (c): el servicio responde 404 al invitado si la tarea no está compartida con él.
+    requierePermiso(ctx, 'comentar', { esCompartido: true });
+    const { texto } = validar(esquemaCrearComentario, req.body);
+    const comentario = await servicio.comentar(db, ctx, actor, tareaId(req), texto);
+    if (!comentario) throw new ErrorNexo(500, 'error_interno', 'Ocurrió un error inesperado.');
+    return res.status(201).send(comentario);
+  });
+
+  app.delete('/equipos/:equipoId/tareas/:tareaId/comentarios/:comentarioId', async (req, res) => {
+    const { ctx } = await contexto(req, true);
+    requierePermiso(ctx, 'comentar', { esCompartido: true });
+    const { tareaId: id, comentarioId } = validar(parametrosComentario, req.params);
+    await servicio.eliminarComentario(db, ctx, id, comentarioId);
+    return res.status(204).send();
+  });
+};

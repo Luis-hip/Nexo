@@ -9,3 +9,12 @@ export function crearBaseDatos(databaseUrl: string): BaseDatos {
     dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: databaseUrl }) }),
   });
 }
+
+/** Conexión o transacción: repositorios y servicios no saben en cuál corren. */
+export type Ejecutor = Kysely<DB>;
+
+/** Código SQLSTATE de un error de PostgreSQL (p. ej. `NX001`, `23505`), si lo es. */
+export function codigoPg(error: unknown): string | undefined {
+  const codigo = (error as { code?: unknown } | null)?.code;
+  return typeof codigo === 'string' ? codigo : undefined;
+}
