@@ -54,7 +54,7 @@
 
 ## Fase 2 · Equipos, tablero y estados
 
-**Estado:** construida y verificada en local; pendiente de CI, PR y tag `fase-2`.
+**Estado:** construida y fusionada (PR #7 a `dev`, #8 a `main`, #9 a `produccion`). Falta confirmar la CI en verde y poner el tag `fase-2` (no se pudo comprobar desde la herramienta: no hay `gh`).
 
 ### Hecho
 
@@ -74,3 +74,23 @@
 - [ ] Prueba de «mover en dos navegadores a la vez» a nivel de interfaz: está probada en la API (200 y 409) y la web muestra el aviso, pero no se probó con dos navegadores reales.
 - [ ] Invitar por correo, solicitudes de ampliación del invitado, salir y expulsar (Fase 3). Chat y WhatsApp (Fase 4). Ver DEC-023.
 - [ ] Sin sprint activo no hay planeación: el tablero muestra las tareas del equipo en sus estados; sprints llegan en la Fase 3.
+
+## Fase 2.5 · Cambios de alcance
+
+**Estado:** en curso (rama `feat/fase-2-5`, desde `dev` en `a6d7895`). Fuente: `docs/07_Cambios_de_Alcance_Fase2.md`.
+
+### Hecho
+
+- **Paso 1 · Documentos y decisiones.** Copiados `07` y `10`; creados `08_Procesos_BD.md`, `09_Seguridad_y_Secretos.md` y `seguridad-incidentes.md`; actualizados `01`–`06`, el README y `decisiones.md` (DEC-024 a DEC-029; DEC-020 marcada como reemplazada en parte). D-02 eliminada (el nombre es Carlos) y D-03 resuelta (Vercel + Render + dominio propio). Mapa de fases con 2.5 y 3.5.
+
+### Para revisión de Luis (valores por confirmar del 07)
+
+- **V-10:** toda tarea nueva del líder entra en votación; desaparece el destino «backlog directo».
+- **V-11:** se mantiene la asignación de DEC-020; si el responsable rechaza, el líder reasigna directamente sin nueva votación.
+
+### Pendiente
+
+- [ ] Paso 2: secretos (informe del historial, redacción de `pino`, validación de `config.ts`, gitleaks, `Origin`).
+- [ ] Paso 3: votación (migración `0002`, procesos, API, permisos, estados y pantalla).
+- [ ] Paso 4: migrar el código existente a procesos y activar los roles `nexo_migraciones`/`nexo_app`.
+- [ ] Paso 5: cierre, CI en verde, tag `fase-2-5` y PR a `dev`.
