@@ -10,11 +10,13 @@ export const ESTADOS_TAREA = [
   'atascada',
   'completada',
   'rechazada',
+  /** El líder retiró la propuesta (Fase 2.5, migración 0002). */
+  'cancelada',
 ] as const;
 export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
 
 /**
- * Estados que usa una tarea personal: no hay triaje ni asignación, así que solo
+ * Estados que usa una tarea personal: no hay votación ni asignación, así que solo
  * pendiente (`backlog`), por hacer (`habilitada`), en curso, atascada (con motivo) y completada.
  */
 export const ESTADOS_TAREA_PERSONAL = [

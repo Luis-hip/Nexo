@@ -34,20 +34,27 @@ const SIN_ACCESO = 'Tu rol en este espacio no incluye esta acción.';
 export const MATRIZ_PERMISOS = {
   // --- Las 30 filas de la tabla de docs/01, 2.2, en el mismo orden ---
   ver_resumen: fila('si', 'si', 'si', 'compartido', 'Solo puedes ver lo compartido contigo.'),
+  // Fase 2.5 (DEC-024): el líder propone con subtareas y los integrantes votan.
   crear_tarea: fila(
     'si',
     'si',
     'no',
     'no',
-    'Como integrante, propones tareas y el líder las acepta en triaje.',
+    'Solo el líder propone tareas; tú votas si se aceptan. Comparte tus ideas en el chat o en los comentarios.',
   ),
-  proponer_tarea: fila('na', 'na', 'si', 'no', 'Los invitados no pueden proponer tareas.'),
-  triaje: fila(
+  votar_propuesta: fila(
+    'na',
+    'no',
+    'si',
+    'no',
+    'Solo los integrantes votan las propuestas; el líder propone.',
+  ),
+  retirar_propuesta: fila(
     'na',
     'si',
     'no',
     'no',
-    'Solo el líder puede aceptar o rechazar propuestas en triaje.',
+    'Solo el líder puede retirar o reformular propuestas.',
   ),
   asignar_responsable: fila(
     'si',
