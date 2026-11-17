@@ -54,9 +54,19 @@ INSERT INTO tareas (equipo_id, titulo, descripcion, responsable_id, proponente_i
  ('10000000-0000-4000-8000-000000000001','Pantalla de ajustes','Perfil y apariencia','00000000-0000-4000-8000-000000000005',NULL,'habilitada',0, now()+interval '9 days','media','20000000-0000-4000-8000-000000000003',NULL,NULL,NULL,'directa','00000000-0000-4000-8000-000000000001'),
  ('10000000-0000-4000-8000-000000000001','Modelo de datos','Esquema y migraciones','00000000-0000-4000-8000-000000000007',NULL,'completada',100, now()-interval '1 day','alta','20000000-0000-4000-8000-000000000003',NULL,'a_tiempo', now()-interval '2 days','directa','00000000-0000-4000-8000-000000000001'),
  ('10000000-0000-4000-8000-000000000001','Guía de estilos','Tokens y componentes','00000000-0000-4000-8000-000000000003',NULL,'completada',100, now()-interval '5 days','media','20000000-0000-4000-8000-000000000003',NULL,'con_retraso', now()-interval '3 days','directa','00000000-0000-4000-8000-000000000001'),
- ('10000000-0000-4000-8000-000000000001','Modo sin conexión','Cola local de mensajes','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000008','aceptada',0, now()+interval '10 days','media','20000000-0000-4000-8000-000000000003',NULL,NULL,NULL,'propuesta','00000000-0000-4000-8000-000000000001'),
- ('10000000-0000-4000-8000-000000000001','Exportar reportes en CSV','',NULL,'00000000-0000-4000-8000-000000000006','propuesta',0, NULL,'baja',NULL,NULL,NULL,NULL,'propuesta','00000000-0000-4000-8000-000000000006'),
- ('10000000-0000-4000-8000-000000000001','Atajos de teclado','',NULL,'00000000-0000-4000-8000-000000000008','backlog',0, NULL,'baja',NULL,NULL,NULL,NULL,'propuesta','00000000-0000-4000-8000-000000000001');
+ ('10000000-0000-4000-8000-000000000001','Modo sin conexión','Cola local de mensajes','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','aceptada',0, now()+interval '10 days','media','20000000-0000-4000-8000-000000000003',NULL,NULL,NULL,'propuesta','00000000-0000-4000-8000-000000000001'),
+ ('10000000-0000-4000-8000-000000000001','Exportar reportes en CSV','',NULL,'00000000-0000-4000-8000-000000000001','propuesta',0, NULL,'baja',NULL,NULL,NULL,NULL,'propuesta','00000000-0000-4000-8000-000000000001'),
+ ('10000000-0000-4000-8000-000000000001','Atajos de teclado','',NULL,'00000000-0000-4000-8000-000000000001','backlog',0, NULL,'baja',NULL,NULL,NULL,NULL,'propuesta','00000000-0000-4000-8000-000000000001');
+
+-- Votación de propuestas (Fase 2.5, DEC-024): las propuestas las hace la líder y votan los
+-- integrantes. T-08 sigue en votación con 2 a favor y 1 en contra (con 7 integrantes hacen falta 4).
+INSERT INTO tarea_votos (tarea_id, usuario_id, voto, comentario)
+SELECT t.id, v.usuario_id::uuid, v.voto::voto_propuesta, v.comentario
+  FROM tareas t,
+       (VALUES ('00000000-0000-4000-8000-000000000002', 'aceptar',  'Nos lo piden en cada revisión'),
+               ('00000000-0000-4000-8000-000000000003', 'aceptar',  NULL),
+               ('00000000-0000-4000-8000-000000000004', 'rechazar', 'Mejor después del Sprint 4')) AS v(usuario_id, voto, comentario)
+ WHERE t.equipo_id = '10000000-0000-4000-8000-000000000001' AND t.codigo = 8;
 
 -- Tareas personales de Paola (sin equipo).
 INSERT INTO tareas (dueno_id, titulo, estado, vence_en, prioridad, creada_por) VALUES

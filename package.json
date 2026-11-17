@@ -19,6 +19,8 @@
     "db:migrate": "pnpm --filter @nexo/api db:migrate",
     "db:seed": "pnpm --filter @nexo/api db:seed",
     "db:test": "pnpm --filter @nexo/api db:test",
+    "db:test:procesos": "pnpm --filter @nexo/api db:test:procesos",
+    "procesos:verificar": "pnpm --filter @nexo/api procesos:verificar",
     "db:reset": "pnpm --filter @nexo/api db:reset",
     "db:tipos": "pnpm --filter @nexo/api db:tipos"
   },
