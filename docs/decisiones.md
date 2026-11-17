@@ -222,6 +222,20 @@ El **líder propone** las tareas junto con sus subtareas (una sola operación; e
 
 **Sigue vigente de DEC-020:** la asignación, que el responsable acepte o rechace con motivo, la máquina de estados compartida y el orden por índice fraccionario.
 
+**Cómo quedó construido (2026-11-16) y en qué se aparta del `07` (para revisión):**
+
+- **Dos migraciones, no una.** `0002_enums_votacion.sql` solo agrega valores a enums y `0003_votacion.sql` trae la tabla `tarea_votos`, el disparador y los procesos. PostgreSQL no deja usar un valor nuevo de enum en la transacción que lo crea, así que no cabían en una sola `0002`.
+- **Estado `cancelada`.** El `07` pide que una propuesta retirada quede `cancelada`, pero ese valor no existía en `estado_tarea`: lo agrega la `0002`. En la interfaz se llama «Retirada».
+- **Empate (regla 4 frente a V-4).** La regla 4 del `07` dice que se rechaza cuando «ya no es posible alcanzar la mayoría», y V-4 (confirmado) dice que el empate sigue en votación. Como el voto se puede cambiar mientras esté abierta, se aplicó **V-4**: se acepta con más de la mitad a favor, se rechaza con más de la mitad en contra y **cualquier otro caso (2 y 2 con 4 integrantes) sigue abierto**. Si el equipo prefiere que el empate total rechace, es un cambio de una línea en `resultadoVotacion` y en `fn_votacion_resultado`.
+- **«8 integrantes» no existe.** El `07` pide probar la mayoría con 3, 4 y 8 integrantes, pero un equipo admite 8 miembros **contando a la líder**: el máximo son 7 integrantes (mayoría de 4). La prueba SQL usa 7 y comprueba además la función con 8 (mayoría de 5).
+- **Backlog.** Al desaparecer el triaje desaparecía también la única forma de pasar tareas entre el backlog y el tablero. Se agregaron a la máquina de estados las transiciones **del líder** `aceptada → backlog` y `backlog → aceptada` (el «backlog para las que el líder aparta» de V-10).
+- **V-11 en la práctica.** Si el responsable rechaza la asignación, la tarea **conserva su estado** y queda sin responsable; la líder la reasigna con «Asignar». Ya no pasa a `rechazada` ni se usa `rechazo_por = 'responsable'`.
+- **Visibilidad (V-8).** Ni el evento de dominio ni la actividad dicen si el voto fue a favor o en contra, y el comentario del voto solo lo ve quien votó. Con un solo voto emitido, el conteo sí permite deducirlo: es inherente a mostrar conteo y votantes.
+- **Quien sale del equipo** pierde sus votos de propuestas abiertas (disparador). La mayoría se vuelve a calcular en el siguiente voto, no en ese momento; al construir «salir y expulsar» (Fase 3) ese proceso debe volver a evaluar las propuestas abiertas.
+- **Editar una propuesta en votación** sigue permitido a la líder (edita cualquier tarea); los votos no se reinician. Para un cambio de fondo está «Reformular».
+- **`whatsapp_reglas.tipo_evento = 'triaje'`** se conserva y se interpreta como votación de propuestas; no hizo falta agregar valores. **`politica_propuestas`**: valor por defecto `votacion`; `triaje` queda obsoleto y `libre` sin uso en el MVP.
+- **Semilla:** T-07, T-08 y T-09 ahora las propone la líder, y T-08 trae tres votos de ejemplo.
+
 ## DEC-025 · Procesos almacenados en la BD; la API no lleva SQL de negocio
 
 **Fecha:** 2026-11-16 · **Fuente:** `07`, sección 2 · **Alcance (V-6) confirmado:** todo lo nuevo nace como proceso; lo de las Fases 1 y 2 se migra en una tarea dedicada de la Fase 2.5.

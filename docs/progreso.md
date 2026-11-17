@@ -86,13 +86,19 @@
 - **Paso 2 · Secretos.** *Informe:* se revisó todo el historial de Git (todas las ramas) y el árbol con patrones de claves (AWS, GitHub, Slack, Meta, llaves privadas, URL con contraseña, asignaciones `secret/token/password`): **no hay secretos**; solo aparece la cadena de desarrollo `nexo:nexo@localhost` de `.env.example` y de la CI, que es pública y desechable. `.env` nunca estuvo en el historial. *Cambios:* `pino` oculta cookies, `set-cookie`, tokens, contraseñas, secretos, claves y cuerpos; `config.ts` exige en producción `SESSION_SECRET` (≥ 32), `ENCRYPTION_KEY` (64 hex), `APP_URL` y `API_URL` (https, sin valor local) y rechaza los valores de `.env.example`; la API comprueba `Origin` en `POST/PUT/PATCH/DELETE`; gitleaks (v8.24.2, historial completo) en la CI con `.gitleaks.toml`; `.env.example` documentado. Pruebas nuevas: 21 en `config.test.ts` y `seguridad.test.ts`. **Sin verificar:** gitleaks no se ejecutó en local (no está instalado; lo corre la CI).
 - **Pendiente tuyo (no se puede por CLI aquí):** activar *secret scanning* y *push protection* en GitHub (Settings → Code security) y decidir si el repositorio pasa a privado; hoy no hay `gh` en esta máquina.
 
+- **Paso 3 · Votación de propuestas (DEC-024).** Migraciones `0002_enums_votacion.sql` (valores `votacion` y `cancelada`) y `0003_votacion.sql` (tabla `tarea_votos`, disparador `NX004`, índice fraccionario en PL/pgSQL y los procesos `proc_tarea_proponer`, `proc_tarea_votar`, `proc_tarea_retirar`, `proc_tarea_reformular`, `proc_tarea_votacion` y `proc_tarea_votaciones`, documentados en `docs/08`). API: `POST …/tareas` solo para el líder (con `subtareas[]`), `POST …/voto`, `…/retirar`, `…/reformular`; la vista `triaje` pasó a `votacion`; desapareció `POST …/triaje`. Permisos: salen `proponer_tarea` y `triaje`, entran `votar_propuesta` y `retirar_propuesta`. Web: pestaña **Votación** (`tareas/votacion`) con conteo, quién votó y mi voto; FALT-08 es ahora «Por votar» y «Ya votaste»; el formulario del líder gana subtareas y sirve para reformular. La API **no devuelve votos ajenos** (ni al líder). Semilla: las propuestas son de la líder y T-08 trae 3 votos.
+- **Pruebas del paso 3:** 15 pruebas SQL de procesos (`pnpm db:test:procesos`: líder e invitado no votan, voto doble, fuera de `propuesta`, mayoría con 3, 4 y 7 integrantes, empate, rechazo, sin integrantes, retirar, reformular, salida del equipo, visibilidad) además de las 11 de integridad; 170 en `shared`, 102 en la API (40 de tareas de equipo, con una que compara la mayoría y el índice fraccionario de TypeScript contra los de la BD) y 87 en la web. Las pruebas de triaje se reemplazaron a propósito por las de votación. **Verificado en el navegador** con la semilla: Carlos cambia su voto en T-08 y el conteo se actualiza; Valeria crea T-10 con una subtarea y queda en votación. **Local con PGlite** (PostgreSQL 17 embebido); la comprobación contra PostgreSQL 16 la hace la CI.
+- **Control nuevo en la CI:** `pnpm db:test:procesos` y `pnpm procesos:verificar` (falla si una migración crea un `proc_*` sin apartado en `docs/08`).
+
 ### Para revisión de Luis (valores por confirmar del 07)
 
 - **V-10:** toda tarea nueva del líder entra en votación; desaparece el destino «backlog directo».
 - **V-11:** se mantiene la asignación de DEC-020; si el responsable rechaza, el líder reasigna directamente sin nueva votación.
+- **Empate:** se aplicó V-4 (el empate sigue abierto) frente a la regla 4 del `07` («ya no es posible alcanzar la mayoría»). Ver DEC-024.
+- **Backlog:** se agregaron las transiciones del líder `aceptada ↔ backlog`, que el `07` no menciona, para no perder el paso del backlog al tablero.
+- **«8 integrantes»:** imposible con el tope de 8 miembros (líder incluida); se probó con 7.
 
 ### Pendiente
 
-- [ ] Paso 3: votación (migración `0002`, procesos, API, permisos, estados y pantalla).
 - [ ] Paso 4: migrar el código existente a procesos y activar los roles `nexo_migraciones`/`nexo_app`.
 - [ ] Paso 5: cierre, CI en verde, tag `fase-2-5` y PR a `dev`.

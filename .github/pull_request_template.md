@@ -17,5 +17,6 @@
 - [ ] Si es una promoción (`dev` → `main` o `main` → `produccion`), se fusiona con «Create a merge commit».
 - [ ] Commits en español con formato `tipo(modulo): descripción`.
 - [ ] Si toca la BD: es una migración **nueva** y regeneré los tipos (`pnpm db:tipos`).
+- [ ] Si creé o cambié un proceso `proc_*`: lo documenté en `docs/08_Procesos_BD.md` y tiene su prueba en `pruebas_procesos.sql`.
 - [ ] Si tomé una decisión no definida en `docs/01`/`docs/02`: la anoté en `docs/decisiones.md`.
 - [ ] Sin secretos ni `.env` en el cambio.

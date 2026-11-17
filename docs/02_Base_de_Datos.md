@@ -255,7 +255,7 @@ erDiagram
   }
 ```
 
-**Votación (Fase 2.5, DEC-024; migración `0002`).** `TAREA_VOTOS` guarda un voto por integrante activo y propuesta, con clave única `(tarea_id, usuario_id)`; solo existe mientras la tarea está en `propuesta` y se conserva como historial al cerrarse.
+**Votación (Fase 2.5, DEC-024; migración `0003`).** `TAREA_VOTOS` guarda un voto por integrante activo y propuesta, con clave única `(tarea_id, usuario_id)`; solo existe mientras la tarea está en `propuesta` y se conserva como historial al cerrarse.
 
 **Cómo leerlo.** `TAREAS` pertenece a un equipo **o** a una persona (tarea personal), nunca a ambos (`CHECK`). Las etiquetas son N:M. Las tareas compartidas con invitados son N:M contra `MEMBRESIAS` (no contra usuarios) para que el acceso termine cuando termina la membresía.
 
@@ -401,8 +401,8 @@ Notación: **A → B** se lee «cada A se relaciona con…». *Part.* indica par
 | 36 | Sprint — Retrospectiva | 1 : 0..1 | P | `retrospectivas.sprint_id UNIQUE` | |
 | 37 | Retrospectiva — Nota — Voto | 1 : N : N | P | `retro_notas`, `retro_votos` | |
 | 38 | Usuario — Sesión / Token | 1 : N | P | `sesiones`, `tokens_verificacion` | |
-| 39 | Tarea — Voto de propuesta | 1 : N | P | `tarea_votos.tarea_id` (0002) | Los integrantes activos votan la propuesta del líder |
-| 40 | Usuario — Voto de propuesta | 1 : N | P | `tarea_votos.usuario_id`, `UNIQUE(tarea_id, usuario_id)` (0002) | Un voto por persona y propuesta, que se puede cambiar mientras esté abierta |
+| 39 | Tarea — Voto de propuesta | 1 : N | P | `tarea_votos.tarea_id` (0003) | Los integrantes activos votan la propuesta del líder |
+| 40 | Usuario — Voto de propuesta | 1 : N | P | `tarea_votos.usuario_id`, `PRIMARY KEY (tarea_id, usuario_id)` (0003) | Un voto por persona y propuesta, que se puede cambiar mientras esté abierta |
 
 ---
 
@@ -479,7 +479,7 @@ El nombre de la persona **no** se repite en `membresias` ni en `mensajes`: se ob
 | RN-TAR-03 | Completada ⇔ fecha de cierre, resultado y 100 % | Tres `CHECK` | `23514` |
 | RN-TAR-04 | Código T-nn consecutivo y único por equipo | Disparador + índice único | `23505` |
 | RN-TAR-05 | Cada actualización incrementa `version` | Disparador | — |
-| RN-TAR-06 | Solo vota un **integrante activo** del mismo equipo (ni el líder ni los invitados) y solo mientras la tarea está en `propuesta`; un voto por persona (cambiarlo actualiza) | Disparador en `tarea_votos` + `UNIQUE(tarea_id, usuario_id)` (migración `0002`) | `NX004` / `23505` |
+| RN-TAR-06 | Solo vota un **integrante activo** del mismo equipo (ni el líder ni los invitados) y solo mientras la tarea está en `propuesta`; un voto por persona (cambiarlo actualiza) | Disparador `trg_voto_propuesta_valido` + `PRIMARY KEY (tarea_id, usuario_id)` (migración `0003`) | `NX004` |
 | RN-LID-01 | Una sola transferencia pendiente y una sola elección abierta por equipo | Índices únicos parciales | `23505` |
 | RN-LID-04 | Se vota una vez por ronda | PK `(eleccion_id, ronda, votante_id)` | `23505` |
 | RN-LID-05 | El líder saliente no vota | `trg_voto_valido` | `NX002` |
@@ -576,7 +576,7 @@ Principio: un índice por cada consulta crítica de una pantalla y **no más**. 
 | `NX001` | Equipo lleno | «Este equipo ya tiene 8 miembros activos.» |
 | `NX002` | El líder saliente no vota | «El líder saliente no participa en la votación.» |
 | `NX003` | Límite de votos de retro | «Ya usaste tus 3 votos.» |
-| `NX004` | Voto de propuesta no permitido (no es integrante activo, o la tarea ya no está en votación) | «Solo los integrantes pueden votar propuestas abiertas.» |
+| `NX004` | Voto de propuesta no permitido (no es integrante activo, o la tarea ya no está en votación) | «Solo los integrantes votan las propuestas; el líder propone.» |
 
 El catálogo completo, incluidos los códigos de los procesos (`NX005` en adelante), vive en `08_Procesos_BD.md`.
 
@@ -642,6 +642,8 @@ SELECT t.codigo, t.titulo FROM tareas t
 ---
 
 ## 14. Datos de prueba y evolución
+
+> **Cambio de la semilla en la Fase 2.5 (DEC-024).** Las tres tareas con `origen = 'propuesta'` (T-07, T-08 y T-09) ahora las propone la **líder** (antes, integrantes), y T-08, que sigue en votación, trae tres votos de ejemplo en `tarea_votos` (2 a favor y 1 en contra; con 7 integrantes hacen falta 4). El script de la sección 15.2 es la copia original; la semilla vigente es `apps/api/db/seed/semilla.sql`. La regla `whatsapp_reglas.tipo_evento = 'triaje'` se conserva y se interpreta como **votación de propuestas**.
 
 ### 14.1 Semilla
 Reproduce el «Equipo Nexo» del prototipo: 11 personas, 1 equipo con **8 miembros activos** (líder + 7 integrantes, cupo completo a propósito) y 2 invitados, 4 sprints (2 cerrados, 1 activo, 1 planificado), 9 tareas de equipo en distintos estados, 2 tareas personales, etiquetas, chat y la configuración de WhatsApp en modo **simulado** con sus 6 reglas. Los usuarios de la semilla **no tienen contraseña**: se entra con el inicio de sesión de desarrollo (ver `01_Contexto…`).
@@ -2080,18 +2082,18 @@ Restricciones de tabla: `PRIMARY KEY (tarea_id, etiqueta_id)`
 
 #### `tarea_votos`
 
-*(Migración `0002`, Fase 2.5.)* Voto de un integrante activo sobre una propuesta del líder.
+*(Migración `0003`, Fase 2.5.)* Voto de un integrante activo sobre una propuesta del líder.
 
 | Columna | Definición | Notas |
 |---|---|---|
 | `tarea_id` | `uuid NOT NULL REFERENCES tareas(id) ON DELETE CASCADE` | |
-| `usuario_id` | `uuid NOT NULL REFERENCES usuarios(id)` | Integrante activo del equipo (lo exige un disparador, `NX004`) |
+| `usuario_id` | `uuid NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE` | Integrante activo del equipo (lo exige un disparador, `NX004`) |
 | `voto` | `voto_propuesta NOT NULL` | `aceptar` \| `rechazar` |
-| `comentario` | `text` | Opcional |
+| `comentario` | `text CHECK (char_length(comentario) BETWEEN 1 AND 500)` | Opcional; solo lo ve quien votó |
 | `votado_en` | `timestamptz NOT NULL DEFAULT now()` | |
 | `actualizado_en` | `timestamptz NOT NULL DEFAULT now()` | |
 
-Restricción: `PRIMARY KEY`/`UNIQUE (tarea_id, usuario_id)`. Los valores nuevos de enums (`rechazo_por = 'votacion'`, `politica_propuestas = 'votacion'`) y la columna obsoleta `tareas.cambios_pedidos` se documentan en la `0002` y en `decisiones.md` (DEC-024).
+Restricción: `PRIMARY KEY (tarea_id, usuario_id)`. La migración `0002` agrega los valores de enum `rechazo_por = 'votacion'`, `politica_propuestas = 'votacion'` (nuevo valor por defecto) y `estado_tarea = 'cancelada'` (propuesta retirada); van aparte porque PostgreSQL no deja usar un valor nuevo de enum en la transacción que lo crea. La columna `tareas.cambios_pedidos` queda obsoleta (no se borra). Ver DEC-024.
 
 #### `tarea_compartida`
 

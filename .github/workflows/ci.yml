@@ -65,6 +65,12 @@ jobs:
       - name: Pruebas SQL (deben salir 11 OK)
         run: pnpm db:test
 
+      - name: Pruebas de los procesos de la BD (deben salir 15 OK)
+        run: pnpm db:test:procesos
+
+      - name: Procesos de la BD documentados en docs/08
+        run: pnpm procesos:verificar
+
       - name: Pruebas SQL con psql (forma literal del plan, 0.4)
         run: |
           psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f apps/api/db/tests/pruebas.sql 2>&1 | tee salida-pruebas.txt
