@@ -306,7 +306,7 @@ function MockResumen() {
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
         {[
-          ['Triaje', '3'],
+          ['Votación', '3'],
           ['WhatsApp', '4'],
           ['Entregas', '5'],
         ].map(([k, v]) => (
@@ -367,7 +367,7 @@ export function Landing() {
               [
                 KanbanSquare,
                 'Tareas dispersas',
-                'Un tablero con flujo claro y triaje: cada tarea tiene responsable, fecha y estado.',
+                'Un tablero con flujo claro y votación: cada tarea tiene responsable, fecha y estado.',
               ],
               [
                 MessageCircle,
@@ -502,8 +502,8 @@ export function Landing() {
               'Tus tareas y tu calendario, con un mini Hill Chart.',
               'solitario',
             ],
-            [Crown, 'Líder', 'Triaje, sprints, reportes y avisos de WhatsApp.', 'lider'],
-            [Users, 'Integrante', 'Tus tareas, propuestas, chat y retrospectiva.', 'integrante'],
+            [Crown, 'Líder', 'Propuestas, sprints, reportes y avisos de WhatsApp.', 'lider'],
+            [Users, 'Integrante', 'Tus tareas, votaciones, chat y retrospectiva.', 'integrante'],
             [Eye, 'Invitado', 'Ve y comenta lo que se comparte contigo.', 'invitado'],
           ].map(([I, ti, tx, h]) => {
             const Ic = I as typeof User;
@@ -601,8 +601,8 @@ export function Caracteristicas() {
     ],
     [
       KanbanSquare,
-      'Tablero y triaje',
-      'Columnas del flujo con arrastrar y soltar y menú «Mover a…». Las propuestas pasan por triaje.',
+      'Tablero y votación',
+      'Columnas del flujo con arrastrar y soltar y menú «Mover a…». El equipo vota las propuestas del líder.',
       <MiniTablero key="t" />,
     ],
     [
@@ -725,7 +725,7 @@ export function ComoFunciona() {
     [
       Inbox,
       'Propón y decide',
-      'Los integrantes proponen tareas; el líder las acepta en triaje con responsable y fecha.',
+      'El líder propone tareas con sus subtareas; los integrantes votan si se aceptan para el sprint.',
     ],
     [
       Flag,
@@ -786,10 +786,11 @@ export function WhatsAppInfo() {
             <Clock className="size-5 text-muted" aria-hidden /> En el reporte diario o semanal
           </h2>
           <p className="text-muted">
-            Tareas aceptadas, asignaciones, cambios de estado o fecha y decisiones de triaje.
+            Tareas aceptadas, asignaciones, cambios de estado o fecha y resultados de las
+            votaciones.
           </p>
           <BurbujaWA texto="👤 «Documentar la API» ahora es de Hilda." />
-          <BurbujaWA texto="📥 Triaje: se aceptó «Filtro por etiquetas»; se rechazó «Tema de alto contraste»." />
+          <BurbujaWA texto="🗳️ Votación: se aceptó «Filtro por etiquetas»; se rechazó «Tema de alto contraste»." />
         </Tarjeta>
       </div>
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -829,7 +830,7 @@ export function ParaQuien() {
       Crown,
       'Líder',
       [
-        'Triaje y asignación',
+        'Proponer tareas y asignarlas',
         'Planear, iniciar y cerrar sprints',
         'Reportes completos y exportación',
         'Revisar y enviar avisos de WhatsApp',
@@ -842,7 +843,7 @@ export function ParaQuien() {
       'Integrante',
       [
         'Ejecutar y actualizar tus tareas',
-        'Proponer tareas',
+        'Votar las propuestas del líder',
         'Chat del equipo, de tareas y directo',
         'Participar en la retrospectiva',
         'Leer reportes',

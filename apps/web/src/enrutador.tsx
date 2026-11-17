@@ -147,13 +147,13 @@ const rutas: RouteObject[] = [
                     },
                   },
                   {
-                    path: 'triaje',
+                    path: 'votacion',
                     lazy: async () => {
-                      const { Triaje } = await equipo();
+                      const { Votacion } = await equipo();
                       return {
                         element: (
                           <Requiere permiso="ver_sprints">
-                            <Triaje />
+                            <Votacion />
                           </Requiere>
                         ),
                       };

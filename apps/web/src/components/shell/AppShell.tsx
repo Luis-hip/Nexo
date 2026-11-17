@@ -151,12 +151,13 @@ function Shell({ yo }: { yo: Yo }) {
     setSp(p, { replace: true });
   };
 
-  // Acción de crear según el perfil: el líder crea, el integrante propone, el invitado no.
+  // Acción de crear según el perfil: en un equipo solo el líder propone tareas (DEC-024);
+  // el integrante vota y el invitado no participa. En el espacio personal cada quien crea las suyas.
   const crear =
-    perfil === 'invitado'
+    perfil === 'invitado' || perfil === 'integrante'
       ? null
       : {
-          etiqueta: perfil === 'integrante' ? 'Proponer tarea' : 'Nueva tarea',
+          etiqueta: perfil === 'lider' ? 'Nueva propuesta' : 'Nueva tarea',
           accion: acciones.nuevaTarea,
         };
   const membresia = yo.equipos.find((e) => e.id === equipoId);

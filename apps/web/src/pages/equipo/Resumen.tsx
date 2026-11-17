@@ -24,7 +24,7 @@ import { TareasCompartidas } from './tareas';
 
 /**
  * EQ-01: resumen del equipo. En la Fase 2 muestra el Hill Chart en solo lectura, lo que la
- * persona tiene pendiente y los accesos a triaje; arrastrar e historial llegan en la Fase 3.
+ * persona tiene pendiente y los accesos a la votación; arrastrar e historial llegan en la Fase 3.
  * El invitado ve el resumen reducido (IN-01).
  */
 export function Resumen() {
@@ -110,12 +110,14 @@ function ResumenMiembro() {
               texto={
                 esLider
                   ? 'Crea la primera tarea del equipo o invita a tus integrantes desde Equipo.'
-                  : 'Propón una tarea para que el líder la revise en triaje.'
+                  : 'Aquí verás las tareas cuando el equipo acepte las propuestas del líder. Revisa si hay propuestas por votar.'
               }
               accion={
-                <Boton variante="primario" onClick={acc.nuevaTarea}>
-                  {esLider ? 'Nueva tarea' : 'Proponer tarea'}
-                </Boton>
+                esLider ? (
+                  <Boton variante="primario" onClick={acc.nuevaTarea}>
+                    Nueva propuesta
+                  </Boton>
+                ) : undefined
               }
             />
           </Tarjeta>
@@ -204,12 +206,12 @@ function ResumenMiembro() {
                     </ul>
                   )}
                   <Link
-                    to={`${base}/tareas/triaje`}
+                    to={`${base}/tareas/votacion`}
                     className="flex min-h-9 items-center justify-between text-sm text-brand hover:underline"
                   >
-                    {esLider ? 'Propuestas en triaje' : 'Triaje y mis propuestas'}
+                    {esLider ? 'Propuestas en votación' : 'Propuestas por votar'}
                     <span className="rounded-full bg-surface px-2 text-xs text-muted tabular">
-                      {conteos.data?.triaje ?? '–'}
+                      {conteos.data?.votacion ?? '–'}
                     </span>
                   </Link>
                   <Link

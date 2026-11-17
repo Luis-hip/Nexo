@@ -62,18 +62,22 @@ export const ARTICULOS: {
     ],
   },
   {
-    slug: 'triaje',
+    slug: 'votacion',
     categoria: 'Trabajo',
-    titulo: 'Proponer tareas y triaje',
-    resumen: 'Los integrantes proponen, el líder decide.',
+    titulo: 'Proponer tareas y votarlas',
+    resumen: 'El líder propone, los integrantes votan.',
     secciones: [
       {
         t: 'Proponer',
-        p: 'Como integrante, el botón de crear se convierte en «Proponer tarea». La propuesta llega a Triaje.',
+        p: 'El líder propone cada tarea junto con sus subtareas. La propuesta llega a Votación. Si eres integrante y tienes una idea, compártela en el chat o en los comentarios.',
       },
       {
-        t: 'Decidir',
-        p: 'El líder acepta al sprint (con responsable y fecha), envía al backlog, pide cambios o rechaza con un motivo obligatorio.',
+        t: 'Votar',
+        p: 'Cada integrante vota a favor o en contra y puede cambiar su voto mientras la votación siga abierta. Se ve cuántos votaron y quiénes, pero no cómo votó cada persona. El líder no vota y los invitados no ven las propuestas.',
+      },
+      {
+        t: 'Resultado',
+        p: 'La propuesta se acepta para el sprint cuando más de la mitad de los integrantes vota a favor, y se rechaza cuando más de la mitad vota en contra. Con empate sigue abierta; el líder puede retirarla o reformularla como una propuesta nueva.',
       },
     ],
   },
@@ -85,7 +89,7 @@ export const ARTICULOS: {
     secciones: [
       {
         t: 'El flujo',
-        p: 'Propuesta → Aceptada → Habilitada → En curso ⇄ Atascada → Completada (a tiempo o con retraso). Una tarea puede ser Rechazada por el líder o por su responsable.',
+        p: 'Propuesta → Aceptada → Habilitada → En curso ⇄ Atascada → Completada (a tiempo o con retraso). Una propuesta puede quedar Rechazada por votación o Retirada por el líder.',
       },
       {
         t: 'Quién mueve',
@@ -105,7 +109,7 @@ export const ARTICULOS: {
       },
       {
         t: 'En el reporte',
-        p: 'Tareas aceptadas al sprint, asignaciones, cambios de estado o fecha y decisiones de triaje se agrupan en el reporte diario o semanal.',
+        p: 'Tareas aceptadas al sprint, asignaciones, cambios de estado o fecha y resultados de las votaciones se agrupan en el reporte diario o semanal.',
       },
       {
         t: 'Revisión',
@@ -175,7 +179,7 @@ export const FAQ = [
   ],
   [
     '¿Quién puede crear tareas?',
-    'El líder crea tareas directamente. Los integrantes proponen y el líder decide en Triaje.',
+    'El líder propone las tareas con sus subtareas y los integrantes votan si se aceptan para el sprint.',
   ],
   [
     '¿Se envía algo a WhatsApp sin mi permiso?',

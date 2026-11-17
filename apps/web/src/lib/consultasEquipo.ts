@@ -11,14 +11,14 @@ import type {
   MoverTarea,
   TareaEquipo,
   TareaEquipoDetalle,
-  TriajeEntrada,
   VistaInvitacion,
+  Voto,
 } from '@nexo/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import { claves } from './consultas';
 
-export type VistaTareas = 'tablero' | 'backlog' | 'triaje' | 'mias' | 'todas';
+export type VistaTareas = 'tablero' | 'backlog' | 'votacion' | 'mias' | 'todas';
 
 const clavesEquipo = {
   equipo: (id: string) => ['equipo', id] as const,
@@ -155,8 +155,16 @@ export function useAccionesTarea(equipoId: string) {
     mover: accion(({ id, ...cuerpo }: MoverTarea & { id: string }) =>
       api<TareaEquipoDetalle>(`${base}/${id}/mover`, { metodo: 'POST', cuerpo }),
     ),
-    triaje: accion(({ id, ...cuerpo }: TriajeEntrada & { id: string }) =>
-      api<TareaEquipoDetalle>(`${base}/${id}/triaje`, { metodo: 'POST', cuerpo }),
+    // Votación de propuestas (DEC-024): votan los integrantes; el líder retira o reformula.
+    votar: accion(({ id, ...cuerpo }: { id: string; voto: Voto; comentario?: string }) =>
+      api<TareaEquipoDetalle>(`${base}/${id}/voto`, { metodo: 'POST', cuerpo }),
+    ),
+    retirar: accion(({ id, version }: { id: string; version: number }) =>
+      api<TareaEquipoDetalle>(`${base}/${id}/retirar`, { metodo: 'POST', cuerpo: { version } }),
+    ),
+    reformular: accion(
+      ({ id, ...datos }: Partial<CrearTareaEquipo> & { id: string; titulo: string }) =>
+        api<TareaEquipoDetalle>(`${base}/${id}/reformular`, { metodo: 'POST', cuerpo: datos }),
     ),
     asignar: accion(
       ({ id, ...cuerpo }: { id: string; version: number; responsable_id: string | null }) =>
