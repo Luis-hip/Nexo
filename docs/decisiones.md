@@ -1,6 +1,6 @@
 # Nexo · Registro de decisiones
 
-> Regla (docs/03, sección 1.2): si algo no está en `01`/`02`, se elige lo más simple, se anota aquí y se sigue; si es irreversible, se pregunta. Cada entrada: fecha, contexto, decisión y consecuencia. Las decisiones pendientes del producto (D-01, D-02, D-03) siguen en `01_Contexto_y_Especificaciones.md`.
+> Regla (docs/03, sección 1.2): si algo no está en `01`/`02`, se elige lo más simple, se anota aquí y se sigue; si es irreversible, se pregunta. Cada entrada: fecha, contexto, decisión y consecuencia. La decisión pendiente del producto D-01 sigue en `01_Contexto_y_Especificaciones.md` (D-02 se eliminó y D-03 quedó resuelta: DEC-027 y DEC-029).
 
 | ID | Fecha | Tema | Estado |
 |---|---|---|---|
@@ -23,10 +23,16 @@
 | DEC-017 | 2026-11-12 | Preferencias de apariencia: servidor y copia local | Vigente |
 | DEC-018 | 2026-11-15 | Equipos: acceso por membresía y 404 a quien no pertenece | Vigente |
 | DEC-019 | 2026-11-15 | Invitaciones: código, enlace y reglas | Vigente |
-| DEC-020 | 2026-11-15 | Tareas de equipo: destino, triaje y asignación | Vigente |
+| DEC-020 | 2026-11-15 | Tareas de equipo: destino, triaje y asignación | **Reemplazada en parte por DEC-024** |
 | DEC-021 | 2026-11-15 | Orden con índice fraccionario y concurrencia | Vigente |
 | DEC-022 | 2026-11-15 | Los eventos de dominio se registran; aún nadie los consume | Vigente |
 | DEC-023 | 2026-11-15 | Lo que la Fase 2 deja para la Fase 3 | Vigente |
+| DEC-024 | 2026-11-16 | El triaje pasa a ser votación de los integrantes sobre propuestas del líder | Vigente; V-10 y V-11 por confirmar |
+| DEC-025 | 2026-11-16 | Procesos almacenados en la BD; la API sin SQL de negocio | Vigente |
+| DEC-026 | 2026-11-16 | Política de secretos y claves | Vigente |
+| DEC-027 | 2026-11-16 | Alojamiento: Vercel + Render + dominio propio (Fase 3.5) | Vigente; D-03 resuelta |
+| DEC-028 | 2026-11-16 | Documentos 07–10 y fases 2.5 y 3.5 | Vigente |
+| DEC-029 | 2026-11-16 | Nombre «Carlos» (se elimina D-02) y visibilidad de votos | Vigente |
 
 ---
 
@@ -96,7 +102,7 @@ Ramas personales, creadas desde `dev`, **una por integrante** (sin separar back 
 
 **Contexto.** `packages/shared` se consume como código TypeScript fuente y los imports no llevan extensión; compilar la API con `tsc` no produce ESM ejecutable por Node sin más configuración.
 
-**Decisión.** `build` de la API solo verifica tipos; `dev` y `start` usan `tsx`. La forma de empaquetar para producción (por ejemplo `tsup`/`esbuild`) se decide en la Fase 6 junto con el alojamiento (D-03).
+**Decisión.** `build` de la API solo verifica tipos; `dev` y `start` usan `tsx`. La forma de empaquetar para producción (por ejemplo `tsup`/`esbuild`) se decide al preparar el despliegue (Fase 3.5, `10_Plan_de_Despliegue.md`).
 
 ## DEC-007 · Formateador: Prettier
 
@@ -205,3 +211,37 @@ Cada cambio de equipo inserta su fila en `eventos_dominio` y en `actividad` **en
 ## DEC-023 · Lo que la Fase 2 deja para la Fase 3
 
 Queda sin construir, con «Próximamente» en la web: sprints (planear, cerrar, retro), calendario, reportes, actividad, archivos, plantillas, ajustes del equipo, elección y transferencia de liderazgo, salir y expulsar, y todo el chat y WhatsApp (Fase 4). El tablero muestra todas las tareas que están en sus columnas, haya o no sprint activo. `react-hook-form` sigue sin instalarse: los formularios validan con los esquemas Zod compartidos (ver DEC-015).
+
+## DEC-024 · El triaje pasa a ser una votación de los integrantes sobre propuestas del líder
+
+**Fecha:** 2026-11-16 · **Fuente:** `07_Cambios_de_Alcance_Fase2.md`, sección 1. **Reemplaza en parte a DEC-020.**
+
+El **líder propone** las tareas junto con sus subtareas (una sola operación; estado `propuesta`) y los **integrantes activos votan** aceptar o rechazar (con comentario opcional; pueden cambiar su voto mientras siga abierta). Valores confirmados el 2026-11-16: **V-1** acepta la mayoría simple de **todos** los integrantes activos; **V-2** el líder no vota y los invitados tampoco; **V-3** sin plazo (el líder puede retirarla); **V-4** empate o sin mayoría → sigue en `propuesta`, el líder puede retirarla (`cancelada`) o reformularla; **V-5** sin integrantes el líder acepta directamente; **V-8** se muestra el conteo y quién ya votó, **no** el voto de los demás (la API no lo devuelve mientras está abierta, ni al líder); cada integrante ve el suyo. Un integrante ya no crea ni propone tareas. Quien sale o es expulsado pierde sus votos de propuestas **abiertas**.
+
+**Por confirmar (marcados para revisión de Luis):** **V-10** toda tarea nueva del líder entra en votación (desaparece el destino «backlog directo» de DEC-020); **V-11** la asignación y su aceptación se mantienen (DEC-020), y si el responsable la rechaza el líder **reasigna directamente**, sin nueva votación.
+
+**Sigue vigente de DEC-020:** la asignación, que el responsable acepte o rechace con motivo, la máquina de estados compartida y el orden por índice fraccionario.
+
+## DEC-025 · Procesos almacenados en la BD; la API no lleva SQL de negocio
+
+**Fecha:** 2026-11-16 · **Fuente:** `07`, sección 2 · **Alcance (V-6) confirmado:** todo lo nuevo nace como proceso; lo de las Fases 1 y 2 se migra en una tarea dedicada de la Fase 2.5.
+
+Toda operación sobre datos es un proceso `proc_<dominio>_<accion>` (documentado en `08_Procesos_BD.md`); la API solo lo llama desde `repositorios/`. Roles `nexo_migraciones` (dueño) y `nexo_app` (solo `EXECUTE`). Riesgo de **reglas duplicadas** (estados, mayoría): la fuente de verdad sigue en `packages/shared`, la BD guarda una copia y una prueba compara ambas. Refactor en rama propia por dominios; si el tiempo aprieta, primero escrituras y operaciones críticas y las lecturas simples pasan a la Fase 3 (anotado en `progreso.md`). Los tipos de `kysely-codegen` quedan para pruebas (decisión final al terminar el refactor).
+
+## DEC-026 · Política de secretos y claves
+
+**Fecha:** 2026-11-16 · **Fuente:** `07`, sección 3 · **Detalle:** `09_Seguridad_y_Secretos.md`.
+
+Ningún secreto en el repositorio; el navegador no recibe secretos; producción solo en variables del alojamiento y de la CI; un secreto distinto por entorno; tokens de terceros cifrados y nunca devueltos; registros con redacción; arranque seguro con validación Zod; gitleaks y secret scanning; rotación y registro de incidentes.
+
+## DEC-027 · Alojamiento: Vercel + Render + dominio propio
+
+**Fecha:** 2026-11-16 · **Detalle:** `10_Plan_de_Despliegue.md` (Fase 3.5). Front en **Vercel**; API, worker y PostgreSQL en **Render**; dominio propio con `app.` y `api.`; despliegue automático solo desde `produccion`. **Resuelve D-03.** No se despliega ni se crean cuentas hasta después de la Fase 3.
+
+## DEC-028 · Documentos nuevos y fases 2.5 y 3.5
+
+**Fecha:** 2026-11-16. Se agregan `07` (cambios de alcance), `08` (procesos de la BD), `09` (seguridad y secretos), `10` (plan de despliegue) y `seguridad-incidentes.md`; se actualizan `01`–`06` y el README. El mapa de fases de `03` suma la **Fase 2.5** y la **Fase 3.5**; la Fase 6 queda como cierre.
+
+## DEC-029 · Nombre del integrante y visibilidad de votos
+
+**Fecha:** 2026-11-16. El integrante se llama **Carlos**; se elimina la decisión D-02 y toda nota sobre «Carlo». Visibilidad de votos (V-8): ver DEC-024.

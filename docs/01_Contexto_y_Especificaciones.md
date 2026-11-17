@@ -17,8 +17,7 @@
 | ID | Decisión | Estado | Efecto mientras tanto |
 |---|---|---|---|
 | D-01 | Capacidad de grupos de WhatsApp: ¿equipos de 8 personas **más** el número de la empresa? | **Pendiente** (ver 7.3) | `equipos.max_miembros` es configurable (1–8, por defecto 8). Se verifica en la documentación oficial de Meta en la Fase 0. |
-| D-02 | Nombre del tercer integrante del equipo: «Carlos» o «Carlo» | Pendiente | Se usa «Carlos» en el cronograma, como en el borrador del equipo. |
-| D-03 | Proveedor de alojamiento (API y PostgreSQL) | Propuesta en 8 | Se decide en la Fase 6; el diseño no depende de él. |
+| D-03 | Proveedor de alojamiento (API y PostgreSQL) | **Resuelta** (DEC-027, 2026-11-16) | Front en Vercel; API, worker y BD en Render; dominio propio (`app.` y `api.`). Detalle en `10_Plan_de_Despliegue.md` (Fase 3.5). |
 
 ---
 
@@ -46,9 +45,9 @@ Nexo es una aplicación web de **trabajo colaborativo tipo tablero (estilo Trell
 | Perfil | Quién es | Resumen |
 |---|---|---|
 | **Personal** | Cualquier usuario en su espacio privado | Sus tareas son privadas; no hay otros roles. |
-| **Líder** | Una persona por equipo | Crea y asigna tareas, hace triaje, gestiona sprints, configura y envía WhatsApp, invita y expulsa, modera el chat. |
-| **Integrante** | Miembro activo del equipo | Propone tareas, cambia el estado de **sus** tareas, comenta, chatea, participa en retros y votaciones. |
-| **Invitado** | Observador externo (con caducidad) | Ve y comenta **solo** lo que se le comparte; usa el canal de Invitados; no adjunta, no propone, no tiene mensajes directos. |
+| **Líder** | Una persona por equipo | **Propone tareas con sus subtareas**, las asigna, gestiona sprints, configura y envía WhatsApp, invita y expulsa, modera el chat. |
+| **Integrante** | Miembro activo del equipo | **Vota las propuestas** del líder, cambia el estado de **sus** tareas, comenta, chatea, participa en retros y votaciones. |
+| **Invitado** | Observador externo (con caducidad) | Ve y comenta **solo** lo que se le comparte; usa el canal de Invitados; no adjunta, no vota, no tiene mensajes directos. |
 
 ### 2.2 Matriz de permisos
 
@@ -57,9 +56,9 @@ Leyenda: **✔** sí · **✖** no · **(p)** solo lo propio · **(c)** solo lo 
 | Acción | Personal | Líder | Integrante | Invitado |
 |---|:-:|:-:|:-:|:-:|
 | Ver resumen | ✔ | ✔ | ✔ | (c) |
-| Crear tarea | ✔ | ✔ | ✖ | ✖ |
-| Proponer tarea (va a triaje) | — | — | ✔ | ✖ |
-| Triaje (aceptar/rechazar) | — | ✔ | ✖ | ✖ |
+| Crear / proponer tarea con subtareas | ✔ | ✔ | ✖ | ✖ |
+| **Votar propuesta (aceptar para el sprint)** | — | ✖ | ✔ | ✖ |
+| Retirar o reformular propuesta | — | ✔ | ✖ | ✖ |
 | Asignar responsable | ✔ | ✔ | ✖ | ✖ |
 | Responder a una asignación | — | ✔ | ✔ | ✖ |
 | Habilitar tarea | ✔ | ✔ | ✖ | ✖ |
@@ -93,7 +92,7 @@ Leyenda: **✔** sí · **✖** no · **(p)** solo lo propio · **(c)** solo lo 
 
 1. Un equipo tiene **un solo líder**.
 2. Elección de líder: votación de **72 horas** por mayoría, con **24 horas** de desempate; el líder saliente **no vota** y queda como interino hasta el resultado.
-3. Los integrantes **proponen** tareas; el **líder las crea/acepta** en triaje.
+3. El **líder propone** las tareas (con sus subtareas); los **integrantes votan** si se aceptan para el sprint (mayoría simple de los integrantes activos; DEC-024).
 4. El invitado **ve, comenta y chatea solo en lo compartido**. Los invitados caducan.
 5. Unirse a un equipo requiere **enlace o código** de invitación.
 6. WhatsApp se configura **a nivel de grupo**, con **consentimiento individual**.
@@ -106,7 +105,7 @@ Leyenda: **✔** sí · **✖** no · **(p)** solo lo propio · **(c)** solo lo 
 
 ### 2.4 Estados de una tarea
 
-`propuesta → (triaje) → backlog/por hacer → en curso → en revisión → hecha`, más `rechazada` y `cancelada`. Las transiciones válidas dependen del rol y de quién es el responsable; se prueban con **tablas de casos** (Fase 2). El estado y su historial viven en la BD (`tareas`, `actividad`, `eventos_dominio`). Una tarea tiene `version` para **concurrencia optimista**: quien guarda con una `version` vieja recibe `409` y la interfaz muestra «alguien cambió esta tarea».
+`propuesta → (votación) → aceptada/backlog → en curso → en revisión → hecha`, más `rechazada` y `cancelada`. Las transiciones válidas dependen del rol y de quién es el responsable; se prueban con **tablas de casos** (Fase 2). El estado y su historial viven en la BD (`tareas`, `actividad`, `eventos_dominio`). Una tarea tiene `version` para **concurrencia optimista**: quien guarda con una `version` vieja recibe `409` y la interfaz muestra «alguien cambió esta tarea».
 
 **Semáforo de plazo** (vista `v_tareas_semaforo`): verde = a tiempo, ámbar = vence pronto, rojo = vencida. Las reglas exactas están en `02_Base_de_Datos.md` y en `src/lib/tareas.ts` del prototipo.
 
@@ -132,7 +131,7 @@ App (AppShell)                /app
   Equipos                     /app/equipos/{nuevo, unirse}
   Notificaciones              /app/notificaciones
   Equipo (EquipoGuard)        /app/e/:equipo
-                                tareas/{lista, backlog, triaje, :id}
+                                tareas/{lista, backlog, votacion, :id}
                                 sprints/{activo, planear, cerrar, retro}
                                 calendario, reportes, actividad, archivos, plantillas
                                 chat/{equipo, invitados, dm/:id, tarea/:tareaId}
@@ -240,7 +239,7 @@ Gráfico en **SVG** propio (sin librería): una colina dividida en «descubrir»
 | Iconos | **lucide-react** | Ya usado en el prototipo. |
 | Backend | **Node 22 + Fastify** | Ligero, rápido, buen soporte de TypeScript y esquemas. |
 | Validación compartida | **Zod** (`packages/shared`) | Una definición, dos usos. |
-| Acceso a BD | **Kysely** + **kysely-codegen** | SQL tipado sin ORM pesado; tipos generados desde la BD real. |
+| Acceso a BD | **Procesos almacenados** (`proc_*`) llamados desde `repositorios/` con tipos y validación **Zod** | La lógica de datos vive en PostgreSQL (DEC-025, `08_Procesos_BD.md`). Kysely queda solo como cliente de la llamada y para pruebas. |
 | Migraciones | **node-pg-migrate** (SQL) | El esquema ya está escrito en SQL; se aplica tal cual. |
 | Tiempo real | **Socket.IO** (salas por equipo/conversación) | Reconexión, salas y *fallback* resueltos; evita escribir sockets a mano. |
 | Edición colaborativa de texto | **Fuera del MVP.** Si se quisiera después: **Yjs** | Las tareas se editan con concurrencia optimista; un CRDT agrega complejidad que el MVP no necesita. |
@@ -274,7 +273,7 @@ Navegador (React) ──HTTPS──► API Fastify ──► PostgreSQL 16
 
 - **Un solo servicio** de API que también ejecuta el trabajador de la cola al inicio (se separa si hace falta).
 - **Patrón *outbox*:** cada cambio relevante inserta una fila en `eventos_dominio` dentro de la **misma transacción**; un proceso la lee y (a) emite por Socket.IO, (b) crea notificaciones, (c) decide si corresponde un aviso de WhatsApp según las reglas del equipo.
-- **Capas del servidor:** `rutas` (HTTP, validación Zod, permisos) → `servicios` (reglas de negocio, transacciones) → `repositorios` (Kysely). Las rutas **no** contienen lógica de negocio.
+- **Capas del servidor:** `rutas` (HTTP, validación Zod, permisos) → `servicios` (reglas de negocio, transacciones) → `repositorios` (única capa que llama a la BD) → **procesos de la BD** (`proc_*`). Ni rutas ni servicios escriben SQL. Las rutas **no** contienen lógica de negocio.
 - **Permisos:** guardia `requierePermiso('accion')` en cada ruta; comprobación adicional del contexto (¿el usuario es miembro activo de **este** equipo?).
 
 ### 7.2 Capa de proveedor de WhatsApp
@@ -320,21 +319,22 @@ El líder **revisa y envía** la cola (por defecto) o activa el envío automáti
 
 **Entornos:** `local` (Docker Compose con PostgreSQL), `ci` (servicio PostgreSQL de GitHub Actions) y `produccion`.
 
-**Propuesta de alojamiento (D-03).** La API en un servicio de contenedores/Node (Render, Railway o Fly.io) y PostgreSQL gestionado (Neon, Supabase o el del propio proveedor). El diseño **no depende** del proveedor: solo exige PostgreSQL 16 y una conexión. El frontend se sirve como archivos estáticos (o desde el mismo servicio). Se elige en la Fase 6 según el plan gratuito disponible.
+**Alojamiento (D-03, resuelta, DEC-027).** Front en **Vercel**; API, worker y PostgreSQL 16 en **Render**; dominio propio con `app.<dominio>` y `api.<dominio>`; despliegue automático solo desde la rama `produccion`. Se ejecuta en la **Fase 3.5** y el plan completo está en `10_Plan_de_Despliegue.md`. Hasta entonces no se despliega nada.
 
 **Variables de entorno** (`.env`, nunca en el repositorio; `.env.example` sí):
 
-| Variable | Uso |
-|---|---|
-| `DATABASE_URL` | Conexión a PostgreSQL |
-| `SESSION_SECRET` | Firma auxiliar de cookies |
-| `ENCRYPTION_KEY` | Clave de 32 bytes para AES-256-GCM (2FA, tokens de WhatsApp) |
-| `APP_URL`, `API_URL` | Enlaces en correos, WhatsApp y CORS |
+| Variable | Uso | Dónde vive / quién accede |
+|---|---|---|
+| `DATABASE_URL` | Conexión a PostgreSQL (en producción, rol `nexo_app`) | Local: `.env`; producción: panel de Render; CI: valor desechable |
+| `DATABASE_URL_MIGRACIONES` | Conexión con el rol `nexo_migraciones` (solo migraciones) | Panel de Render y secretos de la CI; no la usa la API |
+| `SESSION_SECRET` | Firma auxiliar de cookies | Panel de Render (administradores) |
+| `ENCRYPTION_KEY` | Clave de 32 bytes (64 hex) para AES-256-GCM (2FA, tokens de WhatsApp) | Panel de Render (administradores) |
+| `APP_URL`, `API_URL` | Enlaces en correos, WhatsApp, CORS y comprobación de `Origin` | Obligatorias en producción |
 | `WHATSAPP_PROVIDER` | `simulado` \| `cloud_api_grupos` \| `cloud_api_directo` |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | Solo en modo real |
 | `DEV_LOGIN_ENABLED` | `true` solo en local/CI |
 
-**Regla de secretos:** ningún secreto en el código, en el historial de Git ni en los registros. Los tokens de WhatsApp guardados en la BD van **cifrados**.
+**Regla de secretos:** ningún secreto en el código, en el historial de Git ni en los registros. Los tokens de WhatsApp guardados en la BD van **cifrados**. Política completa, rotación y qué hacer ante una filtración: `09_Seguridad_y_Secretos.md` (DEC-026). Un secreto distinto por entorno; el navegador nunca recibe secretos (`VITE_*` es público).
 
 **Inicio de sesión de desarrollo (*dev login*).** Mientras no existe la autenticación real (se construye en la Fase 5), una ruta `POST /dev/login { email }` crea una sesión para cualquier usuario de la semilla (que no tienen contraseña). Reglas: solo existe si `DEV_LOGIN_ENABLED=true`; **el servidor se niega a arrancar en producción con esa variable activa**; la web muestra un selector de usuario de la semilla solo en ese modo. Esto permite construir todas las pantallas por rol sin depender del login.
 
@@ -349,7 +349,7 @@ nexo/
 │  └─ web/            (React; src/pages, src/components/ui, src/features/*, src/styles)
 ├─ packages/
 │  └─ shared/         (Zod, permisos, color, tipos de evento, constantes)
-├─ docs/              (decisiones.md, contexto y plan, 01–06)
+├─ docs/              (decisiones.md, progreso.md y los documentos 01–10)
 ├─ .github/           (workflows/ci.yml, plantillas de issues y PR)
 ├─ docker-compose.yml
 └─ README.md
@@ -366,15 +366,15 @@ nexo/
 1. **TypeScript estricto** (`strict: true`); prohibido `any` salvo con comentario `// justificado:`.
 2. **Nombres:** código y tablas en español **como en la BD** (`tareas`, `membresias`), funciones en `camelCase`, componentes en `PascalCase`, archivos de componentes `PascalCase.tsx`.
 3. **Validar en el borde:** toda entrada HTTP/WebSocket se valida con Zod antes de tocar la lógica; la salida se tipa con los mismos esquemas.
-4. **Transacciones:** cualquier operación que toque más de una tabla va en una transacción; el evento de dominio se inserta en esa misma transacción.
-5. **Reglas en la BD:** lo que la BD ya hace cumplir (tope de miembros, un líder, etc.) **no se reimplementa** en la aplicación, solo se traduce su error (`NX001` → «El equipo ya tiene 8 miembros»).
+4. **Procesos en la BD:** toda operación sobre datos es un proceso `proc_<dominio>_<accion>` creado por una migración y documentado en `08_Procesos_BD.md`; el código de la API **solo llama** procesos desde `repositorios/` y no contiene `SELECT/INSERT/UPDATE/DELETE`. Cada proceso es una transacción y deja su evento de dominio en ella.
+5. **Reglas en la BD:** la lógica de datos vive en los procesos; lo que la BD ya hace cumplir (tope de miembros, un líder, etc.) **no se reimplementa** en la aplicación, solo se traduce su error (`NX001` → «El equipo ya tiene 8 miembros»).
 6. **Permisos:** siempre mediante `puede(...)`; nunca `if (rol === 'lider')` suelto.
 7. **Errores:** formato único `{ codigo, mensaje, detalles? }`; mensajes en español claros para el usuario; nunca se filtran trazas ni SQL.
-8. **Seguridad:** consultas siempre parametrizadas (Kysely); nunca contenido del usuario como HTML sin escapar; cookies `HttpOnly`; límite de peticiones en login y mensajes; los *webhooks* se verifican por firma.
-9. **Datos personales:** no se registran contraseñas, tokens ni números de teléfono completos en los registros.
+8. **Seguridad:** llamadas a procesos siempre parametrizadas; secretos solo en variables de entorno del proveedor y de la CI, nunca en el repositorio (`09`); nunca contenido del usuario como HTML sin escapar; cookies `HttpOnly`; límite de peticiones en login y mensajes; los *webhooks* se verifican por firma.
+9. **Datos personales y registros:** no se registran contraseñas, tokens, cookies ni números de teléfono completos; `pino` redacta `authorization`, `cookie`, `set-cookie`, `token`, `password` y `secret`.
 10. **Pruebas:** toda regla de negocio nueva lleva prueba; toda ruta, al menos un caso permitido y uno prohibido; las tablas de casos de permisos y transiciones son pruebas parametrizadas.
 11. **Interfaz:** solo componentes de `components/ui/` y tokens de 5.2; textos en español; cada pantalla con los cinco estados de 5.3.
-12. **Migraciones:** una migración por cambio, con *subida* y *bajada*; nunca se edita una migración ya aplicada; después de migrar se regeneran los tipos (`kysely-codegen`).
+12. **Migraciones:** una migración por cambio, con *subida* y *bajada*; nunca se edita una migración ya aplicada; cada proceso nuevo o cambiado va en una migración nueva y se documenta en `08`.
 13. **Cada pull request:** CI en verde, descripción de qué cambia y capturas si toca la interfaz.
 14. **Lo que una IA no debe hacer sin preguntar:** borrar datos, cambiar el esquema ya aplicado, cambiar `max_miembros` por defecto, activar envíos reales de WhatsApp, subir secretos, desactivar pruebas o permisos para que algo «pase».
 
@@ -392,4 +392,4 @@ El MVP está listo cuando: (a) las pantallas de los cuatro roles prioritarias de
 
 - Plan paso a paso: `03_Plan_de_Accion.md` (Fase 0: repositorio y scripts SQL; Fase 5: QA, permisos, índices y autenticación real).
 - Diseño y scripts de la BD: `02_Base_de_Datos.md`, `01_esquema.sql`, `02_semilla.sql`, `03_pruebas.sql`.
-- Artículo: `04_Articulo.md`. Cronograma: `05_Cronograma.md`. Índice para IAs: `06_README_AGENTS.md`.
+- Artículo: `04_Articulo.md`. Cronograma: `05_Cronograma.md`. Índice para IAs: `06_README_AGENTS.md`. Cambios de alcance (votación, procesos, secretos): `07_Cambios_de_Alcance_Fase2.md`. Procesos de la BD: `08_Procesos_BD.md`. Seguridad y secretos: `09_Seguridad_y_Secretos.md`. Despliegue: `10_Plan_de_Despliegue.md`.

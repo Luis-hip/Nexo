@@ -8,9 +8,13 @@ Nexo es una aplicación web de trabajo colaborativo tipo tablero, con una aporta
 |---|---|---|---|
 | 1 | `01_Contexto_y_Especificaciones.md` | **Siempre, primero** | Producto, roles y matriz de permisos, mapa de pantallas, reglas de diseño, stack y justificación, arquitectura, despliegue, convenciones y decisiones pendientes |
 | 2 | `02_Base_de_Datos.md` | Vayas a tocar datos, API o migraciones | Diseño de la BD, diagramas, reglas, scripts completos, pruebas, diccionario |
-| 3 | `03_Plan_de_Accion.md` | Vayas a **hacer** algo | Fases 0–6 con instrucciones y criterio de terminado; pantallas por prioridad y faltantes |
+| 3 | `03_Plan_de_Accion.md` | Vayas a **hacer** algo | Fases 0–6 (incluidas 2.5 y 3.5) con instrucciones y criterio de terminado; pantallas por prioridad y faltantes |
 | 4 | `04_Articulo.md` | Redactes o verifiques el artículo | Plantilla, texto de primer borrador, marcas `[VERIFICAR]`, redes de Petri |
 | 5 | `05_Cronograma.md` | Necesites saber quién hace qué y cuándo | Fases, responsables, cambios propuestos |
+| 6 | `07_Cambios_de_Alcance_Fase2.md` | Trabajes en la **Fase 2.5** o toques triaje/votación, procesos o secretos | Tres cambios de alcance (DEC-024 a DEC-029) y su orden de trabajo. **Si contradice a 01–05, manda este** |
+| 7 | `08_Procesos_BD.md` | Toques datos: **todo acceso a datos es un proceso `proc_*`** | Regla, convenciones, catálogo de errores y un apartado por proceso |
+| 8 | `09_Seguridad_y_Secretos.md` | Toques secretos, variables de entorno, registros o despliegue | Política de secretos, rotación y respuesta a filtraciones |
+| 9 | `10_Plan_de_Despliegue.md` | Prepares la **Fase 3.5** (no despliegues antes) | Vercel + Render + dominio propio |
 
 Archivos SQL: `01_esquema.sql`, `02_semilla.sql`, `03_pruebas.sql` (se copian tal cual al repositorio en la Fase 0).
 
@@ -29,8 +33,7 @@ Archivos SQL: `01_esquema.sql`, `02_semilla.sql`, `03_pruebas.sql` (se copian ta
 | ID | Tema |
 |---|---|
 | D-01 | Capacidad de grupos de WhatsApp frente al límite de 8 miembros (verificar con documentación oficial de Meta) |
-| D-02 | Nombre «Carlos» o «Carlo» |
-| D-03 | Proveedor de alojamiento |
+| D-03 | Proveedor de alojamiento: **resuelta** (DEC-027: Vercel + Render + dominio propio) |
 
 ## Reglas que no se negocian
 
