@@ -1,0 +1,82 @@
+import { sql } from 'kysely';
+import type { z } from 'zod';
+import type { Ejecutor } from '../db/conexion';
+import { ErrorNexo } from '../errores';
+
+/**
+ * Único punto de la API que llama a los procesos de la BD (docs/08, DEC-025).
+ * Aquí no hay lógica ni consultas: solo `select proc_x($1, $2, …)`, la validación de la
+ * respuesta con Zod y la traducción de los errores de negocio (SQLSTATE NX0xx).
+ */
+
+/** Argumento de un proceso. Los objetos van como JSON (`jsonb`); las listas, como arreglos. */
+export type Argumento = string | number | boolean | null | undefined | readonly string[] | Json;
+interface Json {
+  json: unknown;
+}
+
+/** Marca un valor para enviarlo como `jsonb`. */
+export const json = (valor: unknown): Json => ({ json: valor });
+
+const esJson = (a: Argumento): a is Json => typeof a === 'object' && a !== null && 'json' in a;
+
+/** SQLSTATE de negocio de los procesos → estado HTTP (catálogo de docs/08, sección 3). */
+const ESTADO_HTTP: Record<string, number> = {
+  NX004: 403, // voto no permitido
+  NX005: 403, // sin permiso
+  NX006: 404, // no encontrado
+  NX007: 422, // el estado no admite la operación
+  NX008: 409, // conflicto de versión
+  NX009: 403, // equipo archivado
+  NX010: 400, // datos inválidos
+};
+
+interface ErrorPg {
+  code?: string;
+  message?: string;
+  hint?: string;
+  detail?: string;
+}
+
+/** Convierte un error NX0xx de un proceso en el error de la API; cualquier otro se relanza. */
+export function traducirErrorDeProceso(error: unknown): never {
+  const e = error as ErrorPg | null;
+  const estado = e?.code ? ESTADO_HTTP[e.code] : undefined;
+  if (!estado || !e) throw error;
+  let detalles: unknown;
+  if (e.detail) {
+    try {
+      detalles = JSON.parse(e.detail);
+    } catch {
+      detalles = undefined;
+    }
+  }
+  // El HINT trae el código de la API (p. ej. `tarea_no_encontrada`); el MESSAGE, el texto en español.
+  throw new ErrorNexo(
+    estado,
+    e.hint ?? 'error_de_proceso',
+    e.message ?? 'No se pudo completar.',
+    detalles,
+  );
+}
+
+/**
+ * Llama a `proc_<dominio>_<accion>` y valida lo que devuelve con el esquema Zod indicado.
+ * `nombre` nunca viene del usuario: es un literal escrito en el repositorio.
+ */
+export async function llamarProceso<T extends z.ZodType>(
+  db: Ejecutor,
+  nombre: `proc_${string}`,
+  argumentos: readonly Argumento[],
+  esquema: T,
+): Promise<z.infer<T>> {
+  const valores = argumentos.map((a) => (esJson(a) ? JSON.stringify(a.json) : (a ?? null)));
+  let filas: { r: unknown }[];
+  try {
+    const consulta = sql<{ r: unknown }>`select ${sql.raw(nombre)}(${sql.join(valores)}) as r`;
+    filas = (await consulta.execute(db)).rows;
+  } catch (error) {
+    traducirErrorDeProceso(error);
+  }
+  return esquema.parse(filas[0]?.r);
+}

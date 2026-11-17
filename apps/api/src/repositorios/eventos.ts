@@ -9,7 +9,7 @@ export interface EventoEquipo {
   objetoId: string;
   /** Datos del evento para sus consumidores (sin datos sensibles). */
   carga?: Record<string, unknown>;
-  /** Frase para el registro de actividad, p. ej. «Valeria aceptó T-08 en triaje». */
+  /** Frase para el registro de actividad, p. ej. «Valeria propuso T-08 (en votación)». */
   resumen: string;
 }
 

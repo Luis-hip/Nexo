@@ -10,7 +10,7 @@ import {
   type MoverTarea,
   type TareaEquipo,
   type TareaEquipoDetalle,
-  type Triaje,
+  type Votar,
 } from '@nexo/shared';
 import { generateKeyBetween } from 'fractional-indexing';
 import type { BaseDatos, Ejecutor } from '../db/conexion';
@@ -18,6 +18,7 @@ import type { ContextoEquipo } from '../equipos/contexto';
 import { ErrorNexo } from '../errores';
 import { registrarEvento } from '../repositorios/eventos';
 import * as repo from '../repositorios/tareasEquipo';
+import * as repoVotacion from '../repositorios/votacion';
 
 /** Quien hace la acción (para el registro de actividad). */
 export interface Actor {
@@ -40,8 +41,17 @@ const alcance = (ctx: ContextoEquipo) => ({
 // Lectura
 // ---------------------------------------------------------------------------------------------
 
-export function listar(db: BaseDatos, ctx: ContextoEquipo, vista: repo.VistaTareas) {
-  return repo.listarTareas(db, alcance(ctx), vista, ctx.usuarioId);
+export async function listar(db: BaseDatos, ctx: ContextoEquipo, vista: repo.VistaTareas) {
+  const tareas = await repo.listarTareas(db, alcance(ctx), vista, ctx.usuarioId);
+  if (ctx.rol === 'invitado' || (vista !== 'votacion' && vista !== 'mias')) return tareas;
+  // En las vistas de votación cada propuesta lleva su resumen (conteo, quién votó y mi voto; V-8).
+  const votaciones = await repoVotacion.resumenes(
+    db,
+    ctx.usuarioId,
+    ctx.equipoId,
+    tareas.map((t) => t.id),
+  );
+  return tareas.map((t) => ({ ...t, votacion: votaciones.get(t.id) ?? null }));
 }
 
 export function contar(db: BaseDatos, ctx: ContextoEquipo): Promise<ConteosTareas> {
@@ -55,7 +65,7 @@ async function detalle(
 ): Promise<TareaEquipoDetalle> {
   const tarea = await repo.obtenerTarea(db, alcance(ctx), tareaId);
   if (!tarea) throw noEncontrada();
-  const [subtareas, comentarios, historial, compartida] = await Promise.all([
+  const [subtareas, comentarios, historial, compartida, votacion] = await Promise.all([
     db
       .selectFrom('subtareas')
       .select(['id', 'titulo', 'hecha'])
@@ -72,9 +82,14 @@ async function detalle(
           .where('tarea_id', '=', tareaId)
           .execute()
       : Promise.resolve([]),
+    // La votación solo existe en las propuestas del líder y los invitados no la ven.
+    tarea.origen === 'propuesta' && ctx.rol !== 'invitado'
+      ? repoVotacion.resumen(db, ctx.usuarioId, ctx.equipoId, tareaId)
+      : Promise.resolve(null),
   ]);
   return {
     ...tarea,
+    votacion,
     subtareas,
     comentarios,
     historial,
@@ -200,6 +215,7 @@ const NOMBRE_ESTADO: Record<EstadoTarea, string> = {
   atascada: 'Atascada',
   completada: 'Completada',
   rechazada: 'Rechazada',
+  cancelada: 'Retirada',
 };
 
 /** Aplica un cambio de estado ya validado y registra su evento. */
@@ -213,9 +229,16 @@ async function aplicarEstado(
   extra: { orden?: string } = {},
 ) {
   const efectos = efectosDeEstado(t, destino, motivo);
+  // Al backlog sale del sprint; del backlog al tablero entra al sprint activo, si lo hay.
+  const sprint =
+    destino === 'backlog'
+      ? { sprint_id: null }
+      : t.estado === 'backlog' && destino === 'aceptada'
+        ? { sprint_id: (await sprintActivo(tx, ctx.equipoId))?.id ?? null }
+        : {};
   await tx
     .updateTable('tareas')
-    .set({ ...efectos, ...extra })
+    .set({ ...efectos, ...sprint, ...extra })
     .where('id', '=', t.id)
     .execute();
   if (destino === 'completada') {
@@ -282,60 +305,57 @@ async function ordenAlFinal(tx: Ejecutor, equipoId: string, estado: EstadoTarea,
 }
 
 // ---------------------------------------------------------------------------------------------
-// Crear y proponer (EQ-07)
+// Proponer (EQ-07) y votación de propuestas (EQ-05, DEC-024)
 // ---------------------------------------------------------------------------------------------
 
-/** El líder crea directamente; el integrante crea una **propuesta** que va a triaje. */
-export function crear(
+/**
+ * Solo el líder crea tareas: cada una nace como **propuesta** con sus subtareas y entra en
+ * votación (V-10). Las reglas viven en el proceso `proc_tarea_proponer`.
+ */
+export async function crear(
   db: BaseDatos,
   ctx: ContextoEquipo,
   actor: Actor,
   datos: CrearTareaEquipo,
 ): Promise<TareaEquipoDetalle> {
-  const propuesta = ctx.rol !== 'lider';
-  return db.transaction().execute(async (tx) => {
-    // En una propuesta, el responsable y el sprint los decide el líder en triaje.
-    const responsableId = propuesta ? null : datos.responsable_id;
-    const alTablero = !propuesta && datos.destino === 'tablero';
-    const sprintId = alTablero ? ((await sprintActivo(tx, ctx.equipoId))?.id ?? null) : null;
-    if (responsableId) await exigirMiembro(tx, ctx.equipoId, responsableId);
-    const estado: EstadoTarea = propuesta ? 'propuesta' : alTablero ? 'aceptada' : 'backlog';
+  const { id } = await repoVotacion.proponer(db, actor.id, ctx.equipoId, datos);
+  return detalle(db, ctx, id);
+}
 
-    const { id, codigo: n } = await tx
-      .insertInto('tareas')
-      .values({
-        equipo_id: ctx.equipoId,
-        codigo: 0, // lo asigna el disparador trg_tareas_codigo
-        titulo: datos.titulo,
-        descripcion: datos.descripcion,
-        prioridad: datos.prioridad,
-        vence_en: datos.vence_en,
-        estado,
-        origen: propuesta ? 'propuesta' : 'directa',
-        proponente_id: propuesta ? actor.id : null,
-        responsable_id: responsableId,
-        // Quien no es el líder debe aceptar la asignación.
-        asignacion_pendiente: !!responsableId && responsableId !== actor.id,
-        sprint_id: sprintId,
-        orden: await ordenAlFinal(tx, ctx.equipoId, estado),
-        creada_por: actor.id,
-      })
-      .returning(['id', 'codigo'])
-      .executeTakeFirstOrThrow();
-    await repo.fijarEtiquetas(tx, ctx.equipoId, id, datos.etiquetas);
-    await registrarEvento(tx, {
-      equipoId: ctx.equipoId,
-      actorId: actor.id,
-      tipo: propuesta ? 'tarea.propuesta' : 'tarea.creada',
-      objetoTipo: 'tarea',
-      objetoId: id,
-      carga: { estado, responsable_id: responsableId, sprint_id: sprintId },
-      resumen: propuesta
-        ? `${primerNombre(actor.nombre)} propuso ${codigo(n)} «${datos.titulo}» (en triaje)`
-        : `${primerNombre(actor.nombre)} creó ${codigo(n)} «${datos.titulo}»`,
-    });
-    return detalle(tx, ctx, id);
-  });
+/** Un integrante vota (o cambia su voto). Al alcanzarse la mayoría, el proceso cierra la votación. */
+export async function votar(
+  db: BaseDatos,
+  ctx: ContextoEquipo,
+  actor: Actor,
+  tareaId: string,
+  datos: Votar,
+): Promise<TareaEquipoDetalle> {
+  await repoVotacion.votar(db, actor.id, ctx.equipoId, tareaId, datos);
+  return detalle(db, ctx, tareaId);
+}
+
+/** El líder retira una propuesta que sigue en votación (queda «Retirada»). */
+export async function retirar(
+  db: BaseDatos,
+  ctx: ContextoEquipo,
+  actor: Actor,
+  tareaId: string,
+  version: number,
+): Promise<TareaEquipoDetalle> {
+  await repoVotacion.retirar(db, actor.id, ctx.equipoId, tareaId, version);
+  return detalle(db, ctx, tareaId);
+}
+
+/** El líder reformula una propuesta rechazada o retirada: nace una propuesta nueva. */
+export async function reformular(
+  db: BaseDatos,
+  ctx: ContextoEquipo,
+  actor: Actor,
+  tareaId: string,
+  datos: CrearTareaEquipo,
+): Promise<TareaEquipoDetalle> {
+  const { id } = await repoVotacion.reformular(db, actor.id, ctx.equipoId, tareaId, datos);
+  return detalle(db, ctx, id);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -343,8 +363,8 @@ export function crear(
 // ---------------------------------------------------------------------------------------------
 
 /**
- * El líder edita cualquier tarea. Un integrante solo puede: corregir **su** propuesta mientras
- * sigue en triaje, y actualizar el avance de **su** tarea (ya aceptada la asignación).
+ * El líder edita cualquier tarea. Un integrante solo puede actualizar el avance de **su** tarea
+ * (ya aceptada la asignación); desde la Fase 2.5 ya no propone, así que no edita propuestas.
  */
 export function editar(
   db: BaseDatos,
@@ -360,13 +380,9 @@ export function editar(
       const campos = Object.keys(cambios).filter(
         (k) => cambios[k as keyof typeof cambios] !== undefined,
       );
-      const suPropuesta = t.estado === 'propuesta' && t.proponente_id === actor.id;
       const soloAvance = campos.length > 0 && campos.every((k) => k === 'progreso') && !etiquetas;
       const suTarea = t.responsable_id === actor.id && !t.asignacion_pendiente;
-      const permitido =
-        ctx.rol === 'integrante' &&
-        ((suPropuesta && !campos.includes('progreso') && !campos.includes('archivada')) ||
-          (soloAvance && suTarea));
+      const permitido = ctx.rol === 'integrante' && soloAvance && suTarea;
       if (!permitido) {
         throw sinPermiso(puedeMotivo('editar_tarea_ajena', ctx));
       }
@@ -385,8 +401,6 @@ export function editar(
         ...(cambios.vence_en !== undefined && { vence_en: cambios.vence_en }),
         ...(cambios.progreso !== undefined && { progreso: cambios.progreso }),
         ...(cambios.archivada !== undefined && { archivada: cambios.archivada }),
-        // Al corregir su propuesta, se da por atendido lo que pidió el líder.
-        ...(ctx.rol !== 'lider' && t.estado === 'propuesta' && { cambios_pedidos: null }),
       })
       .where('id', '=', tareaId)
       .execute();
@@ -523,136 +537,6 @@ export function mover(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Triaje (EQ-05)
-// ---------------------------------------------------------------------------------------------
-
-/** El líder decide sobre una propuesta, o reasigna una tarea cuya asignación fue rechazada. */
-export function triaje(
-  db: BaseDatos,
-  ctx: ContextoEquipo,
-  actor: Actor,
-  tareaId: string,
-  datos: Triaje,
-): Promise<TareaEquipoDetalle> {
-  return db.transaction().execute(async (tx) => {
-    const t = await bloquear(tx, ctx, tareaId, datos.version);
-    const enTriaje =
-      t.estado === 'propuesta' || (t.estado === 'rechazada' && t.rechazo_por === 'responsable');
-    const delBacklog = t.estado === 'backlog' && datos.accion === 'aceptar';
-    if (!enTriaje && !delBacklog) {
-      throw new ErrorNexo(422, 'transicion_invalida', 'Esta tarea ya no está en triaje.');
-    }
-    const quien = primerNombre(actor.nombre);
-    const tarea = `${codigo(t.codigo)} «${t.titulo}»`;
-    const evento = (tipo: string, resumen: string, carga: Record<string, unknown> = {}) =>
-      registrarEvento(tx, {
-        equipoId: ctx.equipoId,
-        actorId: actor.id,
-        tipo,
-        objetoTipo: 'tarea',
-        objetoId: t.id,
-        carga: { proponente_id: t.proponente_id, ...carga },
-        resumen,
-      });
-
-    if (datos.accion === 'aceptar') {
-      const responsable = datos.responsable_id
-        ? await exigirMiembro(tx, ctx.equipoId, datos.responsable_id)
-        : null;
-      const alTablero = datos.destino === 'tablero';
-      const sprint = alTablero ? await sprintActivo(tx, ctx.equipoId) : undefined;
-      const estado: EstadoTarea = alTablero ? 'aceptada' : 'backlog';
-      await tx
-        .updateTable('tareas')
-        .set({
-          estado,
-          sprint_id: sprint?.id ?? null,
-          responsable_id: datos.responsable_id,
-          asignacion_pendiente: !!datos.responsable_id && datos.responsable_id !== actor.id,
-          ...(datos.vence_en !== undefined && { vence_en: datos.vence_en }),
-          motivo: null,
-          rechazo_por: null,
-          cambios_pedidos: null,
-          orden: await ordenAlFinal(tx, ctx.equipoId, estado, t.id),
-        })
-        .where('id', '=', t.id)
-        .execute();
-      await evento(
-        'tarea.aceptada',
-        `${quien} aceptó ${tarea} ${t.estado === 'backlog' ? '' : ' en triaje'}${sprint ? ` al Sprint ${sprint.numero}` : alTablero ? ' al tablero' : ' (al backlog)'}${responsable ? ` y la asignó a ${primerNombre(responsable)}` : ''}`,
-        {
-          sprint_id: sprint?.id ?? null,
-          responsable_id: datos.responsable_id,
-          destino: datos.destino,
-        },
-      );
-      if (datos.responsable_id && datos.responsable_id !== actor.id) {
-        await evento(
-          'tarea.asignada',
-          `${quien} asignó ${tarea} a ${primerNombre(responsable ?? '')}`,
-          {
-            responsable_id: datos.responsable_id,
-          },
-        );
-      }
-    } else if (datos.accion === 'rechazar') {
-      await tx
-        .updateTable('tareas')
-        .set({
-          estado: 'rechazada',
-          rechazo_por: 'lider',
-          motivo: datos.motivo,
-          responsable_id: null,
-          asignacion_pendiente: false,
-          sprint_id: null,
-        })
-        .where('id', '=', t.id)
-        .execute();
-      await evento('tarea.rechazada', `${quien} rechazó ${tarea} en triaje: «${datos.motivo}»`, {
-        motivo: datos.motivo,
-      });
-    } else if (datos.accion === 'backlog') {
-      await tx
-        .updateTable('tareas')
-        .set({
-          estado: 'backlog',
-          sprint_id: null,
-          responsable_id: null,
-          asignacion_pendiente: false,
-          motivo: null,
-          rechazo_por: null,
-          cambios_pedidos: null,
-          orden: await ordenAlFinal(tx, ctx.equipoId, 'backlog', t.id),
-        })
-        .where('id', '=', t.id)
-        .execute();
-      await evento('tarea.al_backlog', `${quien} envió ${tarea} al backlog`);
-    } else {
-      if (t.estado !== 'propuesta') {
-        throw new ErrorNexo(422, 'transicion_invalida', 'Solo se piden cambios a una propuesta.');
-      }
-      await tx
-        .updateTable('tareas')
-        .set({ cambios_pedidos: datos.comentario })
-        .where('id', '=', t.id)
-        .execute();
-      await tx
-        .insertInto('comentarios_tarea')
-        .values({
-          tarea_id: t.id,
-          autor_id: actor.id,
-          texto: `Cambios solicitados: ${datos.comentario}`,
-        })
-        .execute();
-      await evento('tarea.cambios_pedidos', `${quien} pidió cambios en ${tarea}`, {
-        comentario: datos.comentario,
-      });
-    }
-    return detalle(tx, ctx, tareaId);
-  });
-}
-
-// ---------------------------------------------------------------------------------------------
 // Asignación (EQ-08)
 // ---------------------------------------------------------------------------------------------
 
@@ -666,13 +550,16 @@ export function asignar(
 ): Promise<TareaEquipoDetalle> {
   return db.transaction().execute(async (tx) => {
     const t = await bloquear(tx, ctx, tareaId, datos.version);
-    if (['propuesta', 'rechazada', 'completada'].includes(t.estado)) {
+    // V-11: el líder asigna al proponer o cuando la propuesta ya fue aceptada.
+    if (['propuesta', 'rechazada', 'cancelada', 'completada'].includes(t.estado)) {
       throw new ErrorNexo(
         422,
         'transicion_invalida',
         t.estado === 'completada'
           ? 'La tarea ya está completada.'
-          : 'Decide primero la tarea en triaje; ahí se asigna el responsable.',
+          : t.estado === 'propuesta'
+            ? 'La propuesta sigue en votación; asigna al responsable cuando se acepte.'
+            : 'Esta propuesta no fue aceptada; reformúlala para volver a votarla.',
       );
     }
     const responsable = datos.responsable_id
@@ -701,7 +588,11 @@ export function asignar(
   });
 }
 
-/** El responsable acepta la asignación o la rechaza con motivo (vuelve a triaje para reasignar). */
+/**
+ * El responsable acepta la asignación o la rechaza con motivo. Si la rechaza, la tarea conserva
+ * su estado y queda sin responsable para que el líder la **reasigne directamente**, sin nueva
+ * votación (V-11, por confirmar).
+ */
 export function responderAsignacion(
   db: BaseDatos,
   ctx: ContextoEquipo,
@@ -729,12 +620,7 @@ export function responderAsignacion(
     } else {
       await tx
         .updateTable('tareas')
-        .set({
-          asignacion_pendiente: false,
-          estado: 'rechazada',
-          rechazo_por: 'responsable',
-          motivo: datos.motivo ?? null,
-        })
+        .set({ asignacion_pendiente: false, responsable_id: null })
         .where('id', '=', t.id)
         .execute();
     }
@@ -747,7 +633,7 @@ export function responderAsignacion(
       carga: { responsable_id: actor.id, ...(datos.motivo && { motivo: datos.motivo }) },
       resumen: datos.acepta
         ? `${quien} aceptó la asignación de ${tarea}`
-        : `${quien} rechazó la asignación de ${tarea}: «${datos.motivo}»; volvió a triaje`,
+        : `${quien} rechazó la asignación de ${tarea}: «${datos.motivo}»; el líder la reasigna`,
     });
     return detalle(tx, ctx, tareaId);
   });

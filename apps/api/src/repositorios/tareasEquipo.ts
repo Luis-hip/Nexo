@@ -16,7 +16,11 @@ type FilaTarea = Selectable<VTareasSemaforo>;
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
 
 /** Qué tareas del equipo se piden. */
-export type VistaTareas = 'tablero' | 'backlog' | 'triaje' | 'mias' | 'todas';
+/**
+ * - `votacion`: propuestas abiertas y las que no prosperaron (rechazadas o retiradas), para reformular.
+ * - `mias`: lo que toca a quien consulta en la votación: propuestas abiertas y las que ya votó (FALT-08).
+ */
+export type VistaTareas = 'tablero' | 'backlog' | 'votacion' | 'mias' | 'todas';
 
 export const ESTADOS_TABLERO: EstadoTarea[] = [
   'aceptada',
@@ -154,9 +158,21 @@ export async function listarTareas(
   let q = base(db, a).where('t.archivada', '=', false);
   if (vista === 'tablero') q = q.where('t.estado', 'in', ESTADOS_TABLERO);
   if (vista === 'backlog') q = q.where('t.estado', '=', 'backlog');
-  // Propuestas por decidir, asignaciones rechazadas (para reasignar) y lo que rechazó el líder.
-  if (vista === 'triaje') q = q.where('t.estado', 'in', ['propuesta', 'rechazada']);
-  if (vista === 'mias') q = q.where('t.proponente_id', '=', usuarioId);
+  if (vista === 'votacion') q = q.where('t.estado', 'in', ['propuesta', 'rechazada', 'cancelada']);
+  if (vista === 'mias') {
+    q = q.where((eb) =>
+      eb.or([
+        eb('t.estado', '=', 'propuesta'),
+        eb.exists(
+          eb
+            .selectFrom('tarea_votos as v')
+            .select('v.tarea_id')
+            .whereRef('v.tarea_id', '=', 't.id')
+            .where('v.usuario_id', '=', usuarioId),
+        ),
+      ]),
+    );
+  }
   const filas = await q.orderBy('t.orden').orderBy('t.codigo').execute();
   return completar(db, a.equipoId, filas);
 }
@@ -175,20 +191,17 @@ export async function obtenerTarea(
 export async function contarTareas(db: Ejecutor, equipoId: string) {
   const filas = await db
     .selectFrom('tareas')
-    .select((eb) => ['estado', 'rechazo_por', eb.fn.countAll<string>().as('total')])
+    .select((eb) => ['estado', eb.fn.countAll<string>().as('total')])
     .where('equipo_id', '=', equipoId)
     .where('archivada', '=', false)
-    .groupBy(['estado', 'rechazo_por'])
+    .groupBy('estado')
     .execute();
   const suma = (filtro: (f: (typeof filas)[number]) => boolean) =>
     filas.filter(filtro).reduce((n, f) => n + Number(f.total), 0);
   return {
     tablero: suma((f) => ESTADOS_TABLERO.includes(f.estado)),
     backlog: suma((f) => f.estado === 'backlog'),
-    triaje: suma(
-      (f) =>
-        f.estado === 'propuesta' || (f.estado === 'rechazada' && f.rechazo_por === 'responsable'),
-    ),
+    votacion: suma((f) => f.estado === 'propuesta'),
   };
 }
 
