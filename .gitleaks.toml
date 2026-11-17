@@ -1,0 +1,14 @@
+# Configuración de gitleaks (docs/09_Seguridad_y_Secretos.md, DEC-026).
+# Usa las reglas por defecto y solo permite los valores falsos de desarrollo.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valores falsos de desarrollo y archivos generados"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''pnpm-lock\.yaml$''',
+]
+regexes = [
+  '''postgres://nexo:nexo@''',
+]

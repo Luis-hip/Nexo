@@ -54,7 +54,7 @@
 
 ## Fase 2 · Equipos, tablero y estados
 
-**Estado:** construida y fusionada (PR #7 a `dev`, #8 a `main`, #9 a `produccion`). Falta confirmar la CI en verde y poner el tag `fase-2` (no se pudo comprobar desde la herramienta: no hay `gh`).
+**Estado:** construida y fusionada (PR #7 a `dev`, #8 a `main`, #9 a `produccion`). Existe el tag `fase-2`; la CI en verde no se pudo comprobar desde la herramienta (no hay `gh`).
 
 ### Hecho
 
@@ -83,6 +83,9 @@
 
 - **Paso 1 · Documentos y decisiones.** Copiados `07` y `10`; creados `08_Procesos_BD.md`, `09_Seguridad_y_Secretos.md` y `seguridad-incidentes.md`; actualizados `01`–`06`, el README y `decisiones.md` (DEC-024 a DEC-029; DEC-020 marcada como reemplazada en parte). D-02 eliminada (el nombre es Carlos) y D-03 resuelta (Vercel + Render + dominio propio). Mapa de fases con 2.5 y 3.5.
 
+- **Paso 2 · Secretos.** *Informe:* se revisó todo el historial de Git (todas las ramas) y el árbol con patrones de claves (AWS, GitHub, Slack, Meta, llaves privadas, URL con contraseña, asignaciones `secret/token/password`): **no hay secretos**; solo aparece la cadena de desarrollo `nexo:nexo@localhost` de `.env.example` y de la CI, que es pública y desechable. `.env` nunca estuvo en el historial. *Cambios:* `pino` oculta cookies, `set-cookie`, tokens, contraseñas, secretos, claves y cuerpos; `config.ts` exige en producción `SESSION_SECRET` (≥ 32), `ENCRYPTION_KEY` (64 hex), `APP_URL` y `API_URL` (https, sin valor local) y rechaza los valores de `.env.example`; la API comprueba `Origin` en `POST/PUT/PATCH/DELETE`; gitleaks (v8.24.2, historial completo) en la CI con `.gitleaks.toml`; `.env.example` documentado. Pruebas nuevas: 21 en `config.test.ts` y `seguridad.test.ts`. **Sin verificar:** gitleaks no se ejecutó en local (no está instalado; lo corre la CI).
+- **Pendiente tuyo (no se puede por CLI aquí):** activar *secret scanning* y *push protection* en GitHub (Settings → Code security) y decidir si el repositorio pasa a privado; hoy no hay `gh` en esta máquina.
+
 ### Para revisión de Luis (valores por confirmar del 07)
 
 - **V-10:** toda tarea nueva del líder entra en votación; desaparece el destino «backlog directo».
@@ -90,7 +93,6 @@
 
 ### Pendiente
 
-- [ ] Paso 2: secretos (informe del historial, redacción de `pino`, validación de `config.ts`, gitleaks, `Origin`).
 - [ ] Paso 3: votación (migración `0002`, procesos, API, permisos, estados y pantalla).
 - [ ] Paso 4: migrar el código existente a procesos y activar los roles `nexo_migraciones`/`nexo_app`.
 - [ ] Paso 5: cierre, CI en verde, tag `fase-2-5` y PR a `dev`.

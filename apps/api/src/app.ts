@@ -6,6 +6,7 @@ import { registrarAutenticacion } from './autenticacion';
 import type { Config } from './config';
 import type { BaseDatos } from './db/conexion';
 import { ErrorNexo } from './errores';
+import { exigirOrigenPermitido, RUTAS_OCULTAS_EN_REGISTROS } from './seguridad';
 import { rutasContacto } from './rutas/contacto';
 import { rutasDev } from './rutas/dev';
 import { rutasEquipos } from './rutas/equipos';
@@ -15,10 +16,7 @@ import { rutasYo } from './rutas/yo';
 
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
   const app = Fastify({
-    logger:
-      config.NODE_ENV === 'test'
-        ? false
-        : { redact: ['req.headers.cookie', 'req.headers.authorization'] },
+    logger: config.NODE_ENV === 'test' ? false : { redact: RUTAS_OCULTAS_EN_REGISTROS },
   });
 
   await app.register(cors, {
@@ -27,6 +25,7 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'],
   });
   await app.register(cookie);
+  exigirOrigenPermitido(app, config.APP_URL);
   // Límite de peticiones: solo en las rutas que lo declaran (contacto; login en la Fase 5).
   await app.register(rateLimit, { global: false });
   registrarAutenticacion(app, db);
