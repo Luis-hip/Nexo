@@ -1,6 +1,9 @@
 import { useEquipoActual } from './contexto';
 import { ListaTareas, Tablero } from './tareas';
 
+export { AjustesEquipo } from './AjustesEquipo';
+export { Liderazgo } from './Liderazgo';
+export { MiembroDetalle } from './MiembroDetalle';
 export { Miembros } from './Miembros';
 export { Resumen } from './Resumen';
 export { Backlog, TareaRuta, TareasLayout, Votacion } from './tareas';

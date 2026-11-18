@@ -202,19 +202,27 @@ const rutas: RouteObject[] = [
                   { path: 'retro/:sprintId', lazy: diferida(sprints, (m) => m.RetroRuta) },
                 ],
               },
-              {
-                path: 'equipo',
+              ...(
+                [
+                  ['equipo', 'Miembros'],
+                  // Fase 3.5: liderazgo y elección (AD-07 a AD-09), ajustes (AD-06) y ficha (AD-04).
+                  ['equipo/eleccion', 'Liderazgo'],
+                  ['equipo/ajustes', 'AjustesEquipo'],
+                  ['equipo/:miembroId', 'MiembroDetalle'],
+                ] as const
+              ).map(([path, nombre]) => ({
+                path,
                 lazy: async () => {
-                  const { Miembros } = await equipo();
+                  const Pantalla = (await equipo())[nombre];
                   return {
                     element: (
                       <Requiere permiso="ver_miembros">
-                        <Miembros />
+                        <Pantalla />
                       </Requiere>
                     ),
                   };
                 },
-              },
+              })),
               { path: 'chat/*', element: proximamente('Chat del equipo', 4) },
               { path: 'whatsapp/*', element: proximamente('WhatsApp', 4) },
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
