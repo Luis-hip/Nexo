@@ -118,7 +118,7 @@ export const rutasVistas: FastifyPluginAsync<{ db: BaseDatos }> = async (app, { 
     return res
       .header('content-type', 'text/csv; charset=utf-8')
       .header('content-disposition', adjunto(nombre))
-      .send(`﻿${aCsv(COLUMNAS_EXPORTACION, filas)}`);
+      .send(`\uFEFF${aCsv(COLUMNAS_EXPORTACION, filas)}`);
   });
 
   // --- Plantillas (EQ-20) --------------------------------------------------------------------
