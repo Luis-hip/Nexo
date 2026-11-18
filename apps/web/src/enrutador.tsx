@@ -15,6 +15,7 @@ const publico = () => import('./pages/publico');
 const auth = () => import('./pages/auth');
 const equipos = () => import('./pages/equipos');
 const equipo = () => import('./pages/equipo');
+const sprints = () => import('./pages/equipo/sprints');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -160,6 +161,45 @@ const rutas: RouteObject[] = [
                     },
                   },
                   { path: ':id', lazy: diferida(equipo, (m) => m.TareaRuta) },
+                ],
+              },
+              {
+                // Fase 3.3: sprints y retrospectiva (EQ-09 a EQ-13). Los invitados no los ven.
+                path: 'sprints',
+                lazy: async () => {
+                  const { SprintsLayout } = await sprints();
+                  return {
+                    element: (
+                      <Requiere permiso="ver_sprints">
+                        <SprintsLayout />
+                      </Requiere>
+                    ),
+                  };
+                },
+                children: [
+                  { index: true, element: <Navigate to="activo" replace /> },
+                  { path: 'activo', lazy: diferida(sprints, (m) => m.SprintActivo) },
+                  { path: 'planear', lazy: diferida(sprints, (m) => m.PlanearSprint) },
+                  {
+                    path: 'cerrar',
+                    lazy: async () => {
+                      const { CerrarSprint } = await sprints();
+                      return {
+                        element: (
+                          <Requiere permiso="gestionar_sprints">
+                            <CerrarSprint />
+                          </Requiere>
+                        ),
+                      };
+                    },
+                  },
+                  { path: 'historial', lazy: diferida(sprints, (m) => m.HistorialSprints) },
+                  {
+                    path: 'historial/:sprintId',
+                    lazy: diferida(sprints, (m) => m.SprintHistorico),
+                  },
+                  { path: 'retro', lazy: diferida(sprints, (m) => m.RetroRuta) },
+                  { path: 'retro/:sprintId', lazy: diferida(sprints, (m) => m.RetroRuta) },
                 ],
               },
               {
