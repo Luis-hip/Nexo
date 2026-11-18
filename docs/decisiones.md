@@ -316,3 +316,16 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Archivos (EQ-19).** El contenido se guarda **en PostgreSQL** (`archivo_contenidos`, `bytea`) con tope de **5 MB** y una lista cerrada de tipos (PDF, imágenes PNG/JPEG/GIF/WebP, texto, Markdown, CSV, Office y OpenDocument, ZIP; ni ejecutables ni SVG). Así el MVP no necesita otro servicio de almacenamiento y el respaldo de Render incluye los archivos; `storage_key` (`bd:<id>`) permite moverlos después a un almacén de objetos. La API recibe el archivo en base64 (cuerpo de hasta 8 MB solo en esa ruta) y lo entrega como adjunto con `X-Content-Type-Options: nosniff`. Lo borra quien lo subió o el líder (se borra el contenido y queda el registro). **Pendiente:** adjuntar desde el detalle de la tarea (la API ya acepta `tarea_id`), el adjunto del formulario de contacto y la foto de perfil del onboarding.
 - **Plantillas (EQ-20).** Las crea y elimina el líder. Solo las de **proyecto** se «usan»: proponen cada elemento como tarea (van a votación, DEC-024). Las de sprint y retrospectiva son guías de lectura.
 - **Notificaciones (NT-01).** Son de la persona, no del equipo. Por ahora las crean los procesos de liderazgo, elección y reuniones (DEC-032); las de asignaciones, menciones y vencimientos llegan con el despachador de eventos (`eventos_dominio`) de la Fase 4. La campana muestra cuántas hay sin leer (se consulta cada minuto).
+
+## DEC-034 · Fase 3.6 y 3.7: ajustes de la persona y reporte personal
+
+**Fecha:** 2026-11-18 · **Fuente:** `03`, Fase 3, tareas 3.6 (PF-01 a PF-09) y 3.7 (FALT-01, FALT-07) · **Detalle:** `08_Procesos_BD.md` (3 procesos de la `0013`).
+
+- **Rutas.** Los ajustes viven en `/ajustes/{perfil, cuenta, apariencia, notificaciones, whatsapp, privacidad, equipos, atajos, ayuda}`, como ya los enlazaba la navegación (el árbol de `01` dice `/app/ajustes/…`; se mantuvo la ruta de la navegación).
+- **Perfil y apariencia (PF-01, PF-03)** usan los procesos que ya existían (`proc_usuario_perfil_guardar`, `proc_usuario_preferencias_guardar`). La foto de perfil queda para cuando haya archivos personales.
+- **Cuenta (PF-02).** Muestra el correo y cierra la sesión; contraseña, cambio de correo y verificación en dos pasos llegan con la autenticación real (Fase 5).
+- **Avisos (PF-04).** Por cada aviso configurable (`fn_eventos_notificacion`) se guarda si llega en Nexo y por WhatsApp (y por correo, sin pantalla todavía). Se guardan desde ahora; los envíos por WhatsApp son de la Fase 4 y por correo de la 5. También horas de silencio (completas: inicio y fin) y resumen diario.
+- **WhatsApp personal (PF-05)** queda como «Próximamente» hasta la Fase 4 (número, verificación y consentimiento).
+- **Privacidad (PF-06).** Mostrar o no el estado y el primer día de la semana. Exportar todos los datos o borrar la cuenta es FALT-09 (Fase 5).
+- **Mis equipos (PF-07).** Lista con el rol en cada equipo y «Salir» (`proc_equipo_salir`; el líder primero transfiere). **Atajos (PF-08)** y **Ayuda (PF-09)** son pantallas de lectura.
+- **Reporte personal (FALT-01).** Tareas personales y las de equipo a cargo de la persona, **solo de los equipos donde sigue activa** (lo de un equipo que dejó ya no es suyo), con un resumen por espacio. **FALT-07** (historial de transferencias y elecciones) está en `equipo/eleccion` (DEC-032).

@@ -116,7 +116,7 @@
 
 ## Fase 3 · Hill Chart, sprints y vistas secundarias
 
-**Estado:** en curso (rama `feat/fase-3`, desde `Dev_Luis` en `ce13db8`, tag `fase-2-5`).
+**Estado:** terminada el 2026-11-18 en la rama `feat/fase-3` (PR #11 hacia `Dev_Luis`, CI en verde). Falta fusionar el PR y poner el tag `fase-3` (ver «Cierre»).
 
 ### Hecho
 
@@ -132,19 +132,39 @@
 - **3.4 Vistas secundarias (EQ-14 a EQ-20, NT-01).** Migraciones `0011_procesos_vistas.sql` (14 procesos: calendario, reuniones, actividad, notificaciones, reportes y plantillas) y `0012_archivos.sql` (tabla `archivo_contenidos` y 4 procesos de archivos), todos en `docs/08`; tipos de Kysely regenerados. API en `rutas/vistas.ts` (CSV de exportación, archivos en base64 con tope de 5 MB, descarga como adjunto). Web: `calendario`, `reportes`, `actividad`, `archivos` y `plantillas` del equipo y `app/notificaciones` con contador en la campana. Decisiones: DEC-033 (repeticiones, CSV seguro, archivos en PostgreSQL, plantillas de proyecto, qué genera notificaciones). Miembros (AD-01, AD-04, AD-05) y configuración (AD-06) quedaron en 3.5.
 - **Pruebas de 3.4:** 100 pruebas SQL de procesos (P83–P100), 11 de la API (`vistas.test.ts`) y 7 de `shared` (CSV y esquemas). Totales: 194 `shared`, 147 API, 93 web. **Verificado en el navegador** con la semilla: Carlos agendó una reunión semanal (aparece cada jueves con su asistencia) y subió `minuta.txt`; el reporte muestra 9 tareas y 50 % a tiempo; la actividad lista ambas acciones; Valeria tiene en Notificaciones la invitación (3 sin leer).
 
+- **3.6 Ajustes (PF-01 a PF-09).** Migración `0013_procesos_ajustes.sql` (`proc_usuario_ajustes`, `proc_usuario_ajustes_guardar`), API `GET/PATCH /yo/ajustes` y la web en `/ajustes/*`: perfil, cuenta (cerrar sesión), apariencia, avisos por evento y canal con horas de silencio y resumen diario, privacidad, mis equipos (con salir), atajos y ayuda. PF-05 (WhatsApp personal) queda como «Próximamente» para la Fase 4. DEC-034.
+- **3.7 Pantallas faltantes «Fase 3» de `03` 9.2.** FALT-01 reportes personales (`proc_reporte_personal`, `GET /personal/reporte`, `app/personal/reportes`) y FALT-07 historial de liderazgo (en `equipo/eleccion`, 3.5).
+- **Pruebas de 3.6 y 3.7:** P101–P103 y 4 de la API (`ajustes.test.ts`). **Verificado en el navegador:** las nueve secciones de Ajustes cargan; marcar «Reuniones por WhatsApp» queda guardado en la API; Carlos ve en Mis reportes sus 2 tareas del Equipo Nexo.
+
+### Cierre
+
+- **CI en verde** en el PR #11 (`feat/fase-3` → `Dev_Luis`), commit `6142acd`: gitleaks, migraciones `0001`–`0013`, 11 pruebas SQL de integridad y **103 de procesos**, control de `docs/08` (**97 procesos**), tipos de Kysely al día, `typecheck`, lint, formato, **438 pruebas** (194 `shared`, 151 API, 93 web) y build. Lo mismo pasa en local con PGlite.
+- **Criterio de terminado de `03`, Fase 3:**
+  - El Hill Chart muestra datos reales y se actualiza al arrastrar, con persistencia ✔ (3.1).
+  - Un sprint se planea, se inicia, se cierra con instantánea y tiene retrospectiva ✔ (3.3).
+  - Una elección de liderazgo completa funciona de punta a punta, con plazos acortados en la prueba ✔ (P76 y `liderazgo.test.ts`; en el navegador, una elección real con la semilla).
+  - Las pantallas de 3.1 a 3.6 existen o están anotadas como fase posterior ✔ (ver «Fase posterior» abajo).
+  - CI en verde ✔. **Tag `fase-3`: pendiente** hasta fusionar el PR #11 en `Dev_Luis` (como se hizo con `fase-2-5`).
+- **Fase posterior (anotado a propósito):**
+  - PF-05 WhatsApp personal y consentimiento → Fase 4.
+  - Exportar o borrar todos los datos (FALT-09) y contraseña, correo y 2FA (PF-02) → Fase 5.
+  - Notificaciones de asignaciones, menciones y vencimientos → con el despachador de eventos de la Fase 4 (hoy las crean liderazgo, elecciones y reuniones).
+  - `pg-boss` → Fase 4: entonces sustituye al temporizador de plazos de las elecciones y escribe la foto nocturna del burndown.
+  - Adjuntar archivos desde el detalle de la tarea (la API ya acepta `tarea_id`), el adjunto del formulario de contacto y la foto de perfil del onboarding.
+  - Reuniones personales en el calendario personal (PER-04).
+
 ### Siguiente sesión: por dónde seguir
 
-Trabajar en `feat/fase-3`. Reglas que ya están en marcha (DEC-025): **todo acceso a datos es un proceso `proc_*`** en una migración nueva (la siguiente es `0013_…`), que termina con `SELECT fn_conceder_procesos();`, se documenta en `docs/08` (la CI falla si no: `pnpm procesos:verificar`), tiene casos en `apps/api/db/tests/pruebas_procesos.sql` (hoy P1–P100; al agregar, subir el número en `apps/api/scripts/pruebas-procesos.ts` y en el texto del paso de `.github/workflows/ci.yml`) y se llama desde `apps/api/src/repositorios/` con `llamarProceso()` y un esquema Zod de `packages/shared/src/respuestas.ts`. ESLint impide SQL fuera de ahí.
+La Fase 3 está completa en `feat/fase-3`. Reglas que siguen en marcha (DEC-025): **todo acceso a datos es un proceso `proc_*`** en una migración nueva (la siguiente es `0014_…`), que termina con `SELECT fn_conceder_procesos();`, se documenta en `docs/08` (la CI falla si no: `pnpm procesos:verificar`), tiene casos en `apps/api/db/tests/pruebas_procesos.sql` (hoy P1–P103; al agregar, subir el número en `apps/api/scripts/pruebas-procesos.ts` y en el texto del paso de `.github/workflows/ci.yml`) y se llama desde `apps/api/src/repositorios/` con `llamarProceso()` y un esquema Zod de `packages/shared/src/respuestas.ts`. Si una migración cambia tablas, correr `pnpm db:tipos` y subir `apps/api/src/db/tipos.ts`.
 
-1. ~~3.3 Sprints~~ (hecho). Queda para la Fase 3.5: la foto nocturna de `sprint_instantaneas` con `pg-boss` (DEC-031).
-2. ~~3.4 Vistas secundarias~~ (hecho, DEC-033). Pendiente anotado: adjuntar archivos desde el detalle de la tarea, el adjunto del contacto y la foto del onboarding; reuniones personales.
-3. ~~3.5 Liderazgo~~ (hecho, DEC-032).
-4. **3.6 Ajustes** PF-01 a PF-09 y **3.7** pantallas faltantes «Fase 3» de `03` 9.2.
+1. Fusionar el PR #11 (`feat/fase-3` → `Dev_Luis`) y poner el tag `fase-3`; después, el PR `Dev_Luis` → `dev`.
+2. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`): Vercel + Render + dominio propio. El temporizador de plazos ya corre en el proceso de la API.
+3. **Fase 4 · Chat y WhatsApp**, que trae `pg-boss`, el despachador de eventos (notificaciones de asignaciones y menciones) y PF-05.
 
 **BD local sin Docker:** `node node_modules/@electric-sql/pglite-socket/dist/scripts/server.js --db=memory:// --port=5432 --extensions=citext --max-connections=10` desde una carpeta con `@electric-sql/pglite@0.5.16` y `@electric-sql/pglite-socket@0.2.19` instalados; después `pnpm db:reset`, `pnpm db:test`, `pnpm db:test:procesos` y `DATABASE_URL=postgres://nexo:nexo@localhost:5432/nexo pnpm test`.
 
 ### Pendiente
 
-- [ ] 3.6 y 3.7 (ver arriba). Criterio de terminado en `03`, Fase 3 («un sprint se planea, se inicia, se cierra con instantánea y tiene retrospectiva» ✔ con 3.3).
-- [ ] Revisar DEC-031: qué entra al planear (más que «aceptadas»), capacidad sin estimaciones y la pestaña nueva «Historial».
+- [ ] Fusionar el PR #11 y poner el tag `fase-3`.
+- [ ] Revisar DEC-031 a DEC-034, en especial: qué entra al planear (más que «aceptadas»), capacidad sin estimaciones, todos los integrantes como candidatos y desempate por antigüedad (DEC-032), archivos guardados en PostgreSQL (DEC-033).
 - [ ] Revisar DEC-030 (forma por miembro) y los pendientes de la Fase 2.5 (PR `Dev_Luis` → `dev`, secret scanning, V-10 y V-11).
