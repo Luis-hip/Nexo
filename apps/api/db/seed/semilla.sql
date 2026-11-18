@@ -46,6 +46,16 @@ INSERT INTO sprints (id, equipo_id, numero, objetivo, inicio, fin, estado, cerra
  ('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001',3,'Hill Chart y WhatsApp',  current_date-6,  current_date+7, 'activo',  NULL),
  ('20000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',4,'Chat y reportes',       current_date+8,  current_date+21,'planificado', NULL);
 
+-- Instantáneas del burndown (Fase 3.3): la foto final de los sprints cerrados (de ahí sale su
+-- resultado en el historial) y los días ya pasados del sprint activo.
+INSERT INTO sprint_instantaneas (sprint_id, dia, total, completadas) VALUES
+ ('20000000-0000-4000-8000-000000000001', current_date-44, 8, 0), ('20000000-0000-4000-8000-000000000001', current_date-41, 8, 2), ('20000000-0000-4000-8000-000000000001', current_date-38, 8, 3),
+ ('20000000-0000-4000-8000-000000000001', current_date-35, 8, 5), ('20000000-0000-4000-8000-000000000001', current_date-31, 8, 8),
+ ('20000000-0000-4000-8000-000000000002', current_date-30, 6, 0), ('20000000-0000-4000-8000-000000000002', current_date-27, 7, 1), ('20000000-0000-4000-8000-000000000002', current_date-24, 7, 3),
+ ('20000000-0000-4000-8000-000000000002', current_date-21, 7, 4), ('20000000-0000-4000-8000-000000000002', current_date-17, 7, 6),
+ ('20000000-0000-4000-8000-000000000003', current_date-6, 7, 0), ('20000000-0000-4000-8000-000000000003', current_date-5, 7, 0), ('20000000-0000-4000-8000-000000000003', current_date-4, 7, 0),
+ ('20000000-0000-4000-8000-000000000003', current_date-3, 7, 1), ('20000000-0000-4000-8000-000000000003', current_date-2, 7, 2), ('20000000-0000-4000-8000-000000000003', current_date-1, 7, 2);
+
 -- Tareas del equipo (el código T-01, T-02… lo asigna el trigger).
 INSERT INTO tareas (equipo_id, titulo, descripcion, responsable_id, proponente_id, estado, progreso, vence_en, prioridad, sprint_id, motivo, resultado, completada_en, origen, creada_por) VALUES
  ('10000000-0000-4000-8000-000000000001','Diseñar el Hill Chart','Curva, figuras y anticolisión','00000000-0000-4000-8000-000000000003',NULL,'en_curso',60, now()+interval '3 days','alta','20000000-0000-4000-8000-000000000003',NULL,NULL,NULL,'directa','00000000-0000-4000-8000-000000000001'),

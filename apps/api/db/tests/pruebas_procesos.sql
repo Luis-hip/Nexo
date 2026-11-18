@@ -883,8 +883,19 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e); s1
   EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
   BEGIN UPDATE sprints SET estado = 'activo' WHERE id = s2;
   EXCEPTION WHEN unique_violation THEN ok := ok + 1; END;
-  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P55: % de 4 rechazos', ok; END IF;
-  RAISE NOTICE 'OK P55: proc_sprint_iniciar (un solo sprint activo por equipo)';
+  -- Iniciado antes de su fecha se recorre a hoy con la misma duración; con el plazo vencido, no.
+  e := pg_temp.equipo_con(1);
+  s1 := pg_temp.planear(e, jsonb_build_object('inicio', fn_hoy_equipo(e) + 5, 'fin', fn_hoy_equipo(e) + 18));
+  d := proc_sprint_iniciar(pg_temp.lider(e), e, s1);
+  IF (d->>'inicio')::date <> fn_hoy_equipo(e) OR (d->>'fin')::date <> fn_hoy_equipo(e) + 13 THEN
+    RAISE EXCEPTION 'FALLO P55: no se recorrió a hoy: %', d;
+  END IF;
+  e := pg_temp.equipo_con(1);
+  s1 := pg_temp.planear(e, jsonb_build_object('inicio', fn_hoy_equipo(e) - 10, 'fin', fn_hoy_equipo(e) - 1));
+  BEGIN PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s1);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P55: % de 5 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P55: proc_sprint_iniciar (un solo sprint activo; se recorre a hoy si empieza antes)';
 END $$;
 
 -- P56. proc_sprint_obtener: sin id, el sprint activo (o null); con tareas, capacidad y burndown.

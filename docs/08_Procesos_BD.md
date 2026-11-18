@@ -896,8 +896,8 @@
 - **Propósito:** Inicia un sprint planificado (EQ-09).
 - **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint.
 - **Retorno:** `jsonb` `SprintDetalle`.
-- **Reglas y validaciones:** solo el líder, con el equipo activo; el sprint debe estar planificado y no puede haber otro activo (además lo garantiza el índice `ux_un_sprint_activo`). Guarda la instantánea del día de inicio. Las fechas no cambian.
-- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint ya no está planificado. `NX012` · hay otro sprint activo.
+- **Reglas y validaciones:** solo el líder, con el equipo activo; el sprint debe estar planificado y no puede haber otro activo (además lo garantiza el índice `ux_un_sprint_activo`). Si se inicia **antes** de su fecha, se recorre a hoy y conserva su duración (así el burndown empieza hoy); si se inicia tarde, conserva sus fechas; si su fin ya pasó, hay que cambiar las fechas primero. Guarda la instantánea del día de inicio.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint ya no está planificado. `NX010` · el plazo del sprint ya pasó (`fechas_vencidas`). `NX012` · hay otro sprint activo.
 - **Tablas que toca:** escritura `sprints`, `sprint_instantaneas`, `eventos_dominio`, `actividad`.
 - **Eventos que genera:** `sprint.iniciado` («Valeria inició el Sprint 4»).
 - **Lo llama:** `repositorios/sprints.ts` → `iniciar()`; `POST /equipos/:equipoId/sprints/:sprintId/iniciar`.

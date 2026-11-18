@@ -650,7 +650,7 @@ SELECT t.codigo, t.titulo FROM tareas t
 Reproduce el «Equipo Nexo» del prototipo: 11 personas, 1 equipo con **8 miembros activos** (líder + 7 integrantes, cupo completo a propósito) y 2 invitados, 4 sprints (2 cerrados, 1 activo, 1 planificado), 9 tareas de equipo en distintos estados, 2 tareas personales, etiquetas, chat y la configuración de WhatsApp en modo **simulado** con sus 6 reglas. Los usuarios de la semilla **no tienen contraseña**: se entra con el inicio de sesión de desarrollo (ver `01_Contexto…`).
 
 ### 14.2 Qué no cubre la semilla
-No incluye avisos de WhatsApp enviados, elecciones activas ni retrospectivas: se crean con el uso o con pruebas.
+Desde la Fase 3.3 trae también las instantáneas del burndown (`sprint_instantaneas`): la foto final de los dos sprints cerrados y los días ya pasados del activo. No incluye avisos de WhatsApp enviados, elecciones activas ni retrospectivas: se crean con el uso o con pruebas.
 
 ### 14.3 Semilla ampliada para rendimiento
 Generar con un script de Node (`apps/api/db/seeds/volumen.ts`): 50 equipos, 500 usuarios, 20 000 tareas y 200 000 mensajes.

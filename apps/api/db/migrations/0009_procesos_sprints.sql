@@ -379,9 +379,13 @@ BEGIN
   RETURN fn_sprint_detalle(s.id);
 END $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
-/** Inicia un sprint planificado. Solo puede haber uno activo por equipo (EQ-09). */
+/**
+ * Inicia un sprint planificado. Solo puede haber uno activo por equipo (EQ-09). Si se inicia
+ * antes de su fecha, se recorre a hoy y conserva su duración; si su plazo ya pasó, hay que
+ * cambiar las fechas primero.
+ */
 CREATE OR REPLACE FUNCTION proc_sprint_iniciar(p_actor_id uuid, p_equipo_id uuid, p_sprint_id uuid) RETURNS jsonb AS $$
-DECLARE s sprints; v_activo integer;
+DECLARE s sprints; v_activo integer; v_hoy date := fn_hoy_equipo(p_equipo_id);
 BEGIN
   PERFORM fn_exigir_gestion_sprints(p_actor_id, p_equipo_id);
   s := fn_sprint_bloquear(p_equipo_id, p_sprint_id);
@@ -393,7 +397,14 @@ BEGIN
     RAISE EXCEPTION 'El Sprint % sigue activo. Ciérralo antes de iniciar otro.', v_activo
       USING ERRCODE = 'NX012', HINT = 'sprint_activo_existente';
   END IF;
-  UPDATE sprints SET estado = 'activo' WHERE id = s.id;
+  IF s.fin < v_hoy THEN
+    RAISE EXCEPTION 'El plazo de este sprint ya pasó: cambia sus fechas antes de iniciarlo.'
+      USING ERRCODE = 'NX010', HINT = 'fechas_vencidas';
+  END IF;
+  UPDATE sprints SET estado = 'activo',
+         inicio = least(inicio, v_hoy),
+         fin    = CASE WHEN inicio > v_hoy THEN fin - (inicio - v_hoy) ELSE fin END
+   WHERE id = s.id;
   PERFORM fn_sprint_instantanea(s.id);
   PERFORM fn_registrar_evento(p_equipo_id, p_actor_id, 'sprint.iniciado', 'sprint', s.id,
     jsonb_build_object('numero', s.numero) || fn_sprint_conteo(s.id, 'activo'),
