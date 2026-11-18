@@ -17,7 +17,6 @@ import { z } from 'zod';
 import { exigirSesion } from '../autenticacion';
 import type { BaseDatos } from '../db/conexion';
 import { contextoEquipo, requiereEquipoActivo, requierePermiso } from '../equipos/contexto';
-import { ErrorNexo } from '../errores';
 import * as servicio from '../servicios/tareasEquipo';
 import { esquemaId, validar } from '../validacion';
 
@@ -31,7 +30,8 @@ const consultaLista = z.object({
 
 /**
  * Tareas de equipo (Fase 2, secciones 2.2 y 2.3). Cada ruta: sesión → membresía activa en
- * **este** equipo → permiso de la matriz. Las reglas viven en el servicio.
+ * **este** equipo → permiso de la matriz. Las reglas de datos viven en los procesos de la BD
+ * (docs/08) y el servicio solo los llama.
  */
 export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (app, { db }) => {
   /** Sesión + membresía. Para escribir, además exige que el equipo no esté archivado. */
@@ -209,9 +209,7 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
     // (c): el servicio responde 404 al invitado si la tarea no está compartida con él.
     requierePermiso(ctx, 'comentar', { esCompartido: true });
     const { texto } = validar(esquemaCrearComentario, req.body);
-    const comentario = await servicio.comentar(db, ctx, actor, tareaId(req), texto);
-    if (!comentario) throw new ErrorNexo(500, 'error_interno', 'Ocurrió un error inesperado.');
-    return res.status(201).send(comentario);
+    return res.status(201).send(await servicio.comentar(db, ctx, actor, tareaId(req), texto));
   });
 
   app.delete('/equipos/:equipoId/tareas/:tareaId/comentarios/:comentarioId', async (req, res) => {

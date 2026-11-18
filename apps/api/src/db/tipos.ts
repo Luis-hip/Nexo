@@ -546,6 +546,12 @@ export interface TransferenciasLiderazgo {
   saldra: Generated<boolean>;
 }
 
+export interface TransicionesEstado {
+  desde: EstadoTarea;
+  hacia: EstadoTarea;
+  quien: string;
+}
+
 export interface Usuarios {
   actualizado_en: Generated<Timestamp>;
   avatar_url: string | null;
@@ -718,6 +724,7 @@ export interface DB {
   tareas: Tareas;
   tokens_verificacion: TokensVerificacion;
   transferencias_liderazgo: TransferenciasLiderazgo;
+  transiciones_estado: TransicionesEstado;
   usuarios: Usuarios;
   v_equipo_cupo: VEquipoCupo;
   v_miembros_activos: VMiembrosActivos;

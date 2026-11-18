@@ -868,6 +868,55 @@ describe.skipIf(!DATABASE_URL)('tareas de equipo', () => {
       }
     });
 
+    it('la máquina de estados es la misma en estados.ts y en la tabla transiciones_estado', async () => {
+      const { TRANSICIONES } = await import('@nexo/shared');
+      const deTs = Object.entries(TRANSICIONES)
+        .flatMap(([desde, destinos]) =>
+          Object.entries(destinos ?? {}).flatMap(([hacia, quienes]) =>
+            (quienes ?? []).map((quien) => `${desde} → ${hacia} (${quien})`),
+          ),
+        )
+        .sort();
+      const filas = await e.db
+        .selectFrom('transiciones_estado')
+        .select(['desde', 'hacia', 'quien'])
+        .execute();
+      const deBd = filas.map((f) => `${f.desde} → ${f.hacia} (${f.quien})`).sort();
+      expect(deBd).toEqual(deTs);
+      expect(deBd.length).toBeGreaterThan(10);
+    });
+
+    it('con el rol nexo_app la API solo puede ejecutar procesos: no lee tablas', async () => {
+      const { sql } = await import('kysely');
+      // Un proceso sí funciona…
+      await e.db.transaction().execute(async (tx) => {
+        await sql`set local role nexo_app`.execute(tx);
+        const ok = await sql<{ x: { recibido: boolean } }>`
+          select proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Mensaje enviado como nexo_app') as x
+        `.execute(tx);
+        expect(ok.rows[0]?.x.recibido).toBe(true);
+      });
+      // …pero no las tablas, las vistas, las auxiliares ni los procesos de desarrollo.
+      for (const consulta of [
+        sql`select * from tareas limit 1`,
+        sql`select * from v_tareas_semaforo limit 1`,
+        sql`update usuarios set nombre = 'Intruso'`,
+        sql`select fn_integrantes_activos(gen_random_uuid())`,
+        sql`select proc_dev_usuarios()`,
+      ]) {
+        const codigo = await e.db
+          .transaction()
+          .execute(async (tx) => {
+            await sql`set local role nexo_app`.execute(tx);
+            await consulta.execute(tx);
+            return 'permitido';
+          })
+          .catch((error: { code?: string }) => error.code);
+        // 42501 = insufficient_privilege
+        expect(codigo).toBe('42501');
+      }
+    });
+
     it('el índice fraccionario de la BD da las mismas claves que la librería', async () => {
       const { generateKeyBetween } = await import('fractional-indexing');
       const { sql } = await import('kysely');
