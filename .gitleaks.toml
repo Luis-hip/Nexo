@@ -1,14 +1,20 @@
 # Configuración de gitleaks (docs/09_Seguridad_y_Secretos.md, DEC-026).
-# Usa las reglas por defecto y solo permite los valores falsos de desarrollo.
+# Usa las reglas por defecto y solo permite valores FALSOS conocidos: los de desarrollo y los que
+# usan a propósito las pruebas de seguridad (config.test.ts, seguridad.test.ts) para comprobar que
+# la API rechaza los valores de ejemplo y que los registros ocultan secretos.
+# No se excluyen archivos de prueba completos: un secreto real en una prueba también debe fallar.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Valores falsos de desarrollo y archivos generados"
+description = "Valores falsos de desarrollo, de .env.example y de las pruebas de seguridad"
 paths = [
   '''(^|/)\.env\.example$''',
   '''pnpm-lock\.yaml$''',
 ]
 regexes = [
   '''postgres://nexo:nexo@''',
+  '''cambia-esto''',
+  '''VALOR-SECRETO-\d''',
+  '''pw-de-prueba''',
 ]
