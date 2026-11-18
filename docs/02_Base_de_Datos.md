@@ -563,7 +563,8 @@ Principio: un índice por cada consulta crítica de una pantalla y **no más**. 
 ## 12. Migraciones y ciclo de vida del esquema
 
 - Herramienta: **`node-pg-migrate`** con migraciones en SQL puro (`apps/api/db/migrations/NNNN_nombre.sql`).
-- `0001_esquema.sql` = script de la sección 15.1. `0002_…` en adelante = cambios.
+- `0001_esquema.sql` = script de la sección 15.1. `0002_…` en adelante = cambios. Fase 2.5: `0002_enums_votacion`, `0003_votacion`, `0004_procesos_cuenta`, `0005_procesos_equipos`, `0006_procesos_tareas_equipo`, `0007_procesos_tareas_personales` y `0008_roles` (ver `08_Procesos_BD.md`).
+- **Desde la Fase 2.5 (DEC-025)** las migraciones se ejecutan con el rol dueño (`nexo_migraciones`, `DATABASE_URL_MIGRACIONES`) y la API se conecta con `nexo_app`, que solo ejecuta procesos `proc_*`. Toda migración que cree o cambie procesos termina con `SELECT fn_conceder_procesos();`.
 - Cada migración es **transaccional** y tiene su `down` cuando es posible.
 - Tras migrar en local se regeneran los tipos: `pnpm --filter api db:types` (ejecuta `kysely-codegen` y escribe `apps/api/src/db/tipos.ts`, que **sí se versiona**).
 - La semilla se carga con `pnpm --filter api db:seed`; el reinicio completo con `pnpm db:reset` (solo en desarrollo; falla si `NODE_ENV=production`).

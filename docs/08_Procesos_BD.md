@@ -35,8 +35,10 @@
 | `NX008` | Conflicto de versión (concurrencia optimista) | «Alguien cambió esta tarea. Recárgala para ver la versión más reciente.» | `0003` |
 | `NX009` | Equipo archivado (solo lectura) | «El equipo está archivado: solo lectura.» | `0003` |
 | `NX010` | Datos inválidos que solo la BD puede comprobar (responsable que no es miembro…) | El mensaje del proceso | `0003` |
+| `NX011` | Ya no disponible: invitación caducada, usada o revocada | «Esta invitación caducó. Pide una nueva al líder del equipo.» y variantes | `0005` |
+| `NX012` | Conflicto que no es de versión: ya es miembro, o el tablero cambió mientras se movía una tarjeta | El mensaje del proceso | `0005` |
 
-**Forma de un error de proceso.** `SQLSTATE` (la clase del error) + `MESSAGE` (texto en español para el usuario) + `HINT` (código de la API, p. ej. `tarea_no_encontrada`) + `DETAIL` opcional en JSON (p. ej. `{"version_actual": 5}`). La API los traduce en un solo lugar (`repositorios/procesos.ts`): `NX004`/`NX005`/`NX009` → 403, `NX006` → 404, `NX007` → 422, `NX008` → 409, `NX010` → 400. Los códigos nuevos se agregan aquí al crearlos.
+**Forma de un error de proceso.** `SQLSTATE` (la clase del error) + `MESSAGE` (texto en español para el usuario) + `HINT` (código de la API, p. ej. `tarea_no_encontrada`) + `DETAIL` opcional en JSON (p. ej. `{"version_actual": 5}`). La API los traduce en un solo lugar (`repositorios/procesos.ts`): `NX004`/`NX005`/`NX009` → 403, `NX006` → 404, `NX007` → 422, `NX001`/`NX008`/`NX012` → 409, `NX010` → 400, `NX011` → 410. Para `NX001` (equipo lleno) la API arma el mensaje con `mensajeEquipoLleno()` de `packages/shared` a partir de `max_miembros`, que viaja en el detalle. Los códigos nuevos se agregan aquí al crearlos.
 
 ## 4. Índice de procesos
 
@@ -48,8 +50,66 @@
 | `proc_tarea_reformular` | Tareas · votación | `0003_votacion.sql` | Vigente |
 | `proc_tarea_votacion` | Tareas · votación (lectura) | `0003_votacion.sql` | Vigente |
 | `proc_tarea_votaciones` | Tareas · votación (lectura) | `0003_votacion.sql` | Vigente |
+| `proc_sesion_resolver` | Cuenta · sesiones (lectura) | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_sesion_revocar` | Cuenta · sesiones | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_dev_usuarios` | Desarrollo (lectura) | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_dev_sesion_crear` | Desarrollo | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_usuario_yo` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_usuario_preferencias_guardar` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_usuario_perfil_guardar` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_contacto_enviar` | Contacto | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_equipo_contexto` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
+| `proc_equipo_crear` | Equipos | `0005_procesos_equipos.sql` | Vigente |
+| `proc_equipo_obtener` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
+| `proc_equipo_miembros` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
+| `proc_invitacion_crear` | Invitaciones | `0005_procesos_equipos.sql` | Vigente |
+| `proc_invitacion_listar` | Invitaciones (lectura) | `0005_procesos_equipos.sql` | Vigente |
+| `proc_invitacion_revocar` | Invitaciones | `0005_procesos_equipos.sql` | Vigente |
+| `proc_invitacion_ver` | Invitaciones (lectura) | `0005_procesos_equipos.sql` | Vigente |
+| `proc_invitacion_aceptar` | Invitaciones | `0005_procesos_equipos.sql` | Vigente |
+| `proc_tarea_listar` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_conteos` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_obtener` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_editar` | Tareas de equipo | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_eliminar` | Tareas de equipo | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_cambiar_estado` | Tareas de equipo · estados | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_mover` | Tareas de equipo · tablero | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_asignar` | Tareas de equipo · asignación | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_responder_asignacion` | Tareas de equipo · asignación | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_compartir` | Tareas de equipo | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_subtarea_crear` | Tareas de equipo · subtareas | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_subtarea_actualizar` | Tareas de equipo · subtareas | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_subtarea_eliminar` | Tareas de equipo · subtareas | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_comentario_crear` | Tareas de equipo · comentarios | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_comentario_eliminar` | Tareas de equipo · comentarios | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_personal_tarea_listar` | Espacio personal (lectura) | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_tarea_obtener` | Espacio personal (lectura) | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_tarea_crear` | Espacio personal | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_tarea_actualizar` | Espacio personal | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_tarea_eliminar` | Espacio personal | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_subtarea_crear` | Espacio personal · subtareas | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_subtarea_actualizar` | Espacio personal · subtareas | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_subtarea_eliminar` | Espacio personal · subtareas | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_comentario_crear` | Espacio personal · comentarios | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_comentario_eliminar` | Espacio personal · comentarios | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_personal_etiquetas` | Espacio personal (lectura) | `0007_procesos_tareas_personales.sql` | Vigente |
 
 **Auxiliares (`fn_*`, no las llama la aplicación)** creadas en `0003`: índice fraccionario (`fn_orden_entre`, `fn_orden_al_final` y sus partes), `fn_votacion_resultado`, `fn_votacion_resumen`, `fn_integrantes_activos`, `fn_registrar_evento`, `fn_membresia_actor`, `fn_exigir_lider`, `fn_exigir_equipo_activo`, `fn_exigir_responsable`, `fn_exigir_version`, `fn_bloquear_tarea`, `fn_fijar_etiquetas`, `fn_tarea_insertar_propuesta`, y los disparadores `fn_voto_propuesta_valido` y `fn_membresia_descarta_votos`.
+
+**Auxiliares de `0004` a `0007`:** `fn_iso` (fechas como `Date.toISOString()`), formas JSON (`fn_usuario_json`, `fn_preferencias_json`, `fn_miembros_json`, `fn_invitacion_json`, `fn_persona_json`, `fn_tarea_equipo_json`, `fn_tarea_equipo_detalle`, `fn_comentario_equipo_json`, `fn_tarea_personal_json`, `fn_tarea_personal_detalle`, `fn_comentario_personal_json`), invitaciones (`fn_codigo_invitacion`, `fn_invitacion_vigente`), tareas (`fn_exigir_tarea_visible`, `fn_bloquear_tarea_visible`, `fn_columna_ordenar`, `fn_transicion_permitida`, `fn_exigir_trabajo_en_tarea`, `fn_tarea_aplicar_estado`, `fn_exigir_gestion_subtareas`, `fn_nombre_estado`), espacio personal (`fn_tarea_propia`, `fn_fijar_etiquetas_personales`, `fn_actividad_personal`) y la tabla `transiciones_estado` (copia de `estados.ts`). La `0008` agrega `fn_conceder_procesos`.
+
+## 4b. Roles de la BD
+
+| Rol | Para qué | Permisos |
+|---|---|---|
+| `nexo_migraciones` | Dueño del esquema. Es el rol con el que se **ejecutan las migraciones** (`DATABASE_URL_MIGRACIONES`; solo CI y despliegue) | Todo sobre el esquema. No lo crea ninguna migración: es quien las ejecuta. En local y en la CI ese papel lo hace el usuario de `DATABASE_URL` |
+| `nexo_app` | La API en producción (`DATABASE_URL`) | **Solo `EXECUTE` sobre `proc_*`** (menos `proc_dev_*`). Sin permisos sobre tablas, vistas ni secuencias, y sin acceso a las auxiliares `fn_*` |
+
+- La migración `0008_roles.sql` crea `nexo_app` **sin inicio de sesión y sin contraseña** (ningún secreto en el repositorio, `09`) y aplica los permisos con `fn_conceder_procesos()`. En el despliegue, una persona lo habilita: `ALTER ROLE nexo_app LOGIN PASSWORD '…'` (el valor va solo al panel del alojamiento).
+- **Por qué funciona:** todos los procesos son `SECURITY DEFINER` con `SET search_path = public, pg_temp`: se ejecutan con los permisos del dueño, validan al actor (`p_actor_id`) y son la única puerta a los datos. Aunque alguien robe la conexión de la aplicación, no puede leer ni escribir tablas a mano.
+- **Convención:** toda migración que cree o cambie procesos termina con `SELECT fn_conceder_procesos();` (es idempotente). La prueba `P52` falla si un `proc_*` quedó sin conceder o si `nexo_app` alcanza alguna tabla, y `P51` si un proceso no es `SECURITY DEFINER`.
+- **Acceso de desarrollo:** `proc_dev_usuarios` y `proc_dev_sesion_crear` no se conceden a `nexo_app`. En local y en la CI la API se conecta con el dueño del esquema, por eso el *dev login* funciona ahí y no puede funcionar en producción.
+- **Lo que sí queda en la API:** `repositorios/procesos.ts` (la llamada `select proc_x(…)`), la conexión (`db/conexion.ts`) y las pruebas, que preparan y comprueban datos con SQL directo como dueño. Una regla de ESLint impide importar `kysely` o escribir consultas en el resto de `apps/api/src`.
 
 ## 5. Plantilla de apartado
 
@@ -156,3 +216,605 @@
 - **Pruebas:** `tareasEquipo.test.ts` «nadie ve el voto ajeno…» (lista `vista=votacion`).
 - **Ejemplo de llamada:** `select proc_tarea_votaciones($1, $2, $3::uuid[])`
 - **Historial:** 2026-11-16 · creación · `0003`.
+
+### proc_sesion_resolver
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Resuelve la sesión de una petición a partir del hash del token de la cookie.
+- **Parámetros:** `p_token_hash bytea` · SHA-256 del token opaco. **No recibe `p_actor_id`**: es lo que averigua quién es el actor.
+- **Retorno:** `jsonb` `{ sesion_id, usuario: { id, correo, nombre, cargo, descripcion, zona_horaria, avatar_url } }`, o `NULL` si no hay sesión vigente.
+- **Reglas y validaciones:** la sesión no debe estar revocada ni vencida y la cuenta no debe estar eliminada; nunca devuelve el hash de la contraseña.
+- **Errores:** ninguno: una sesión inválida devuelve `NULL` y la API responde 401.
+- **Tablas que toca:** lectura `sesiones`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/cuenta.ts` → `resolverSesion()`; se llama en cada petición (`autenticacion.ts`).
+- **Pruebas:** `pruebas_procesos.sql` P16; `app.test.ts` y `yo.test.ts` (sesiones).
+- **Ejemplo de llamada:** `select proc_sesion_resolver($1)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_sesion_revocar
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Cierra una sesión del actor.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_sesion_id uuid` · sesión a cerrar.
+- **Retorno:** `jsonb` `{ revocada: boolean }`.
+- **Reglas y validaciones:** solo revoca una sesión **del propio actor** que siga vigente; la de otra persona no se toca (`revocada: false`).
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `sesiones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/cuenta.ts` → `revocarSesion()`; `POST /salir`.
+- **Pruebas:** `pruebas_procesos.sql` P17; `yo.test.ts`.
+- **Ejemplo de llamada:** `select proc_sesion_revocar($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_dev_usuarios
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Lista los usuarios de la semilla para el selector del acceso de desarrollo.
+- **Parámetros:** ninguno.
+- **Retorno:** `jsonb` arreglo de `{ id, correo, nombre, cargo }`, por nombre.
+- **Reglas y validaciones:** solo existe para el acceso de desarrollo (`DEV_LOGIN_ENABLED=true`). **No se concede al rol `nexo_app`**: en producción la API no puede ejecutarlo.
+- **Errores:** `42501` · lo ejecuta `nexo_app`.
+- **Tablas que toca:** lectura `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/cuenta.ts` → `usuariosDev()`; `GET /dev/usuarios`.
+- **Pruebas:** `pruebas_procesos.sql` P18, P52; `app.test.ts`.
+- **Ejemplo de llamada:** `select proc_dev_usuarios()`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_dev_sesion_crear
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Crea una sesión real para un usuario de la semilla, sin contraseña (solo desarrollo y CI).
+- **Parámetros:** `p_correo text`. `p_token_hash bytea` · hash del token. `p_ip text`. `p_expira_en timestamptz`.
+- **Retorno:** `jsonb` `{ usuario: { id, correo, nombre } }`.
+- **Reglas y validaciones:** guarda solo el **hash** del token; la sesión se marca con `dispositivo = dev-login`. **No se concede a `nexo_app`**.
+- **Errores:** `NX006` · no existe un usuario con ese correo (404, `usuario_no_encontrado`). `42501` · lo ejecuta `nexo_app`.
+- **Tablas que toca:** lectura `usuarios`; escritura `sesiones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/cuenta.ts` → `crearSesionDev()`; `POST /dev/login`.
+- **Pruebas:** `pruebas_procesos.sql` P18; `app.test.ts`.
+- **Ejemplo de llamada:** `select proc_dev_sesion_crear($1, $2, $3, $4)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_usuario_yo
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Equipos activos de la persona (con su perfil en cada uno) y sus preferencias.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta.
+- **Retorno:** `jsonb` `{ equipos: [{ id, nombre, rol, color_idx, caduca_en }], preferencias: {…} }`.
+- **Reglas y validaciones:** solo membresías activas en equipos activos; si la persona aún no tiene fila de preferencias, la crea con los valores por defecto.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `membresias`, `equipos`; lectura y escritura `preferencias_usuario`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/cuenta.ts` → `yo()`; `GET /yo`.
+- **Pruebas:** `pruebas_procesos.sql` P19; `yo.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_yo($1)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_usuario_preferencias_guardar
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Guarda cualquier subconjunto de las preferencias propias.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_cambios jsonb` · subconjunto de `{ tema, densidad, tamano_texto, reducir_movimiento, formato_hora, formato_fecha, tour_visto, idioma, resumen_diario }`.
+- **Retorno:** `jsonb` con las nueve preferencias como quedaron.
+- **Reglas y validaciones:** solo cambia lo que viene en `p_cambios`; cada quien solo toca las suyas.
+- **Errores:** `22P02` / `23514` · valor fuera del catálogo (lo evita la validación Zod de la API).
+- **Tablas que toca:** lectura y escritura `preferencias_usuario`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/cuenta.ts` → `guardarPreferencias()`; `PATCH /yo/preferencias`.
+- **Pruebas:** `pruebas_procesos.sql` P20; `yo.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_preferencias_guardar($1, '{"tema":"oscuro"}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_usuario_perfil_guardar
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Actualiza el perfil propio.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_cambios jsonb` · subconjunto de `{ nombre, cargo, descripcion, zona_horaria }`.
+- **Retorno:** `jsonb` con el usuario de la sesión (`UsuarioSesion`).
+- **Reglas y validaciones:** solo el perfil del actor; exige al menos un cambio.
+- **Errores:** `NX010` · sin cambios (400, `validacion`). `NX006` · la cuenta no existe o está eliminada. `23514` · nombre fuera de 2 a 80 caracteres.
+- **Tablas que toca:** escritura `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/cuenta.ts` → `guardarPerfil()`; `PATCH /yo/perfil`.
+- **Pruebas:** `pruebas_procesos.sql` P21; `yo.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_perfil_guardar($1, '{"cargo":"QA"}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_contacto_enviar
+- **Migración:** `0004_procesos_cuenta.sql`
+- **Propósito:** Guarda un mensaje del formulario público de contacto.
+- **Parámetros:** `p_nombre text`. `p_correo text`. `p_asunto text`. `p_mensaje text`. **No hay actor**: la ruta no tiene sesión.
+- **Retorno:** `jsonb` `{ recibido: true }`.
+- **Reglas y validaciones:** el mensaje mide de 10 a 4000 caracteres (lo exige la tabla); la ruta lleva límite de peticiones.
+- **Errores:** `23514` · mensaje demasiado corto o largo (lo evita la validación Zod).
+- **Tablas que toca:** escritura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/cuenta.ts` → `enviarContacto()`; `POST /contacto`.
+- **Pruebas:** `pruebas_procesos.sql` P22, P52; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_enviar($1, $2, $3, $4)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
+
+### proc_equipo_contexto
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Comprueba que el actor es miembro activo del equipo de la ruta y devuelve su perfil.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `{ membresia_id, rol, equipo: { nombre, estado, max_miembros } }`.
+- **Reglas y validaciones:** quien no pertenece recibe 404, igual que si el equipo no existiera (DEC-018); un invitado cuyo acceso caducó, 403.
+- **Errores:** `NX006` · el actor no pertenece al equipo (404) (`equipo_no_encontrado`). `NX005` · invitado caducado (403, `acceso_caducado`).
+- **Tablas que toca:** lectura `membresias`, `equipos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/equipos.ts` → `contexto()`; lo usa `contextoEquipo()` en todas las rutas `/equipos/:equipoId/*`.
+- **Pruebas:** `pruebas_procesos.sql` P23; `equipos.test.ts` y `tareasEquipo.test.ts` (404 a quien no pertenece).
+- **Ejemplo de llamada:** `select proc_equipo_contexto($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_equipo_crear
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Crea un equipo; quien lo crea queda como líder.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_datos jsonb` · `{ nombre, descripcion?, duracion_sprint_semanas?, max_miembros? }`.
+- **Retorno:** `jsonb` `{ id }`.
+- **Reglas y validaciones:** el creador es líder con el color 0; se crean los dos canales fijos (equipo e invitados); `max_miembros` de 1 a 8 (por defecto 8).
+- **Errores:** `23514` · nombre fuera de 2 a 60 caracteres o `max_miembros` fuera de 1 a 8 (lo evita Zod).
+- **Tablas que toca:** escritura `equipos`, `membresias`, `conversaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.creado` («Paola Reyes creó el equipo «…»»).
+- **Lo llama:** `repositorios/equipos.ts` → `crear()`; `POST /equipos`.
+- **Pruebas:** `pruebas_procesos.sql` P24; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_crear($1, '{"nombre":"Equipo nuevo"}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_equipo_obtener
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Datos del equipo según el perfil de quien consulta.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `EquipoDetalle`: `{ id, nombre, descripcion, estado, max_miembros, miembros_activos, invitados_activos, mi_rol, mi_membresia_id, lider, miembros[], sprints[], etiquetas[] }`.
+- **Reglas y validaciones:** un **invitado** recibe `miembros`, `sprints` y `etiquetas` vacíos; los sprints cerrados no se incluyen.
+- **Errores:** `NX006` · el actor no pertenece al equipo (404). `NX005` · invitado caducado.
+- **Tablas que toca:** lectura `equipos`, `membresias`, `usuarios`, `sprints`, `etiquetas`, `v_equipo_cupo`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/equipos.ts` → `obtener()`; `GET /equipos/:equipoId`.
+- **Pruebas:** `pruebas_procesos.sql` P25; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_obtener($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_equipo_miembros
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Miembros activos del equipo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` arreglo de `{ membresia_id, usuario_id, nombre, rol, color_idx, caduca_en }`: líder, integrantes (por color) e invitados.
+- **Reglas y validaciones:** lo consultan el líder y los integrantes.
+- **Errores:** `NX005` · un invitado (403). `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `membresias`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/equipos.ts` → `miembros()`; `GET /equipos/:equipoId/miembros`.
+- **Pruebas:** `pruebas_procesos.sql` P26; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_miembros($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_invitacion_crear
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** El líder genera un código de invitación de un solo uso.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_datos jsonb` · `{ rol_destino: integrante|invitado, dias_validez?, duracion_invitado_dias? }`.
+- **Retorno:** `jsonb` `Invitacion`: `{ id, codigo, rol_destino, estado, caduca_en, duracion_invitado_dias, creada_en, aceptada_por }`.
+- **Reglas y validaciones:** solo el líder; equipo no archivado; el código tiene el formato `NX4-821Q` con un alfabeto sin 0/O ni 1/I/L (DEC-019) y es único; la duración del invitado solo aplica a invitados.
+- **Errores:** `NX005` · no es el líder. `NX006` · el actor no pertenece al equipo (404). `NX009` · equipo archivado (403).
+- **Tablas que toca:** lectura `membresias`, `equipos`, `usuarios`; escritura `invitaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `invitacion.creada`.
+- **Lo llama:** `repositorios/equipos.ts` → `crearInvitacion()`; `POST /equipos/:equipoId/invitaciones`.
+- **Pruebas:** `pruebas_procesos.sql` P27; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_invitacion_crear($1, $2, '{"rol_destino":"integrante","dias_validez":7}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_invitacion_listar
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Invitaciones del equipo, de la más reciente a la más antigua.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` arreglo de `Invitacion`.
+- **Reglas y validaciones:** solo el líder; una pendiente cuyo plazo ya pasó se muestra como `caducada`.
+- **Errores:** `NX005` · no es el líder. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `invitaciones`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/equipos.ts` → `listarInvitaciones()`; `GET /equipos/:equipoId/invitaciones`.
+- **Pruebas:** `pruebas_procesos.sql` P28; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_invitacion_listar($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_invitacion_revocar
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** El líder revoca una invitación que sigue pendiente.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_invitacion_id uuid`.
+- **Retorno:** `jsonb` `Invitacion` con `estado: revocada`.
+- **Reglas y validaciones:** solo el líder; solo invitaciones pendientes de ese equipo.
+- **Errores:** `NX006` · no hay una invitación pendiente con ese id (404, `invitacion_no_encontrada`). `NX005` · no es el líder.
+- **Tablas que toca:** escritura `invitaciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/equipos.ts` → `revocarInvitacion()`; `POST /equipos/:equipoId/invitaciones/:invitacionId/revocar`.
+- **Pruebas:** `pruebas_procesos.sql` P29; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_invitacion_revocar($1, $2, $3)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_invitacion_ver
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Vista previa de una invitación antes de unirse.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_codigo text` · código ya normalizado (la API acepta también el enlace completo).
+- **Retorno:** `jsonb` `VistaInvitacion`: `{ codigo, equipo: { id, nombre, descripcion }, lider, miembros_activos, max_miembros, rol_destino, duracion_invitado_dias, caduca_en, ya_miembro }`.
+- **Reglas y validaciones:** no exige pertenecer al equipo; solo sirve una invitación pendiente, vigente y de un equipo activo.
+- **Errores:** `NX006` · no existe (404, `invitacion_no_existe`). `NX011` · caducada, usada o revocada (410, `invitacion_caducada` / `invitacion_usada` / `invitacion_revocada`).
+- **Tablas que toca:** lectura `invitaciones`, `equipos`, `membresias`, `usuarios`, `v_equipo_cupo`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/equipos.ts` → `verInvitacion()`; `GET /invitaciones/:codigo`.
+- **Pruebas:** `pruebas_procesos.sql` P30; `equipos.test.ts`.
+- **Ejemplo de llamada:** `select proc_invitacion_ver($1, 'NX4-821Q')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_invitacion_aceptar
+- **Migración:** `0005_procesos_equipos.sql`
+- **Propósito:** Unirse a un equipo con un código de invitación.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_codigo text` · código ya normalizado.
+- **Retorno:** `jsonb` `{ equipo_id, rol }`.
+- **Reglas y validaciones:** la invitación es de **un solo uso**: se marca `aceptada` en la misma transacción que crea la membresía; el integrante recibe el primer color libre y el invitado, una caducidad (7, 14 o 30 días); las altas del equipo se serializan con el mismo bloqueo que usa el disparador del tope; si el equipo está lleno, todo se deshace y la invitación sigue pendiente (DEC-019).
+- **Errores:** `NX006` / `NX011` · invitación inexistente, caducada, usada o revocada. `NX012` · ya es miembro (409, `ya_miembro`, con `equipo_id` en el detalle). `NX001` · equipo lleno (409, `equipo_lleno`, con `max_miembros` en el detalle).
+- **Tablas que toca:** lectura `equipos`; escritura `invitaciones`, `membresias`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `membresia.creada` («… se unió al equipo como integrante»).
+- **Lo llama:** `repositorios/equipos.ts` → `aceptarInvitacion()`; `POST /invitaciones/:codigo/aceptar`.
+- **Pruebas:** `pruebas_procesos.sql` P31; `equipos.test.ts` (incluida la de dos personas a la vez al último lugar).
+- **Ejemplo de llamada:** `select proc_invitacion_aceptar($1, 'NX4-821Q')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+
+### proc_tarea_listar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Tareas del equipo según la vista.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_vista text` · `tablero` | `backlog` | `votacion` | `mias` | `todas`.
+- **Retorno:** `jsonb` arreglo de `TareaEquipo`, por orden de columna (índice fraccionario) y código. En `votacion` y `mias` cada propuesta lleva `votacion` (resumen, V-8).
+- **Reglas y validaciones:** no incluye archivadas; `tablero` = aceptada a completada; `votacion` = propuestas abiertas y las que no prosperaron; `mias` = propuestas abiertas y las que el actor ya votó (FALT-08); un **invitado** solo recibe las compartidas con su membresía y no tiene `backlog`, `votacion` ni `mias`.
+- **Errores:** `NX005` · invitado en una vista que no le corresponde. `NX010` · vista inválida. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `tareas`, `v_tareas_semaforo`, `tarea_compartida`, `tarea_votos`, `tarea_etiquetas`, `etiquetas`, `subtareas`, `comentarios_tarea`, `usuarios`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `listar()`; `GET /equipos/:equipoId/tareas?vista=`.
+- **Pruebas:** `pruebas_procesos.sql` P32; `tareasEquipo.test.ts` «ver tareas».
+- **Ejemplo de llamada:** `select proc_tarea_listar($1, $2, 'tablero')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_conteos
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Conteos para las pestañas de tareas.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `{ tablero, backlog, votacion }` (`votacion` = propuestas abiertas).
+- **Reglas y validaciones:** no cuenta archivadas; los invitados no lo consultan.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `tareas`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `conteos()`; `GET /equipos/:equipoId/tareas/conteos`.
+- **Pruebas:** `pruebas_procesos.sql` P33; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_tarea_conteos($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_obtener
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Detalle de una tarea del equipo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea.
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API). Incluye `subtareas[]`, `comentarios[]`, `historial[]` (últimos 50), `compartida_con[]` y `votacion`.
+- **Reglas y validaciones:** un invitado solo alcanza las tareas compartidas con él y no recibe historial ni votación; `compartida_con` solo lo ve el líder; `votacion` solo existe en las propuestas (origen `propuesta`).
+- **Errores:** `NX006` · la tarea no es del equipo o el actor no la alcanza (404). `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `tareas`, `v_tareas_semaforo`, `subtareas`, `comentarios_tarea`, `actividad`, `tarea_compartida`, `tarea_votos`, `usuarios`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `obtener()`; `GET /equipos/:equipoId/tareas/:tareaId`.
+- **Pruebas:** `pruebas_procesos.sql` P34; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_tarea_obtener($1, $2, $3)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_editar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Edita los datos de una tarea.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_version int` · versión que tenía el cliente. `p_cambios jsonb` · solo lo que cambia de `{ titulo, descripcion, prioridad, vence_en (admite null), progreso, archivada, etiquetas[] }`.
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API).
+- **Reglas y validaciones:** el **líder** edita cualquier tarea; un **integrante** solo actualiza el `progreso` de **su** tarea, con la asignación ya aceptada; el permiso se comprueba antes que la versión; una tarea completada tiene el 100 %; siempre sube `version`; las etiquetas nuevas se crean en el equipo.
+- **Errores:** `NX005` · no puede editarla (403). `NX008` · versión vieja (409). `NX010` · avance distinto de 100 en una completada (400). `NX006` · la tarea no es del equipo o el actor no la alcanza (404). `NX009` · equipo archivado (403).
+- **Tablas que toca:** lectura `membresias`, `equipos`; escritura `tareas`, `etiquetas`, `tarea_etiquetas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.progreso` (solo avance) o `tarea.editada`.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `editar()`; `PATCH /equipos/:equipoId/tareas/:tareaId`.
+- **Pruebas:** `pruebas_procesos.sql` P35; `tareasEquipo.test.ts` «editar…».
+- **Ejemplo de llamada:** `select proc_tarea_editar($1, $2, $3, 4, '{"titulo":"Nuevo título"}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_eliminar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** El líder elimina una tarea.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea.
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** solo el líder; se borran en cascada sus subtareas, comentarios, etiquetas y votos.
+- **Errores:** `NX005` · no es el líder. `NX006` · la tarea no es del equipo o el actor no la alcanza (404). `NX009` · equipo archivado (403).
+- **Tablas que toca:** escritura `tareas` (y en cascada), `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.eliminada`.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `eliminar()`; `DELETE /equipos/:equipoId/tareas/:tareaId`.
+- **Pruebas:** `pruebas_procesos.sql` P36; `tareasEquipo.test.ts` «solo el líder elimina».
+- **Ejemplo de llamada:** `select proc_tarea_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_cambiar_estado
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Cambia el estado de una tarea según la máquina de estados.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_version int`. `p_estado text` · destino. `p_motivo text` · obligatorio para `atascada`.
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API).
+- **Reglas y validaciones:** solo el líder o el responsable (con la asignación aceptada); la transición debe existir en `transiciones_estado` (copia de `estados.ts`); orden de las comprobaciones: permiso → versión → transición; la tarea queda al final de su nueva columna; al **completar**: avance 100, fecha de cierre, resultado (`a_tiempo` o `con_retraso`) y subtareas hechas; al **reabrir** (solo el líder): se limpian y el avance baja a 90 como máximo; al pasar a `en_curso` con avance 0 sube a 5; al `backlog` sale del sprint y del backlog a `aceptada` entra al sprint activo.
+- **Errores:** `NX005` · no es el líder ni el responsable (403). `NX008` · versión vieja (409). `NX007` · transición no permitida (422). `NX010` · atascar sin motivo (400). `NX006` · la tarea no es del equipo o el actor no la alcanza (404). `NX009` · equipo archivado (403). *La API comprueba antes lo mismo con `packages/shared` para dar el motivo exacto en español.*
+- **Tablas que toca:** lectura `transiciones_estado`, `sprints`, `membresias`; escritura `tareas`, `subtareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.completada` o `tarea.estado_cambiado` (con `de`, `a`, motivo y resultado).
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `cambiarEstado()`; `POST /equipos/:equipoId/tareas/:tareaId/estado`.
+- **Pruebas:** `pruebas_procesos.sql` P37; `tareasEquipo.test.ts` «máquina de estados en el servidor» y la comparación de `transiciones_estado` con `estados.ts`.
+- **Ejemplo de llamada:** `select proc_tarea_cambiar_estado($1, $2, $3, 4, 'en_curso', null)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_mover
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Arrastrar y soltar: mueve la tarea entre dos vecinas y, si cambia de columna, de estado.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_version int`. `p_antes_id uuid` · la que queda arriba (o null). `p_despues_id uuid` · la que queda abajo (o null). `p_estado text` · columna de destino si cambia. `p_motivo text`.
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API).
+- **Reglas y validaciones:** calcula el nuevo `orden` con el índice fraccionario (`fn_orden_entre`); bloquea la columna y, si hay claves repetidas, las reparte antes (DEC-021); sin vecinas va al final; con una sola, junto a ella; si cambia de columna aplica las reglas de `proc_tarea_cambiar_estado`; **solo el líder reordena** dentro de una columna.
+- **Errores:** `NX005` · no puede moverla o reordenar (403). `NX008` · versión vieja (409). `NX007` · transición no permitida (422). `NX010` · atascar sin motivo. `NX012` · las vecinas ya no están en esa columna (409, `conflicto_orden`). `NX006` · la tarea no es del equipo o el actor no la alcanza (404).
+- **Tablas que toca:** lectura `transiciones_estado`, `sprints`; escritura `tareas`, `subtareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** los de `proc_tarea_cambiar_estado` si cambia de columna; ninguno si solo reordena.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `mover()`; `POST /equipos/:equipoId/tareas/:tareaId/mover`.
+- **Pruebas:** `pruebas_procesos.sql` P38; `tareasEquipo.test.ts` «mover tarjetas» (incluida la de dos personas a la vez: 200 y 409).
+- **Ejemplo de llamada:** `select proc_tarea_mover($1, $2, $3, 4, $5, $6, null, null)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_asignar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** El líder asigna o quita al responsable.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_version int`. `p_responsable_id uuid` · o null para dejarla sin responsable.
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API).
+- **Reglas y validaciones:** solo el líder; el responsable debe ser líder o integrante activo; queda con la asignación pendiente salvo que sea el propio líder; **no** se asigna una propuesta en votación, rechazada, retirada ni una tarea completada (V-11).
+- **Errores:** `NX005` · no es el líder. `NX008` · versión vieja. `NX007` · el estado no admite asignar (422). `NX010` · el responsable no es miembro (400, `responsable_invalido`). `NX006` · la tarea no es del equipo o el actor no la alcanza (404).
+- **Tablas que toca:** lectura `membresias`, `usuarios`; escritura `tareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.asignada` o `tarea.desasignada`.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `asignar()`; `POST /equipos/:equipoId/tareas/:tareaId/asignar`.
+- **Pruebas:** `pruebas_procesos.sql` P39; `tareasEquipo.test.ts` «asignar y responder».
+- **Ejemplo de llamada:** `select proc_tarea_asignar($1, $2, $3, 4, $5)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_responder_asignacion
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** El responsable acepta o rechaza la asignación.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_acepta boolean`. `p_motivo text` · obligatorio al rechazar.
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API).
+- **Reglas y validaciones:** solo responde quien tiene la asignación pendiente; al **rechazar**, la tarea conserva su estado y queda sin responsable para que el líder la reasigne directamente, sin nueva votación (V-11).
+- **Errores:** `NX007` · no tiene una asignación pendiente (422, `sin_asignacion_pendiente`). `NX010` · rechazo sin motivo. `NX006` · la tarea no es del equipo o el actor no la alcanza (404).
+- **Tablas que toca:** escritura `tareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.asignacion_aceptada` o `tarea.asignacion_rechazada` (con el motivo).
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `responderAsignacion()`; `POST /equipos/:equipoId/tareas/:tareaId/asignacion`.
+- **Pruebas:** `pruebas_procesos.sql` P40; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_tarea_responder_asignacion($1, $2, $3, false, 'Estoy saturado')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_tarea_compartir
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** El líder elige qué invitados ven la tarea.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_membresias uuid[]` · membresías de invitados (sustituye la lista anterior).
+- **Retorno:** `jsonb` con el detalle de la tarea (`TareaEquipoDetalle` sin `transiciones`, que calcula la API).
+- **Reglas y validaciones:** solo el líder; todas deben ser membresías **activas de invitados de este equipo**; una lista vacía deja de compartirla.
+- **Errores:** `NX005` · no es el líder. `NX010` · alguna no es un invitado activo del equipo (400). `NX006` · la tarea no es del equipo o el actor no la alcanza (404).
+- **Tablas que toca:** lectura `membresias`; escritura `tarea_compartida`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.compartida` (con el número de invitados).
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `compartir()`; `PUT /equipos/:equipoId/tareas/:tareaId/compartida`.
+- **Pruebas:** `pruebas_procesos.sql` P41, P32; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_tarea_compartir($1, $2, $3, $4::uuid[])`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_subtarea_crear
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Agrega una subtarea a una tarea del equipo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_titulo text`.
+- **Retorno:** `jsonb` `{ id, titulo, hecha }`.
+- **Reglas y validaciones:** las subtareas las gestiona el líder o el responsable de la tarea.
+- **Errores:** `NX005` · no es el líder ni el responsable (403). `NX006` · la tarea no es del equipo o el actor no la alcanza (404). `NX009` · equipo archivado (403).
+- **Tablas que toca:** escritura `subtareas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `crearSubtarea()`; `POST …/tareas/:tareaId/subtareas`.
+- **Pruebas:** `pruebas_procesos.sql` P42; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_subtarea_crear($1, $2, $3, 'Paso 1')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_subtarea_actualizar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Cambia el título de una subtarea o la marca como hecha.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_subtarea_id uuid`. `p_cambios jsonb` · `{ titulo?, hecha? }`.
+- **Retorno:** `jsonb` `{ id, titulo, hecha }`.
+- **Reglas y validaciones:** el líder o el responsable de la tarea; la subtarea debe ser de esa tarea.
+- **Errores:** `NX005` · sin permiso. `NX006` · la subtarea no existe en esa tarea (404, `subtarea_no_encontrada`).
+- **Tablas que toca:** escritura `subtareas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `actualizarSubtarea()`; `PATCH …/subtareas/:subId`.
+- **Pruebas:** `pruebas_procesos.sql` P42; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_subtarea_actualizar($1, $2, $3, $4, '{"hecha":true}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_subtarea_eliminar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Elimina una subtarea.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_subtarea_id uuid`.
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** el líder o el responsable de la tarea.
+- **Errores:** `NX005` · sin permiso. `NX006` · la subtarea no existe en esa tarea.
+- **Tablas que toca:** escritura `subtareas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `eliminarSubtarea()`; `DELETE …/subtareas/:subId`.
+- **Pruebas:** `pruebas_procesos.sql` P42.
+- **Ejemplo de llamada:** `select proc_subtarea_eliminar($1, $2, $3, $4)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_comentario_crear
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Comenta en una tarea del equipo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_texto text`.
+- **Retorno:** `jsonb` `{ id, texto, autor: { usuario_id, nombre, color_idx }, creado_en, editado_en }`.
+- **Reglas y validaciones:** comentan el líder, los integrantes y los invitados **con la tarea compartida**.
+- **Errores:** `NX006` · la tarea no es del equipo o el actor no la alcanza (404) (un invitado sin la tarea compartida). `NX009` · equipo archivado (403).
+- **Tablas que toca:** escritura `comentarios_tarea`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.comentada`.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `comentar()`; `POST …/tareas/:tareaId/comentarios`.
+- **Pruebas:** `pruebas_procesos.sql` P43; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_comentario_crear($1, $2, $3, 'Un comentario')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_comentario_eliminar
+- **Migración:** `0006_procesos_tareas_equipo.sql`
+- **Propósito:** Elimina un comentario de una tarea del equipo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · tarea. `p_comentario_id uuid`.
+- **Retorno:** `jsonb` `{ eliminado: true }`.
+- **Reglas y validaciones:** cada quien borra sus comentarios; el líder, además, los ajenos.
+- **Errores:** `NX006` · el comentario no existe o no es suyo (404, `comentario_no_encontrado`).
+- **Tablas que toca:** escritura `comentarios_tarea`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasEquipo.ts` → `eliminarComentario()`; `DELETE …/comentarios/:comentarioId`.
+- **Pruebas:** `pruebas_procesos.sql` P43; `tareasEquipo.test.ts`.
+- **Ejemplo de llamada:** `select proc_comentario_eliminar($1, $2, $3, $4)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+
+### proc_personal_tarea_listar
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Tareas personales del actor, con filtros.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_filtros jsonb` · `{ estado?: [], prioridad?: [], etiqueta?, q?, archivadas }`.
+- **Retorno:** `jsonb` arreglo de `TareaPersonal`, por fecha de entrega (las que no tienen, al final) y código.
+- **Reglas y validaciones:** solo las del actor (`dueno_id`); `q` busca en el título sin distinguir mayúsculas y con los comodines `%` y `_` escapados; por defecto no incluye archivadas.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `tareas`, `v_tareas_semaforo`, `tarea_etiquetas`, `etiquetas`, `subtareas`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `listar()`; `GET /personal/tareas`.
+- **Pruebas:** `pruebas_procesos.sql` P45; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_tarea_listar($1, '{"estado":["en_curso"]}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_tarea_obtener
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Detalle de una tarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea.
+- **Retorno:** `jsonb` `TareaPersonalDetalle` (con `subtareas[]` y `comentarios[]`).
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014).
+- **Errores:** `NX006` · no es suya o no existe (404, `tarea_no_encontrada`).
+- **Tablas que toca:** lectura `tareas`, `v_tareas_semaforo`, `subtareas`, `comentarios_tarea`, `tarea_etiquetas`, `etiquetas`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `obtener()`; `GET /personal/tareas/:id`.
+- **Pruebas:** `pruebas_procesos.sql` P44; `personal.test.ts` (privacidad).
+- **Ejemplo de llamada:** `select proc_personal_tarea_obtener($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_tarea_crear
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Crea una tarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_datos jsonb` · `{ titulo, descripcion?, prioridad?, vence_en?, etiquetas?: [] }`.
+- **Retorno:** `jsonb` `TareaPersonalDetalle`.
+- **Reglas y validaciones:** nace «Por hacer» (`habilitada`), sin votación ni asignación; el dueño es su responsable (DEC-012); las etiquetas son privadas y no distinguen mayúsculas.
+- **Errores:** `23514` · título vacío o de más de 140 caracteres (lo evita Zod).
+- **Tablas que toca:** escritura `tareas`, `etiquetas`, `tarea_etiquetas`, `actividad`.
+- **Eventos que genera:** solo actividad personal «Creaste «…»» (DEC-013: sin evento de dominio).
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `crear()`; `POST /personal/tareas`.
+- **Pruebas:** `pruebas_procesos.sql` P44; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_tarea_crear($1, '{"titulo":"Estudiar"}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_tarea_actualizar
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Actualiza una tarea personal (datos, estado, avance, archivado, etiquetas).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea. `p_datos jsonb` · `version` y solo lo que cambia de `{ titulo, descripcion, prioridad, vence_en, estado, motivo, progreso, archivada, etiquetas[] }`.
+- **Retorno:** `jsonb` `TareaPersonalDetalle`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014); concurrencia optimista por `version`; la persona mueve su tarea libremente entre sus estados; atascar exige motivo; al completar: 100 %, fecha de cierre y resultado; al reabrir se limpian; siempre sube `version`.
+- **Errores:** `NX006` · no es suya. `NX008` · versión vieja (409). `NX010` · atascar sin motivo o avance distinto de 100 en una completada (400).
+- **Tablas que toca:** escritura `tareas`, `etiquetas`, `tarea_etiquetas`, `actividad`.
+- **Eventos que genera:** actividad personal «Completaste «…»» al completar.
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `actualizar()`; `PATCH /personal/tareas/:id`.
+- **Pruebas:** `pruebas_procesos.sql` P46; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_tarea_actualizar($1, $2, '{"version":3,"estado":"completada"}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_tarea_eliminar
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Elimina una tarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea.
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014).
+- **Errores:** `NX006` · no es suya o no existe.
+- **Tablas que toca:** escritura `tareas` (y en cascada), `actividad`.
+- **Eventos que genera:** actividad personal «Eliminaste «…»».
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `eliminar()`; `DELETE /personal/tareas/:id`.
+- **Pruebas:** `pruebas_procesos.sql` P47; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_tarea_eliminar($1, $2)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_subtarea_crear
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Agrega una subtarea a una tarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea. `p_titulo text`.
+- **Retorno:** `jsonb` `{ id, titulo, hecha }`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014).
+- **Errores:** `NX006` · la tarea no es suya.
+- **Tablas que toca:** escritura `subtareas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `crearSubtarea()`; `POST /personal/tareas/:id/subtareas`.
+- **Pruebas:** `pruebas_procesos.sql` P48; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_subtarea_crear($1, $2, 'Paso 1')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_subtarea_actualizar
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Cambia una subtarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea. `p_subtarea_id uuid`. `p_cambios jsonb` · `{ titulo?, hecha? }`.
+- **Retorno:** `jsonb` `{ id, titulo, hecha }`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014).
+- **Errores:** `NX006` · la tarea no es suya, o la subtarea no existe en ella (`subtarea_no_encontrada`).
+- **Tablas que toca:** escritura `subtareas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `actualizarSubtarea()`; `PATCH /personal/tareas/:id/subtareas/:subId`.
+- **Pruebas:** `pruebas_procesos.sql` P48; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_subtarea_actualizar($1, $2, $3, '{"hecha":true}')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_subtarea_eliminar
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Elimina una subtarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea. `p_subtarea_id uuid`.
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014).
+- **Errores:** `NX006` · la tarea no es suya, o la subtarea no existe en ella.
+- **Tablas que toca:** escritura `subtareas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `eliminarSubtarea()`; `DELETE /personal/tareas/:id/subtareas/:subId`.
+- **Pruebas:** `pruebas_procesos.sql` P48; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_subtarea_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_comentario_crear
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Agrega una nota a una tarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea. `p_texto text`.
+- **Retorno:** `jsonb` `{ id, texto, autor_id, creado_en, editado_en }`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014).
+- **Errores:** `NX006` · la tarea no es suya.
+- **Tablas que toca:** escritura `comentarios_tarea`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `comentar()`; `POST /personal/tareas/:id/comentarios`.
+- **Pruebas:** `pruebas_procesos.sql` P49; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_comentario_crear($1, $2, 'Una nota')`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_comentario_eliminar
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Elimina una nota de una tarea personal.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_tarea_id uuid` · tarea. `p_comentario_id uuid`.
+- **Retorno:** `jsonb` `{ eliminado: true }`.
+- **Reglas y validaciones:** la tarea debe ser del actor (`dueno_id`); una ajena responde `NX006`, sin revelar que existe (DEC-014); solo borra comentarios propios.
+- **Errores:** `NX006` · la tarea no es suya, o el comentario no existe (`comentario_no_encontrado`).
+- **Tablas que toca:** escritura `comentarios_tarea`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `eliminarComentario()`; `DELETE /personal/tareas/:id/comentarios/:comentarioId`.
+- **Pruebas:** `pruebas_procesos.sql` P49; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_comentario_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_personal_etiquetas
+- **Migración:** `0007_procesos_tareas_personales.sql`
+- **Propósito:** Etiquetas personales del actor.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta.
+- **Retorno:** `jsonb` arreglo de nombres, en orden alfabético.
+- **Reglas y validaciones:** solo las etiquetas del actor.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `etiquetas`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/tareasPersonales.ts` → `etiquetas()`; `GET /personal/etiquetas`.
+- **Pruebas:** `pruebas_procesos.sql` P50; `personal.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_etiquetas($1)`
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.

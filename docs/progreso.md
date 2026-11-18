@@ -90,6 +90,10 @@
 - **Pruebas del paso 3:** 15 pruebas SQL de procesos (`pnpm db:test:procesos`: líder e invitado no votan, voto doble, fuera de `propuesta`, mayoría con 3, 4 y 7 integrantes, empate, rechazo, sin integrantes, retirar, reformular, salida del equipo, visibilidad) además de las 11 de integridad; 170 en `shared`, 102 en la API (40 de tareas de equipo, con una que compara la mayoría y el índice fraccionario de TypeScript contra los de la BD) y 87 en la web. Las pruebas de triaje se reemplazaron a propósito por las de votación. **Verificado en el navegador** con la semilla: Carlos cambia su voto en T-08 y el conteo se actualiza; Valeria crea T-10 con una subtarea y queda en votación. **Local con PGlite** (PostgreSQL 17 embebido); la comprobación contra PostgreSQL 16 la hace la CI.
 - **Control nuevo en la CI:** `pnpm db:test:procesos` y `pnpm procesos:verificar` (falla si una migración crea un `proc_*` sin apartado en `docs/08`).
 
+- **Paso 4 · Todo el acceso a datos pasa por procesos (DEC-025).** Migraciones `0004` (cuenta, sesiones, preferencias, contacto y acceso de desarrollo), `0005` (equipos e invitaciones), `0006` (tareas de equipo, con la tabla `transiciones_estado`), `0007` (espacio personal) y `0008_roles`. Son **49 procesos** en total, todos en `docs/08`; se migraron también las lecturas, así que no quedó nada para la Fase 3. En la API, servicios y rutas ya no tienen SQL ni transacciones: el único que llama a la BD es `repositorios/procesos.ts`, que valida cada respuesta con Zod (`packages/shared/src/respuestas.ts`) y traduce los errores `NX0xx`. Una **regla de ESLint** impide que vuelva a aparecer SQL fuera de ahí. Se borró `repositorios/eventos.ts`: los eventos los registra cada proceso.
+- **Roles:** `nexo_app` (creado sin inicio de sesión ni contraseña) solo ejecuta `proc_*`; no lee ni escribe tablas, vistas ni auxiliares, y no tiene los procesos del acceso de desarrollo. `nexo_migraciones` es quien ejecuta las migraciones (en local y CI, el usuario de `DATABASE_URL`). La contraseña y el `LOGIN` de `nexo_app` se ponen en el despliegue (Fase 3.5).
+- **Pruebas del paso 4:** 52 pruebas SQL de procesos (antes 15): un caso permitido y uno prohibido por proceso, más «todo proceso es `SECURITY DEFINER`» y «con `nexo_app` no se lee ninguna tabla». En la API, **104** pruebas (las 102 anteriores sin cambiar sus expectativas, más la que compara `transiciones_estado` con `estados.ts` y la del rol `nexo_app`); 170 en `shared` y 87 en la web. **Verificado** con la API en marcha (sesión, `/yo`, conteos, votación, `Origin` rechazado) y en el navegador (tablero de la líder sin errores en la consola).
+
 ### Para revisión de Luis (valores por confirmar del 07)
 
 - **V-10:** toda tarea nueva del líder entra en votación; desaparece el destino «backlog directo».
@@ -100,5 +104,4 @@
 
 ### Pendiente
 
-- [ ] Paso 4: migrar el código existente a procesos y activar los roles `nexo_migraciones`/`nexo_app`.
 - [ ] Paso 5: cierre, CI en verde, tag `fase-2-5` y PR a `dev`.
