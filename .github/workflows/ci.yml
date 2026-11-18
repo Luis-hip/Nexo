@@ -76,7 +76,7 @@ jobs:
       - name: Pruebas SQL (deben salir 11 OK)
         run: pnpm db:test
 
-      - name: Pruebas de los procesos de la BD (deben salir 69 OK)
+      - name: Pruebas de los procesos de la BD (deben salir 82 OK)
         run: pnpm db:test:procesos
 
       - name: Procesos de la BD documentados en docs/08

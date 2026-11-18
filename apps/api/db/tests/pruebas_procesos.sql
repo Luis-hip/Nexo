@@ -1150,3 +1150,264 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.sprint_con_retr
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P69: % de 2 rechazos', ok; END IF;
   RAISE NOTICE 'OK P69: proc_retro_nota_a_tarea';
 END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Liderazgo y administración del equipo (0010, Fase 3.5)
+-- ---------------------------------------------------------------------------------------------
+
+CREATE FUNCTION pg_temp.rol(p_equipo uuid, p_usuario uuid) RETURNS text AS $$
+  SELECT rol::text FROM membresias WHERE equipo_id = p_equipo AND usuario_id = p_usuario AND estado = 'activa';
+$$ LANGUAGE sql;
+
+CREATE FUNCTION pg_temp.eleccion(p_equipo uuid) RETURNS uuid AS $$
+  SELECT id FROM elecciones WHERE equipo_id = p_equipo ORDER BY creada_en DESC LIMIT 1;
+$$ LANGUAGE sql;
+
+CREATE FUNCTION pg_temp.votar_lider(p_equipo uuid, i int, j int) RETURNS jsonb AS $$
+  SELECT proc_eleccion_votar(pg_temp.integrante(p_equipo, i), p_equipo, pg_temp.eleccion(p_equipo), pg_temp.integrante(p_equipo, j));
+$$ LANGUAGE sql;
+
+-- P70. proc_liderazgo_transferir + aceptar: los roles se intercambian y el nuevo líder ya no tiene
+--      votos de propuestas abiertas. No transfiere un integrante (NX005), ni a un invitado (NX010),
+--      ni hay dos transferencias pendientes (NX012); responde solo la persona propuesta (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(3); l uuid := pg_temp.lider(e); a uuid := pg_temp.integrante(e, 1);
+  t uuid := pg_temp.proponer(e); tr uuid; ok int := 0; BEGIN
+  PERFORM pg_temp.votar(e, t, 1, 'aceptar');
+  BEGIN PERFORM proc_liderazgo_transferir(a, e, pg_temp.integrante(e, 2));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_liderazgo_transferir(l, e, pg_temp.invitado(e));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  tr := (proc_liderazgo_transferir(l, e, a)->'transferencia'->>'id')::uuid;
+  BEGIN PERFORM proc_liderazgo_transferir(l, e, pg_temp.integrante(e, 2));
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_liderazgo_responder(pg_temp.integrante(e, 2), e, tr, true);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_liderazgo_responder(a, e, tr, true);
+  IF pg_temp.rol(e, a) <> 'lider' OR pg_temp.rol(e, l) <> 'integrante' THEN RAISE EXCEPTION 'FALLO P70: roles'; END IF;
+  IF EXISTS (SELECT 1 FROM tarea_votos WHERE tarea_id = t AND usuario_id = a) THEN RAISE EXCEPTION 'FALLO P70: el nuevo líder conserva su voto'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM notificaciones WHERE usuario_id = a AND accion_tipo = 'liderazgo') THEN RAISE EXCEPTION 'FALLO P70: sin aviso'; END IF;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P70: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P70: proc_liderazgo_transferir (y aceptar con proc_liderazgo_responder)';
+END $$;
+
+-- P71. proc_liderazgo_responder: rechazar no cambia nada; aceptar una transferencia «y salgo» deja
+--      al líder anterior fuera del equipo; una transferencia resuelta no se responde dos veces (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); l uuid := pg_temp.lider(e); a uuid := pg_temp.integrante(e, 1);
+  tr uuid; ok int := 0; BEGIN
+  tr := (proc_liderazgo_transferir(l, e, a)->'transferencia'->>'id')::uuid;
+  PERFORM proc_liderazgo_responder(a, e, tr, false);
+  IF pg_temp.rol(e, l) <> 'lider' OR (SELECT estado::text FROM transferencias_liderazgo WHERE id = tr) <> 'rechazada' THEN
+    RAISE EXCEPTION 'FALLO P71: el rechazo cambió algo';
+  END IF;
+  BEGIN PERFORM proc_liderazgo_responder(a, e, tr, true);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  tr := (proc_liderazgo_transferir(l, e, a, true)->'transferencia'->>'id')::uuid;
+  PERFORM proc_liderazgo_responder(a, e, tr, true);
+  IF pg_temp.rol(e, a) <> 'lider' OR pg_temp.rol(e, l) IS NOT NULL
+     OR (SELECT estado::text FROM membresias WHERE equipo_id = e AND usuario_id = l ORDER BY desde DESC LIMIT 1) <> 'salio' THEN
+    RAISE EXCEPTION 'FALLO P71: el líder anterior no salió';
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P71: % de 1 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P71: proc_liderazgo_responder (rechazar y aceptar saliendo del equipo)';
+END $$;
+
+-- P72. proc_liderazgo_cancelar: solo el líder (NX005) y solo una pendiente (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); l uuid := pg_temp.lider(e); tr uuid; ok int := 0; BEGIN
+  tr := (proc_liderazgo_transferir(l, e, pg_temp.integrante(e, 1))->'transferencia'->>'id')::uuid;
+  BEGIN PERFORM proc_liderazgo_cancelar(pg_temp.integrante(e, 1), e, tr);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF proc_liderazgo_cancelar(l, e, tr)->'transferencia' <> 'null'::jsonb THEN RAISE EXCEPTION 'FALLO P72: sigue pendiente'; END IF;
+  BEGIN PERFORM proc_liderazgo_cancelar(l, e, tr);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P72: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P72: proc_liderazgo_cancelar';
+END $$;
+
+-- P73. proc_liderazgo_obtener: pendiente, elección e historial (FALT-07); el invitado no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); l uuid := pg_temp.lider(e); tr uuid; d jsonb; ok boolean := false; BEGIN
+  tr := (proc_liderazgo_transferir(l, e, pg_temp.integrante(e, 1))->'transferencia'->>'id')::uuid;
+  PERFORM proc_liderazgo_cancelar(l, e, tr);
+  PERFORM proc_eleccion_convocar(l, e);
+  d := proc_liderazgo_obtener(pg_temp.integrante(e, 2), e);
+  IF d->'eleccion'->>'fase' <> 'votacion' OR jsonb_array_length(d->'historial') <> 1
+     OR d->'historial'->0->>'tipo' <> 'transferencia' THEN RAISE EXCEPTION 'FALLO P73: %', d; END IF;
+  BEGIN PERFORM proc_liderazgo_obtener(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P73: el invitado vio el liderazgo'; END IF;
+  RAISE NOTICE 'OK P73: proc_liderazgo_obtener';
+END $$;
+
+-- P74. proc_eleccion_convocar: todos los integrantes son candidatos y el plazo es de 72 h; no
+--      convoca un integrante (NX005) ni hay dos elecciones abiertas (NX012) ni sin integrantes (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(3); solo uuid := pg_temp.equipo_con(0); d jsonb; ok int := 0; BEGIN
+  BEGIN PERFORM proc_eleccion_convocar(pg_temp.integrante(e, 1), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  d := proc_eleccion_convocar(pg_temp.lider(e), e)->'eleccion';
+  IF jsonb_array_length(d->'candidatos') <> 3 OR (d->>'votantes_total')::int <> 3
+     OR abs(extract(epoch FROM (d->>'plazo_en')::timestamptz - now()) - 72 * 3600) > 60 THEN
+    RAISE EXCEPTION 'FALLO P74: %', d;
+  END IF;
+  BEGIN PERFORM proc_eleccion_convocar(pg_temp.lider(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_eleccion_convocar(pg_temp.lider(solo), solo);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P74: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P74: proc_eleccion_convocar';
+END $$;
+
+-- P75. proc_eleccion_votar: el líder saliente no vota (NX002, por el proceso y a mano), el invitado
+--      tampoco (NX005), nadie vota dos veces (NX012); los votos ajenos no se ven mientras está
+--      abierta, y cuando votaron todos se resuelve en el acto: hay nuevo líder y el saliente es integrante.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(3); l uuid := pg_temp.lider(e); g uuid := pg_temp.integrante(e, 2);
+  el uuid; d jsonb; ok int := 0; BEGIN
+  PERFORM proc_eleccion_convocar(l, e);
+  el := pg_temp.eleccion(e);
+  BEGIN PERFORM proc_eleccion_votar(l, e, el, pg_temp.integrante(e, 1));
+  EXCEPTION WHEN SQLSTATE 'NX002' THEN ok := ok + 1; END;
+  BEGIN INSERT INTO eleccion_votos (eleccion_id, ronda, votante_id, candidato_id) VALUES (el, 1, l, pg_temp.integrante(e, 1));
+  EXCEPTION WHEN SQLSTATE 'NX002' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_eleccion_votar(pg_temp.invitado(e), e, el, pg_temp.integrante(e, 1));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  d := pg_temp.votar_lider(e, 1, 2)->'eleccion';
+  IF d->'candidatos'->0->'votos' <> 'null'::jsonb OR (d->>'mi_voto')::uuid <> pg_temp.integrante(e, 2) THEN
+    RAISE EXCEPTION 'FALLO P75: se ven votos ajenos %', d;
+  END IF;
+  BEGIN PERFORM pg_temp.votar_lider(e, 1, 3);
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  PERFORM pg_temp.votar_lider(e, 2, 2);
+  d := pg_temp.votar_lider(e, 3, 1);
+  IF d->'eleccion' <> 'null'::jsonb OR d->'historial'->0->>'fase' <> 'resultado'
+     OR pg_temp.rol(e, g) <> 'lider' OR pg_temp.rol(e, l) <> 'integrante' THEN
+    RAISE EXCEPTION 'FALLO P75: no se resolvió %', d;
+  END IF;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P75: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P75: proc_eleccion_votar (el saliente no vota, NX002; resultado al votar todos)';
+END $$;
+
+-- P76. Elección de punta a punta con plazos acortados: empate → ronda de desempate solo entre los
+--      empatados (votar a otro, NX010) → vence el plazo y proc_eleccion_vencidas da el resultado.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(4); g uuid := pg_temp.integrante(e, 1); el uuid; d jsonb; ok int := 0; BEGIN
+  PERFORM proc_eleccion_convocar(pg_temp.lider(e), e);
+  el := pg_temp.eleccion(e);
+  PERFORM pg_temp.votar_lider(e, 1, 1); PERFORM pg_temp.votar_lider(e, 2, 2);
+  PERFORM pg_temp.votar_lider(e, 3, 1);
+  d := pg_temp.votar_lider(e, 4, 2)->'eleccion';
+  IF d->>'fase' <> 'empate' OR (d->>'ronda')::int <> 2
+     OR (SELECT count(*) FROM jsonb_array_elements(d->'candidatos') c WHERE (c->>'finalista')::boolean) <> 2 THEN
+    RAISE EXCEPTION 'FALLO P76: no hubo desempate %', d;
+  END IF;
+  BEGIN PERFORM pg_temp.votar_lider(e, 3, 3);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM pg_temp.votar_lider(e, 3, 1); PERFORM pg_temp.votar_lider(e, 4, 1);
+  IF (proc_eleccion_vencidas()->>'resueltas')::int <> 0 THEN RAISE EXCEPTION 'FALLO P76: resolvió antes del plazo'; END IF;
+  UPDATE elecciones SET plazo_en = now() - interval '1 minute' WHERE id = el;   -- plazo acortado
+  IF (proc_eleccion_vencidas()->>'resueltas')::int <> 1 THEN RAISE EXCEPTION 'FALLO P76: no resolvió la vencida'; END IF;
+  IF (SELECT fase::text FROM elecciones WHERE id = el) <> 'resultado' OR pg_temp.rol(e, g) <> 'lider' THEN
+    RAISE EXCEPTION 'FALLO P76: resultado incorrecto';
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P76: % de 1 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P76: proc_eleccion_vencidas (elección completa con desempate y plazo acortado)';
+END $$;
+
+-- P77. proc_eleccion_vencidas: sin votos el líder sigue siéndolo; un empate en el desempate lo
+--      gana quien lleva más tiempo en el equipo.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); f uuid := pg_temp.equipo_con(2); g uuid := pg_temp.integrante(f, 2); BEGIN
+  PERFORM proc_eleccion_convocar(pg_temp.lider(e), e);
+  UPDATE elecciones SET plazo_en = now() - interval '1 minute' WHERE id = pg_temp.eleccion(e);
+  PERFORM proc_eleccion_vencidas();
+  IF (SELECT fase::text FROM elecciones WHERE id = pg_temp.eleccion(e)) <> 'sin_votos' OR pg_temp.rol(e, pg_temp.lider(e)) <> 'lider' THEN
+    RAISE EXCEPTION 'FALLO P77: sin votos';
+  END IF;
+  UPDATE membresias SET desde = now() - interval '10 days' WHERE equipo_id = f AND usuario_id = pg_temp.integrante(f, 2);
+  PERFORM proc_eleccion_convocar(pg_temp.lider(f), f);
+  PERFORM pg_temp.votar_lider(f, 1, 1); PERFORM pg_temp.votar_lider(f, 2, 2);   -- empate → ronda 2
+  PERFORM pg_temp.votar_lider(f, 1, 2); PERFORM pg_temp.votar_lider(f, 2, 1);   -- empate otra vez
+  IF (SELECT ganador_id FROM elecciones WHERE id = pg_temp.eleccion(f)) <> g THEN
+    RAISE EXCEPTION 'FALLO P77: el desempate por antigüedad falló';
+  END IF;
+  RAISE NOTICE 'OK P77: elección sin votos y empate en el desempate';
+END $$;
+
+-- P78. proc_equipo_salir: quien sale deja sus tareas sin responsable y las votaciones se recuentan
+--      (con menos integrantes una propuesta alcanza la mayoría); el líder no sale (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(4); t uuid := pg_temp.proponer(e); mia uuid; ok boolean := false; BEGIN
+  mia := pg_temp.aceptada(e, 4, 'De quien se va');
+  PERFORM pg_temp.votar(e, t, 1, 'aceptar'); PERFORM pg_temp.votar(e, t, 2, 'aceptar');   -- 2 de 4: sigue abierta
+  PERFORM proc_equipo_salir(pg_temp.integrante(e, 4), e);
+  IF pg_temp.estado(t) <> 'aceptada' THEN RAISE EXCEPTION 'FALLO P78: no se recontó (quedó %)', pg_temp.estado(t); END IF;
+  IF (SELECT responsable_id FROM tareas WHERE id = mia) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P78: la tarea sigue asignada'; END IF;
+  BEGIN PERFORM proc_equipo_salir(pg_temp.lider(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P78: el líder salió'; END IF;
+  RAISE NOTICE 'OK P78: proc_equipo_salir';
+END $$;
+
+-- P79. proc_equipo_expulsar: la líder expulsa (y la persona recibe aviso); no se expulsa a sí misma
+--      (NX010) y un integrante no expulsa (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); x uuid := pg_temp.integrante(e, 2); ok int := 0; BEGIN
+  BEGIN PERFORM proc_equipo_expulsar(pg_temp.integrante(e, 1), e, pg_temp.membresia(e, x));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_equipo_expulsar(pg_temp.lider(e), e, pg_temp.membresia(e, pg_temp.lider(e)));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_equipo_expulsar(pg_temp.lider(e), e, pg_temp.membresia(e, x));
+  IF pg_temp.rol(e, x) IS NOT NULL OR NOT EXISTS (SELECT 1 FROM notificaciones WHERE usuario_id = x) THEN
+    RAISE EXCEPTION 'FALLO P79: sigue en el equipo o sin aviso';
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P79: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P79: proc_equipo_expulsar';
+END $$;
+
+-- P80. proc_invitado_gestionar: ampliar el acceso y convertir en integrante (con color); no lo hace
+--      un integrante (NX005), no se «convierte» a quien no es invitado (NX007) y los días son 7/14/30 (NX010).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); inv uuid := pg_temp.invitado(e); m uuid; antes timestamptz; ok int := 0; BEGIN
+  m := pg_temp.membresia(e, inv);
+  antes := (SELECT caduca_en FROM membresias WHERE id = m);
+  BEGIN PERFORM proc_invitado_gestionar(pg_temp.integrante(e, 1), e, m, 'convertir');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_invitado_gestionar(pg_temp.lider(e), e, m, 'ampliar', 9);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_invitado_gestionar(pg_temp.lider(e), e, m, 'ampliar', 7);
+  IF (SELECT caduca_en FROM membresias WHERE id = m) - antes <> interval '7 days' THEN RAISE EXCEPTION 'FALLO P80: no amplió'; END IF;
+  PERFORM proc_invitado_gestionar(pg_temp.lider(e), e, m, 'convertir');
+  IF (SELECT rol::text || coalesce(color_idx::text, '-') || coalesce(caduca_en::text, 'sin') FROM membresias WHERE id = m) <> 'integrante3sin' THEN
+    RAISE EXCEPTION 'FALLO P80: conversión incompleta';
+  END IF;
+  BEGIN PERFORM proc_invitado_gestionar(pg_temp.lider(e), e, m, 'convertir');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P80: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P80: proc_invitado_gestionar';
+END $$;
+
+-- P81. proc_equipo_configurar y proc_equipo_configuracion: la líder cambia nombre y plazos; el tope
+--      no baja de los miembros actuales y la zona horaria debe existir (NX010); el integrante no
+--      configura (NX005) y el invitado no ve la configuración (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(3); d jsonb; ok int := 0; BEGIN
+  d := proc_equipo_configurar(pg_temp.lider(e), e, '{"nombre": "Equipo renombrado", "votacion_plazo_horas": 48}');
+  IF d->>'nombre' <> 'Equipo renombrado' OR (d->>'votacion_plazo_horas')::int <> 48 THEN RAISE EXCEPTION 'FALLO P81: %', d; END IF;
+  BEGIN PERFORM proc_equipo_configurar(pg_temp.lider(e), e, '{"max_miembros": 3}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_equipo_configurar(pg_temp.lider(e), e, '{"zona_horaria": "Marte/Olimpo"}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_equipo_configurar(pg_temp.lider(e), e, '{"duracion_sprint_semanas": 5}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_equipo_configurar(pg_temp.integrante(e, 1), e, '{"nombre": "Otro"}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_equipo_configuracion(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P81: % de 5 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P81: proc_equipo_configurar y proc_equipo_configuracion';
+END $$;
+
+-- P82. proc_equipo_archivar: archivado, el equipo es de solo lectura (NX009); se reactiva; el
+--      integrante no archiva (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); ok int := 0; BEGIN
+  BEGIN PERFORM proc_equipo_archivar(pg_temp.integrante(e, 1), e, true);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF proc_equipo_archivar(pg_temp.lider(e), e, true)->>'estado' <> 'archivado' THEN RAISE EXCEPTION 'FALLO P82: no archivó'; END IF;
+  BEGIN PERFORM pg_temp.proponer(e, 'En un equipo archivado');
+  EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  IF proc_equipo_archivar(pg_temp.lider(e), e, false)->>'estado' <> 'activo' THEN RAISE EXCEPTION 'FALLO P82: no reactivó'; END IF;
+  PERFORM pg_temp.proponer(e, 'Ya se puede');
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P82: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P82: proc_equipo_archivar';
+END $$;

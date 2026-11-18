@@ -26,7 +26,7 @@
 | SQLSTATE | Significado | Mensaje para el usuario | Origen |
 |---|---|---|---|
 | `NX001` | Equipo lleno | «Este equipo ya tiene 8 miembros activos.» | `0001` |
-| `NX002` | El líder saliente no vota (elección) | «El líder saliente no participa en la votación.» | `0001` |
+| `NX002` | El líder saliente no vota (elección) | «El líder saliente no participa en la votación.» | `0001` (disparador), `0010` (`proc_eleccion_votar`) |
 | `NX003` | Límite de votos de retrospectiva (3 por persona) | «Ya usaste tus 3 votos en esta retrospectiva.» | `0001` (disparador), `0009` (`proc_retro_votar`) |
 | `NX004` | Voto de propuesta no permitido (vota el líder o un invitado, o la tarea no está en votación) | «Solo los integrantes votan las propuestas; el líder propone.» | `0003` |
 | `NX005` | El actor no tiene permiso para la operación (no es el líder, invitado caducado…) | El mensaje del proceso, en español | `0003` |
@@ -38,7 +38,7 @@
 | `NX011` | Ya no disponible: invitación caducada, usada o revocada | «Esta invitación caducó. Pide una nueva al líder del equipo.» y variantes | `0005` |
 | `NX012` | Conflicto que no es de versión: ya es miembro, o el tablero cambió mientras se movía una tarjeta | El mensaje del proceso | `0005` |
 
-**Forma de un error de proceso.** `SQLSTATE` (la clase del error) + `MESSAGE` (texto en español para el usuario) + `HINT` (código de la API, p. ej. `tarea_no_encontrada`) + `DETAIL` opcional en JSON (p. ej. `{"version_actual": 5}`). La API los traduce en un solo lugar (`repositorios/procesos.ts`): `NX004`/`NX005`/`NX009` → 403, `NX006` → 404, `NX007` → 422, `NX001`/`NX003`/`NX008`/`NX012` → 409, `NX010` → 400, `NX011` → 410. Para `NX001` (equipo lleno) la API arma el mensaje con `mensajeEquipoLleno()` de `packages/shared` a partir de `max_miembros`, que viaja en el detalle. Los códigos nuevos se agregan aquí al crearlos.
+**Forma de un error de proceso.** `SQLSTATE` (la clase del error) + `MESSAGE` (texto en español para el usuario) + `HINT` (código de la API, p. ej. `tarea_no_encontrada`) + `DETAIL` opcional en JSON (p. ej. `{"version_actual": 5}`). La API los traduce en un solo lugar (`repositorios/procesos.ts`): `NX002`/`NX004`/`NX005`/`NX009` → 403, `NX006` → 404, `NX007` → 422, `NX001`/`NX003`/`NX008`/`NX012` → 409, `NX010` → 400, `NX011` → 410. Para `NX001` (equipo lleno) la API arma el mensaje con `mensajeEquipoLleno()` de `packages/shared` a partir de `max_miembros`, que viaja en el detalle. Los códigos nuevos se agregan aquí al crearlos.
 
 ## 4. Índice de procesos
 
@@ -107,12 +107,27 @@
 | `proc_retro_votar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
 | `proc_retro_avanzar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
 | `proc_retro_nota_a_tarea` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
+| `proc_liderazgo_obtener` | Liderazgo (lectura) | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_liderazgo_transferir` | Liderazgo | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_liderazgo_responder` | Liderazgo | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_liderazgo_cancelar` | Liderazgo | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_eleccion_convocar` | Liderazgo · elección | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_eleccion_votar` | Liderazgo · elección | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_eleccion_vencidas` | Liderazgo · elección (tarea programada) | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_equipo_salir` | Equipos · membresías | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_equipo_expulsar` | Equipos · membresías | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_invitado_gestionar` | Equipos · membresías | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_equipo_configuracion` | Equipos (lectura) | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_equipo_configurar` | Equipos | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_equipo_archivar` | Equipos | `0010_procesos_liderazgo.sql` | Vigente |
 
 **Auxiliares (`fn_*`, no las llama la aplicación)** creadas en `0003`: índice fraccionario (`fn_orden_entre`, `fn_orden_al_final` y sus partes), `fn_votacion_resultado`, `fn_votacion_resumen`, `fn_integrantes_activos`, `fn_registrar_evento`, `fn_membresia_actor`, `fn_exigir_lider`, `fn_exigir_equipo_activo`, `fn_exigir_responsable`, `fn_exigir_version`, `fn_bloquear_tarea`, `fn_fijar_etiquetas`, `fn_tarea_insertar_propuesta`, y los disparadores `fn_voto_propuesta_valido` y `fn_membresia_descarta_votos`.
 
 **Auxiliares de `0004` a `0007`:** `fn_iso` (fechas como `Date.toISOString()`), formas JSON (`fn_usuario_json`, `fn_preferencias_json`, `fn_miembros_json`, `fn_invitacion_json`, `fn_persona_json`, `fn_tarea_equipo_json`, `fn_tarea_equipo_detalle`, `fn_comentario_equipo_json`, `fn_tarea_personal_json`, `fn_tarea_personal_detalle`, `fn_comentario_personal_json`), invitaciones (`fn_codigo_invitacion`, `fn_invitacion_vigente`), tareas (`fn_exigir_tarea_visible`, `fn_bloquear_tarea_visible`, `fn_columna_ordenar`, `fn_transicion_permitida`, `fn_exigir_trabajo_en_tarea`, `fn_tarea_aplicar_estado`, `fn_exigir_gestion_subtareas`, `fn_nombre_estado`), espacio personal (`fn_tarea_propia`, `fn_fijar_etiquetas_personales`, `fn_actividad_personal`) y la tabla `transiciones_estado` (copia de `estados.ts`). La `0008` agrega `fn_conceder_procesos`.
 
 **Auxiliares de `0009` (sprints y retrospectiva):** permisos (`fn_exigir_ve_sprints`, `fn_exigir_gestion_sprints`, que además bloquea la fila del equipo, y `fn_exigir_moderar_retro`), fechas (`fn_hoy_equipo`, «hoy» en la zona horaria del equipo), sprints (`fn_sprint_bloquear`, `fn_sprint_conteo`, `fn_sprint_instantanea`, `fn_sprint_json`, `fn_sprint_serie`, `fn_sprint_capacidad_json`, `fn_sprint_detalle`, `fn_estado_planeable`, `fn_tarea_de_sprint_cerrado`) y retrospectiva (`fn_retro_asegurar`, `fn_retro_detalle`, `fn_retro_nota_bloquear`). La `0009` también cambia `fn_registrar_evento`: los eventos `sprint.*` quedan en `actividad` con tipo `sprint` (antes, todo lo que no era tarea era `equipo`).
+
+**Auxiliares de `0010` (liderazgo y equipo):** avisos (`fn_notificar`, `fn_notificar_equipo`, `fn_enlace_liderazgo`), membresías (`fn_membresia_bloquear`, `fn_miembro_retirado`, `fn_votaciones_reevaluar`: recuenta las propuestas abiertas cuando cambian los integrantes, misma regla que `proc_tarea_votar`), cambio de líder (`fn_cambiar_lider`) y elección (`fn_eleccion_finalistas`, `fn_eleccion_votantes`, `fn_eleccion_resolver`, `fn_eleccion_json`, `fn_transferencia_json`, `fn_liderazgo_json`).
 
 ## 4b. Roles de la BD
 
@@ -1030,3 +1045,185 @@
 - **Pruebas:** `pruebas_procesos.sql` P69; `sprints.test.ts`.
 - **Ejemplo de llamada:** `select proc_retro_nota_a_tarea($1, $2, $3)`
 - **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_liderazgo_obtener
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** Estado del liderazgo del equipo (AD-07 a AD-09) y su historial (FALT-07).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `Liderazgo`: `transferencia` pendiente (o `null`), `eleccion` abierta (o `null`) e `historial[]` de transferencias resueltas y elecciones cerradas, de la más reciente a la más antigua. Cada elección trae `fase`, `ronda`, `plazo_en`, `saliente`, `ganador`, `candidatos[]` (con `finalista` y `votos`), `votantes_total`, `votaron[]` y `mi_voto`.
+- **Reglas y validaciones:** los invitados no lo ven. Mientras la elección está abierta, `votos` de cada candidato es `null`: se ve cuántos y quiénes votaron, nunca por quién (como V-8).
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `transferencias_liderazgo`, `elecciones`, `eleccion_candidatos`, `eleccion_votos`, `membresias`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/liderazgo.ts` → `obtener()`; `GET /equipos/:equipoId/liderazgo` (antes resuelve las elecciones vencidas con `proc_eleccion_vencidas`).
+- **Pruebas:** `pruebas_procesos.sql` P73; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_liderazgo_obtener($1, $2)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_liderazgo_transferir
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder propone a un integrante como nuevo líder (AD-07).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_a_id uuid` · integrante propuesto. `p_saldra boolean` · si el líder sale del equipo al aceptarse.
+- **Retorno:** `jsonb` `Liderazgo`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo; el destino debe ser integrante activo (no invitado). Una sola transferencia pendiente (además el índice `ux_transferencia_pendiente`) y ninguna con una elección abierta. Avisa a la persona propuesta (notificación `liderazgo`).
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX010` · el destino no es integrante. `NX012` · ya hay una transferencia pendiente o una elección abierta.
+- **Tablas que toca:** escritura `transferencias_liderazgo`, `notificaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.transferencia_propuesta`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `transferir()`; `POST /equipos/:equipoId/liderazgo/transferencias`.
+- **Pruebas:** `pruebas_procesos.sql` P70; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_liderazgo_transferir($1, $2, $3, false)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_liderazgo_responder
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** La persona propuesta acepta o rechaza el liderazgo (AD-08).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_transferencia_id uuid` · transferencia. `p_acepta boolean`.
+- **Retorno:** `jsonb` `Liderazgo`.
+- **Reglas y validaciones:** solo la persona propuesta y solo una transferencia pendiente. Al aceptar, el líder pasa a integrante (o sale del equipo si `saldra`) y la persona pasa a líder; sus votos de propuestas abiertas se descartan (el líder no vota) y las votaciones se recuentan. Avisa al líder anterior.
+- **Errores:** `NX005` · no es la persona propuesta. `NX006` · la transferencia no es del equipo. `NX007` · ya no está pendiente. `NX009` · equipo archivado. `NX012` · la persona ya no es integrante.
+- **Tablas que toca:** escritura `transferencias_liderazgo`, `membresias`, `tarea_votos`, `tareas`, `notificaciones`, `equipos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.transferencia_aceptada` o `equipo.transferencia_rechazada` (y los de propuestas que se resuelvan al recontar).
+- **Lo llama:** `repositorios/liderazgo.ts` → `responder()`; `POST /equipos/:equipoId/liderazgo/transferencias/:id/respuesta`.
+- **Pruebas:** `pruebas_procesos.sql` P70 y P71; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_liderazgo_responder($1, $2, $3, true)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_liderazgo_cancelar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder cancela la transferencia que propuso.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_transferencia_id uuid` · transferencia.
+- **Retorno:** `jsonb` `Liderazgo`.
+- **Reglas y validaciones:** solo el líder y solo una transferencia pendiente.
+- **Errores:** `NX005` · no es el líder. `NX006` · la transferencia no es del equipo. `NX007` · ya no está pendiente.
+- **Tablas que toca:** escritura `transferencias_liderazgo`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.transferencia_cancelada`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `cancelar()`; `POST /equipos/:equipoId/liderazgo/transferencias/:id/cancelar`.
+- **Pruebas:** `pruebas_procesos.sql` P72; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_liderazgo_cancelar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_eleccion_convocar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder convoca una elección de líder (AD-09).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `Liderazgo`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo; una sola elección abierta (además `ux_eleccion_abierta`) y ninguna con una transferencia pendiente. Son candidatos **todos los integrantes activos** (la fase de postulación no se usa, DEC-032). La votación dura `votacion_plazo_horas` del equipo (72 por defecto). El líder queda como **interino** hasta el resultado y no vota. Avisa a los integrantes.
+- **Errores:** `NX005` · no es el líder. `NX007` · el equipo no tiene integrantes. `NX009` · equipo archivado. `NX012` · ya hay una elección abierta o una transferencia pendiente.
+- **Tablas que toca:** escritura `elecciones`, `eleccion_candidatos`, `notificaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.eleccion_convocada`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `convocar()`; `POST /equipos/:equipoId/liderazgo/eleccion`.
+- **Pruebas:** `pruebas_procesos.sql` P74; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_eleccion_convocar($1, $2)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_eleccion_votar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** Un integrante vota en la elección de líder.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_eleccion_id uuid` · elección. `p_candidato_id uuid` · persona candidata.
+- **Retorno:** `jsonb` `Liderazgo`.
+- **Reglas y validaciones:** solo integrantes; el líder saliente no vota (`NX002`, también lo impide el disparador `trg_voto_valido` de la `0001`). Un voto por ronda y no se cambia. En la ronda 2 solo se vota por los empatados. Si ya votaron todos los integrantes, la ronda se resuelve en el acto (ver `proc_eleccion_vencidas`).
+- **Errores:** `NX002` · vota el líder saliente. `NX005` · un invitado. `NX006` · la elección no es del equipo. `NX007` · la elección ya terminó. `NX009` · equipo archivado. `NX010` · el candidato no es de esta ronda. `NX012` · ya votó en la ronda.
+- **Tablas que toca:** escritura `eleccion_votos` (y, al resolverse, `elecciones`, `membresias`, `tarea_votos`, `tareas`, `notificaciones`), `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.eleccion_votada` (sin el candidato), y al resolverse `equipo.lider_elegido`, `equipo.eleccion_empate` o `equipo.eleccion_sin_votos`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `votar()`; `POST /equipos/:equipoId/liderazgo/eleccion/:id/voto`.
+- **Pruebas:** `pruebas_procesos.sql` P75 a P77; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_eleccion_votar($1, $2, $3, $4)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_eleccion_vencidas
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** Tarea programada (sin actor): resuelve las elecciones cuyo plazo venció.
+- **Parámetros:** ninguno (es la excepción a `p_actor_id`: la llama el sistema, no una persona).
+- **Retorno:** `jsonb` `{ resueltas }`.
+- **Reglas y validaciones:** por cada elección abierta con `plazo_en` vencido cierra la ronda: gana quien tenga más votos entre los finalistas que sigan siendo integrantes; **empate en la ronda 1** → ronda 2 de desempate de `votacion_desempate_horas` (24 por defecto) solo entre los empatados; **empate en la ronda 2** → gana quien lleva más tiempo en el equipo; **sin votos en la ronda 1** → `sin_votos` y el saliente sigue como líder. Al haber ganador cambia el líder (el saliente pasa a integrante). Bloquea cada elección con `FOR UPDATE SKIP LOCKED`, así varias instancias no se pisan.
+- **Errores:** ninguno propio.
+- **Tablas que toca:** escritura `elecciones`, `membresias`, `tarea_votos`, `tareas`, `notificaciones`, `equipos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.lider_elegido`, `equipo.eleccion_empate` o `equipo.eleccion_sin_votos` (actor nulo).
+- **Lo llama:** `repositorios/liderazgo.ts` → `vencerElecciones()`, desde el temporizador `apps/api/src/trabajos/plazos.ts` (cada minuto; `pg-boss` lo sustituye en la Fase 4) y antes de `GET /equipos/:equipoId/liderazgo`.
+- **Pruebas:** `pruebas_procesos.sql` P76 y P77 (elección de punta a punta con plazos acortados); `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_eleccion_vencidas()`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_equipo_salir
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** Salir del equipo (AD-10).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `{ salio: true }`.
+- **Reglas y validaciones:** integrantes e invitados; el líder primero transfiere el liderazgo (o convoca una elección). La membresía queda `salio` (se conserva el historial). Sus tareas sin terminar quedan sin responsable, se cancela una transferencia pendiente hacia esa persona, sus votos de propuestas abiertas se descartan (disparador de la `0003`) y las votaciones se recuentan (DEC-024). Funciona también con el equipo archivado.
+- **Errores:** `NX007` · es el líder. `NX006` · no pertenece al equipo.
+- **Tablas que toca:** escritura `membresias`, `tareas`, `tarea_votos`, `transferencias_liderazgo`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.miembro_salio`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `salir()`; `POST /equipos/:equipoId/salir`.
+- **Pruebas:** `pruebas_procesos.sql` P78; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_salir($1, $2)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_equipo_expulsar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder expulsa a un integrante o invitado (AD-11).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_membresia_id uuid` · membresía.
+- **Retorno:** `jsonb` arreglo de `Miembro` (la lista actualizada).
+- **Reglas y validaciones:** solo el líder, con el equipo activo, y no a sí mismo. La membresía queda `expulsada`; lo demás igual que `proc_equipo_salir`. La persona recibe una notificación.
+- **Errores:** `NX005` · no es el líder. `NX006` · la membresía no está activa en el equipo. `NX009` · equipo archivado. `NX010` · se expulsa a sí mismo.
+- **Tablas que toca:** escritura `membresias`, `tareas`, `tarea_votos`, `transferencias_liderazgo`, `notificaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.miembro_expulsado`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `expulsar()`; `POST /equipos/:equipoId/miembros/:membresiaId/expulsar`.
+- **Pruebas:** `pruebas_procesos.sql` P79; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_expulsar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_invitado_gestionar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder amplía el acceso de un invitado o lo convierte en integrante (AD-05).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_membresia_id uuid` · membresía del invitado. `p_accion text` · `ampliar` | `convertir`. `p_dias int` · 7, 14 o 30 (solo `ampliar`).
+- **Retorno:** `jsonb` arreglo de `Miembro`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo, y solo sobre un invitado activo. `ampliar` suma los días a partir de hoy o de su caducidad, lo que sea más tarde. `convertir` le da color, quita la caducidad y lo deja como integrante (cuenta para el tope: `NX001` si el equipo está lleno); deja de necesitar las tareas compartidas y las votaciones se recuentan.
+- **Errores:** `NX001` · equipo lleno. `NX005` · no es el líder. `NX006` · la membresía no está activa. `NX007` · no es invitado. `NX009` · equipo archivado. `NX010` · acción o días inválidos.
+- **Tablas que toca:** escritura `membresias`, `tarea_compartida`, `tareas`, `notificaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.invitado_ampliado` o `equipo.invitado_convertido`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `gestionarInvitado()`; `POST /equipos/:equipoId/miembros/:membresiaId/invitado`.
+- **Pruebas:** `pruebas_procesos.sql` P80; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_invitado_gestionar($1, $2, $3, 'ampliar', 7)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_equipo_configuracion
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** Configuración actual del equipo (AD-06).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `ConfiguracionEquipo` (`nombre`, `descripcion`, `estado`, `duracion_sprint_semanas`, `zona_horaria`, `votacion_plazo_horas`, `votacion_desempate_horas`, `max_miembros`, `archivado_en`).
+- **Reglas y validaciones:** líder e integrantes; los invitados no.
+- **Errores:** `NX005` · un invitado. `NX006` · no pertenece al equipo.
+- **Tablas que toca:** lectura `equipos`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/liderazgo.ts` → `configuracion()`; `GET /equipos/:equipoId/configuracion`.
+- **Pruebas:** `pruebas_procesos.sql` P81; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_configuracion($1, $2)`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_equipo_configurar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder cambia los datos y reglas del equipo (AD-06).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_cambios jsonb` · solo lo que cambia: `nombre`, `descripcion`, `duracion_sprint_semanas`, `zona_horaria`, `votacion_plazo_horas`, `votacion_desempate_horas`, `max_miembros`.
+- **Retorno:** `jsonb` `ConfiguracionEquipo`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo. La zona horaria debe existir en `pg_timezone_names`; el tope de miembros no baja de los miembros activos; los rangos los cuidan los `CHECK` de `equipos` (se traducen a `NX010`).
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX010` · valor fuera de rango, zona inválida o tope menor que los miembros.
+- **Tablas que toca:** escritura `equipos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.configurado` (con la lista de campos).
+- **Lo llama:** `repositorios/liderazgo.ts` → `configurar()`; `PATCH /equipos/:equipoId/configuracion`.
+- **Pruebas:** `pruebas_procesos.sql` P81; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_configurar($1, $2, '{"votacion_plazo_horas": 48}')`
+- **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_equipo_archivar
+- **Migración:** `0010_procesos_liderazgo.sql`
+- **Propósito:** El líder archiva el equipo o lo reactiva (AD-12).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_archivar boolean`.
+- **Retorno:** `jsonb` `ConfiguracionEquipo`.
+- **Reglas y validaciones:** solo el líder. Archivado, el equipo es de solo lectura (`NX009` en toda escritura). No se archiva con una elección abierta.
+- **Errores:** `NX005` · no es el líder. `NX012` · hay una elección abierta.
+- **Tablas que toca:** escritura `equipos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.archivado` o `equipo.reactivado`.
+- **Lo llama:** `repositorios/liderazgo.ts` → `archivar()`; `POST /equipos/:equipoId/archivar`.
+- **Pruebas:** `pruebas_procesos.sql` P82; `liderazgo.test.ts`.
+- **Ejemplo de llamada:** `select proc_equipo_archivar($1, $2, true)`
+- **Historial:** 2026-11-18 · creación · `0010`.
