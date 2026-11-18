@@ -77,7 +77,7 @@
 
 ## Fase 2.5 · Cambios de alcance
 
-**Estado:** en curso (rama `feat/fase-2-5`, desde `dev` en `a6d7895`). Fuente: `docs/07_Cambios_de_Alcance_Fase2.md`.
+**Estado:** terminada el 2026-11-17 (rama `feat/fase-2-5` fusionada en `Dev_Luis`, tag `fase-2-5`). Fuente: `docs/07_Cambios_de_Alcance_Fase2.md`.
 
 ### Hecho
 
@@ -104,4 +104,12 @@
 
 ### Pendiente
 
-- [ ] Paso 5: cierre, CI en verde, tag `fase-2-5` y PR a `dev`.
+- [ ] **Abrir el PR `Dev_Luis` → `dev`** (lo tiene que crear una persona con sesión en GitHub: no hay `gh` en esta máquina y el navegador de la herramienta no tiene sesión). Enlace listo: <https://github.com/Luis-hip/Nexo/compare/dev...Dev_Luis?expand=1>.
+- [ ] Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2).
+- [ ] Revisar los valores por confirmar V-10 y V-11 y las desviaciones anotadas arriba.
+
+### Cierre
+
+- **CI en verde** con PostgreSQL 16 real en el PR #10 (`feat/fase-2-5` → `Dev_Luis`), commit `4b93540`: gitleaks sobre todo el historial, migraciones `0001`–`0008`, 11 pruebas SQL de integridad y 52 de procesos, control de `docs/08`, tipos al día, `typecheck`, lint, formato, 361 pruebas (170 `shared`, 104 API, 87 web) y build.
+- **gitleaks en la CI:** en la primera corrida marcó dos falsos positivos (los valores de ejemplo de las pruebas de seguridad y la frase «secretos: `09_Seguridad_y_Secretos.md`» de `docs/01`); se permitieron con expresiones concretas en `.gitleaks.toml`, sin excluir archivos. Ahora cada hallazgo aparece como anotación del PR (archivo, línea y regla; el valor va redactado).
+- **Criterio de terminado de la `07` (sección 7):** documentos 07–10 ✔; informe de secretos, redacción, arranque seguro y gitleaks ✔; votación probada (3 → 2, 4 → 3, líder e invitado no votan, la API no devuelve votos ajenos) ✔; todo acceso a datos por `proc_*` documentados, regla de lint y `nexo_app` sin tablas ✔; pruebas de la Fase 2 en verde sin cambiar expectativas (salvo las de triaje, a propósito) ✔; `progreso.md` y `decisiones.md` ✔; tag `fase-2-5` ✔. Solo falta abrir el PR a `dev` (ver arriba).

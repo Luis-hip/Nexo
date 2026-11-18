@@ -2,7 +2,7 @@
 
 Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (hasta 8 miembros activos), con una aportación propia: **avisos en el grupo de WhatsApp del equipo**, configurados por el líder y con consentimiento individual.
 
-> Estado: **Fase 1 · Base, roles y espacio personal** (ver [`docs/progreso.md`](docs/progreso.md)).
+> Estado: **Fase 2.5 terminada** (votación de propuestas, procesos de la BD y secretos); sigue la **Fase 3** (ver [`docs/progreso.md`](docs/progreso.md)).
 
 ## Documentación
 
