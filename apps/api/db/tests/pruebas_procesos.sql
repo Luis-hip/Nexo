@@ -212,3 +212,573 @@ DO $$ BEGIN
   END IF;
   RAISE NOTICE 'OK P15: índice fraccionario igual al de la librería';
 END $$;
+
+-- =============================================================================================
+-- Procesos de las migraciones 0004 a 0008: por cada proceso, al menos un caso permitido y uno
+-- prohibido (docs/07, 2.6).
+-- =============================================================================================
+
+CREATE FUNCTION pg_temp.membresia(p_equipo uuid, p_usuario uuid) RETURNS uuid AS $$
+  SELECT id FROM membresias WHERE equipo_id = p_equipo AND usuario_id = p_usuario AND estado = 'activa';
+$$ LANGUAGE sql;
+
+CREATE FUNCTION pg_temp.usuario(p_nombre text DEFAULT 'Persona Suelta') RETURNS uuid AS $$
+  INSERT INTO usuarios (correo, nombre) VALUES ('u-' || gen_random_uuid() || '@prueba.mx', p_nombre) RETURNING id;
+$$ LANGUAGE sql;
+
+-- Tarea aceptada por votación (todos los integrantes a favor), con el integrante `i` de responsable
+-- (0 = sin responsable) y la asignación ya aceptada.
+CREATE FUNCTION pg_temp.aceptada(p_equipo uuid, i int DEFAULT 0, p_titulo text DEFAULT 'Tarea aceptada') RETURNS uuid AS $$
+DECLARE t uuid; n int; k int;
+BEGIN
+  t := (proc_tarea_proponer(pg_temp.lider(p_equipo), p_equipo,
+          jsonb_build_object('titulo', p_titulo,
+                             'responsable_id', CASE WHEN i > 0 THEN pg_temp.integrante(p_equipo, i) END))->>'id')::uuid;
+  SELECT count(*) INTO n FROM membresias WHERE equipo_id = p_equipo AND rol = 'integrante' AND estado = 'activa';
+  FOR k IN 1..n LOOP
+    EXIT WHEN pg_temp.estado(t) <> 'propuesta';
+    PERFORM pg_temp.votar(p_equipo, t, k, 'aceptar');
+  END LOOP;
+  IF i > 0 THEN
+    PERFORM proc_tarea_responder_asignacion(pg_temp.integrante(p_equipo, i), p_equipo, t, true);
+  END IF;
+  RETURN t;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.version(p_tarea uuid) RETURNS int AS $$
+  SELECT version FROM tareas WHERE id = p_tarea;
+$$ LANGUAGE sql;
+
+-- ---------------------------------------------------------------------------------------------
+-- Cuenta, sesiones y contacto (0004)
+-- ---------------------------------------------------------------------------------------------
+
+-- P16. proc_sesion_resolver: sesión vigente sí; revocada o vencida, no.
+DO $$ DECLARE u uuid := pg_temp.usuario('Ana Sesión'); r jsonb; BEGIN
+  INSERT INTO sesiones (usuario_id, token_hash, expira_en) VALUES
+    (u, '\x01'::bytea || uuid_send(gen_random_uuid()), now() + interval '1 day'),
+    (u, '\x02'::bytea || uuid_send(gen_random_uuid()), now() - interval '1 minute');
+  SELECT proc_sesion_resolver(token_hash) INTO r FROM sesiones WHERE usuario_id = u AND expira_en > now();
+  IF r->'usuario'->>'nombre' <> 'Ana Sesión' OR r ? 'hash_contrasena' THEN RAISE EXCEPTION 'FALLO P16: %', r; END IF;
+  IF (SELECT proc_sesion_resolver(token_hash) FROM sesiones WHERE usuario_id = u AND expira_en < now()) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P16: resolvió una sesión vencida';
+  END IF;
+  UPDATE sesiones SET revocada_en = now() WHERE usuario_id = u;
+  IF EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u AND proc_sesion_resolver(token_hash) IS NOT NULL) THEN
+    RAISE EXCEPTION 'FALLO P16: resolvió una sesión revocada';
+  END IF;
+  RAISE NOTICE 'OK P16: proc_sesion_resolver solo resuelve sesiones vigentes';
+END $$;
+
+-- P17. proc_sesion_revocar: cada quien revoca la suya; la de otra persona no.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); s uuid; BEGIN
+  INSERT INTO sesiones (usuario_id, token_hash, expira_en)
+  VALUES (u, uuid_send(gen_random_uuid()), now() + interval '1 day') RETURNING id INTO s;
+  IF (proc_sesion_revocar(otro, s)->>'revocada')::boolean THEN RAISE EXCEPTION 'FALLO P17: revocó una sesión ajena'; END IF;
+  IF NOT (proc_sesion_revocar(u, s)->>'revocada')::boolean THEN RAISE EXCEPTION 'FALLO P17: no revocó su sesión'; END IF;
+  IF (SELECT revocada_en IS NULL FROM sesiones WHERE id = s) THEN RAISE EXCEPTION 'FALLO P17: la sesión sigue vigente'; END IF;
+  RAISE NOTICE 'OK P17: proc_sesion_revocar solo revoca sesiones propias';
+END $$;
+
+-- P18. Acceso de desarrollo: proc_dev_usuarios y proc_dev_sesion_crear.
+DO $$ DECLARE u uuid := pg_temp.usuario('Devi Login'); c text; ok boolean := false; BEGIN
+  SELECT correo::text INTO c FROM usuarios WHERE id = u;
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(proc_dev_usuarios()) x WHERE x->>'id' = u::text) THEN
+    RAISE EXCEPTION 'FALLO P18: proc_dev_usuarios no lista al usuario';
+  END IF;
+  PERFORM proc_dev_sesion_crear(c, uuid_send(gen_random_uuid()), '127.0.0.1', now() + interval '1 day');
+  IF NOT EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u AND dispositivo = 'dev-login') THEN
+    RAISE EXCEPTION 'FALLO P18: no creó la sesión';
+  END IF;
+  BEGIN PERFORM proc_dev_sesion_crear('nadie@prueba.mx', uuid_send(gen_random_uuid()), '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P18: creó sesión para un correo inexistente'; END IF;
+  RAISE NOTICE 'OK P18: acceso de desarrollo (proc_dev_usuarios, proc_dev_sesion_crear)';
+END $$;
+
+-- P19. proc_usuario_yo: equipos activos con su perfil y preferencias por defecto; no los ajenos.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); otro uuid := pg_temp.equipo_con(0); r jsonb; BEGIN
+  r := proc_usuario_yo(pg_temp.integrante(e, 1));
+  IF jsonb_array_length(r->'equipos') <> 1 OR r->'equipos'->0->>'rol' <> 'integrante'
+     OR r->'preferencias'->>'tema' <> 'sistema' THEN
+    RAISE EXCEPTION 'FALLO P19: %', r;
+  END IF;
+  UPDATE equipos SET estado = 'archivado', archivado_en = now() WHERE id = e;
+  IF jsonb_array_length(proc_usuario_yo(pg_temp.integrante(e, 1))->'equipos') <> 0 THEN
+    RAISE EXCEPTION 'FALLO P19: lista un equipo archivado';
+  END IF;
+  RAISE NOTICE 'OK P19: proc_usuario_yo';
+END $$;
+
+-- P20. proc_usuario_preferencias_guardar: guarda un subconjunto; un valor fuera del catálogo falla.
+DO $$ DECLARE u uuid := pg_temp.usuario(); r jsonb; ok boolean := false; BEGIN
+  r := proc_usuario_preferencias_guardar(u, '{"tema":"oscuro","tour_visto":true}');
+  IF r->>'tema' <> 'oscuro' OR NOT (r->>'tour_visto')::boolean OR r->>'densidad' <> 'comoda' THEN
+    RAISE EXCEPTION 'FALLO P20: %', r;
+  END IF;
+  BEGIN PERFORM proc_usuario_preferencias_guardar(u, '{"tema":"neon"}');
+  EXCEPTION WHEN invalid_text_representation THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P20: aceptó un tema inválido'; END IF;
+  RAISE NOTICE 'OK P20: proc_usuario_preferencias_guardar';
+END $$;
+
+-- P21. proc_usuario_perfil_guardar: actualiza el perfil propio; sin cambios, NX010.
+DO $$ DECLARE u uuid := pg_temp.usuario('Nombre Viejo'); r jsonb; ok boolean := false; BEGIN
+  r := proc_usuario_perfil_guardar(u, '{"nombre":"Nombre Nuevo","cargo":"QA"}');
+  IF r->>'nombre' <> 'Nombre Nuevo' OR r->>'cargo' <> 'QA' THEN RAISE EXCEPTION 'FALLO P21: %', r; END IF;
+  BEGIN PERFORM proc_usuario_perfil_guardar(u, '{}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P21: aceptó un perfil sin cambios'; END IF;
+  RAISE NOTICE 'OK P21: proc_usuario_perfil_guardar';
+END $$;
+
+-- P22. proc_contacto_enviar: guarda el mensaje; uno demasiado corto lo rechaza la tabla.
+DO $$ DECLARE ok boolean := false; BEGIN
+  IF NOT (proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Un mensaje de prueba válido')->>'recibido')::boolean THEN
+    RAISE EXCEPTION 'FALLO P22';
+  END IF;
+  BEGIN PERFORM proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'corto');
+  EXCEPTION WHEN check_violation THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P22: aceptó un mensaje corto'; END IF;
+  RAISE NOTICE 'OK P22: proc_contacto_enviar';
+END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Equipos e invitaciones (0005)
+-- ---------------------------------------------------------------------------------------------
+
+-- P23. proc_equipo_contexto: miembro sí; ajeno NX006; invitado caducado NX005.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); ok int := 0; BEGIN
+  IF proc_equipo_contexto(pg_temp.integrante(e, 1), e)->>'rol' <> 'integrante' THEN RAISE EXCEPTION 'FALLO P23'; END IF;
+  BEGIN PERFORM proc_equipo_contexto(pg_temp.usuario(), e);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  UPDATE membresias SET caduca_en = now() - interval '1 day' WHERE equipo_id = e AND rol = 'invitado';
+  BEGIN PERFORM proc_equipo_contexto(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P23: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P23: proc_equipo_contexto';
+END $$;
+
+-- P24. proc_equipo_crear: quien crea es líder con color 0 y hay dos canales; nombre inválido falla.
+DO $$ DECLARE u uuid := pg_temp.usuario('Paula Líder'); e uuid; ok boolean := false; BEGIN
+  e := (proc_equipo_crear(u, '{"nombre":"Equipo nuevo","max_miembros":5}')->>'id')::uuid;
+  IF NOT EXISTS (SELECT 1 FROM membresias WHERE equipo_id = e AND usuario_id = u AND rol = 'lider' AND color_idx = 0)
+     OR (SELECT count(*) FROM conversaciones WHERE equipo_id = e) <> 2
+     OR (SELECT max_miembros FROM equipos WHERE id = e) <> 5
+     OR NOT EXISTS (SELECT 1 FROM eventos_dominio WHERE equipo_id = e AND tipo = 'equipo.creado') THEN
+    RAISE EXCEPTION 'FALLO P24';
+  END IF;
+  BEGIN PERFORM proc_equipo_crear(u, '{"nombre":"X"}');
+  EXCEPTION WHEN check_violation THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P24: aceptó un nombre de una letra'; END IF;
+  RAISE NOTICE 'OK P24: proc_equipo_crear';
+END $$;
+
+-- P25. proc_equipo_obtener: el líder ve miembros; el invitado, no; un ajeno, NX006.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r jsonb; ok boolean := false; BEGIN
+  r := proc_equipo_obtener(pg_temp.lider(e), e);
+  IF jsonb_array_length(r->'miembros') <> 4 OR (r->>'miembros_activos')::int <> 3
+     OR (r->>'invitados_activos')::int <> 1 OR r->>'mi_rol' <> 'lider' THEN
+    RAISE EXCEPTION 'FALLO P25: %', r;
+  END IF;
+  r := proc_equipo_obtener(pg_temp.invitado(e), e);
+  IF jsonb_array_length(r->'miembros') <> 0 OR r->>'mi_rol' <> 'invitado' THEN RAISE EXCEPTION 'FALLO P25: invitado %', r; END IF;
+  BEGIN PERFORM proc_equipo_obtener(pg_temp.usuario(), e);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P25: un ajeno vio el equipo'; END IF;
+  RAISE NOTICE 'OK P25: proc_equipo_obtener';
+END $$;
+
+-- P26. proc_equipo_miembros: integrante sí (líder primero); invitado NX005.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r jsonb; ok boolean := false; BEGIN
+  r := proc_equipo_miembros(pg_temp.integrante(e, 1), e);
+  IF jsonb_array_length(r) <> 4 OR r->0->>'rol' <> 'lider' OR r->3->>'rol' <> 'invitado' THEN RAISE EXCEPTION 'FALLO P26: %', r; END IF;
+  BEGIN PERFORM proc_equipo_miembros(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P26: el invitado vio los miembros'; END IF;
+  RAISE NOTICE 'OK P26: proc_equipo_miembros';
+END $$;
+
+-- P27. proc_invitacion_crear: solo el líder; el código tiene el formato NX4-821Q.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); r jsonb; ok boolean := false; BEGIN
+  r := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"invitado","dias_validez":7,"duracion_invitado_dias":14}');
+  IF r->>'codigo' !~ '^NX[A-Z2-9]-[A-Z2-9]{4}$' OR r->>'estado' <> 'pendiente'
+     OR (r->>'duracion_invitado_dias')::int <> 14 THEN
+    RAISE EXCEPTION 'FALLO P27: %', r;
+  END IF;
+  BEGIN PERFORM proc_invitacion_crear(pg_temp.integrante(e, 1), e, '{"rol_destino":"integrante"}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P27: un integrante invitó'; END IF;
+  RAISE NOTICE 'OK P27: proc_invitacion_crear';
+END $$;
+
+-- P28. proc_invitacion_listar: el líder las ve; un integrante, NX005.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); ok boolean := false; BEGIN
+  PERFORM proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}');
+  IF jsonb_array_length(proc_invitacion_listar(pg_temp.lider(e), e)) <> 1 THEN RAISE EXCEPTION 'FALLO P28'; END IF;
+  BEGIN PERFORM proc_invitacion_listar(pg_temp.integrante(e, 1), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P28: un integrante listó invitaciones'; END IF;
+  RAISE NOTICE 'OK P28: proc_invitacion_listar';
+END $$;
+
+-- P29. proc_invitacion_revocar: revoca una pendiente; revocarla otra vez, NX006.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(0); i uuid; ok boolean := false; BEGIN
+  i := (proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'id')::uuid;
+  IF proc_invitacion_revocar(pg_temp.lider(e), e, i)->>'estado' <> 'revocada' THEN RAISE EXCEPTION 'FALLO P29'; END IF;
+  BEGIN PERFORM proc_invitacion_revocar(pg_temp.lider(e), e, i);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P29: revocó dos veces'; END IF;
+  RAISE NOTICE 'OK P29: proc_invitacion_revocar';
+END $$;
+
+-- P30. proc_invitacion_ver: vista previa; inexistente NX006; revocada NX011.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); inv jsonb; r jsonb; ok int := 0; BEGIN
+  inv := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}');
+  r := proc_invitacion_ver(pg_temp.usuario(), inv->>'codigo');
+  IF r->'equipo'->>'nombre' <> 'Equipo de prueba' OR (r->>'ya_miembro')::boolean OR (r->>'miembros_activos')::int <> 2 THEN
+    RAISE EXCEPTION 'FALLO P30: %', r;
+  END IF;
+  BEGIN PERFORM proc_invitacion_ver(pg_temp.usuario(), 'NXZ-ZZZZ');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  PERFORM proc_invitacion_revocar(pg_temp.lider(e), e, (inv->>'id')::uuid);
+  BEGIN PERFORM proc_invitacion_ver(pg_temp.usuario(), inv->>'codigo');
+  EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P30: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P30: proc_invitacion_ver';
+END $$;
+
+-- P31. proc_invitacion_aceptar: un solo uso, color siguiente; ya miembro NX012; equipo lleno NX001.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); u uuid := pg_temp.usuario('Nueva Integrante'); c text; r jsonb; ok int := 0; BEGIN
+  c := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  r := proc_invitacion_aceptar(u, c);
+  IF r->>'rol' <> 'integrante' OR (SELECT color_idx FROM membresias WHERE id = pg_temp.membresia(e, u)) <> 2 THEN
+    RAISE EXCEPTION 'FALLO P31: %', r;
+  END IF;
+  BEGIN PERFORM proc_invitacion_aceptar(pg_temp.usuario(), c);                    -- ya se usó
+  EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  c := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  BEGIN PERFORM proc_invitacion_aceptar(u, c);                                     -- ya es miembro
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  UPDATE equipos SET max_miembros = 3 WHERE id = e;                                -- líder + 2: lleno
+  BEGIN PERFORM proc_invitacion_aceptar(pg_temp.usuario(), c);
+  EXCEPTION WHEN SQLSTATE 'NX001' THEN ok := ok + 1; END;
+  IF ok <> 3 OR (SELECT estado FROM invitaciones WHERE codigo = c) <> 'pendiente' THEN
+    RAISE EXCEPTION 'FALLO P31: % de 3', ok;
+  END IF;
+  RAISE NOTICE 'OK P31: proc_invitacion_aceptar';
+END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Tareas de equipo (0006)
+-- ---------------------------------------------------------------------------------------------
+
+-- P32. proc_tarea_listar: el líder ve el tablero; el invitado solo lo compartido y sin backlog.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 1, 'Compartida'); b uuid := pg_temp.aceptada(e, 0, 'Privada');
+  r jsonb; ok boolean := false; BEGIN
+  PERFORM proc_tarea_compartir(pg_temp.lider(e), e, a, ARRAY[pg_temp.membresia(e, pg_temp.invitado(e))]);
+  IF jsonb_array_length(proc_tarea_listar(pg_temp.lider(e), e, 'tablero')) <> 2 THEN RAISE EXCEPTION 'FALLO P32: líder'; END IF;
+  r := proc_tarea_listar(pg_temp.invitado(e), e, 'todas');
+  IF jsonb_array_length(r) <> 1 OR r->0->>'titulo' <> 'Compartida' OR r->0 ? 'votacion' THEN RAISE EXCEPTION 'FALLO P32: invitado %', r; END IF;
+  BEGIN PERFORM proc_tarea_listar(pg_temp.invitado(e), e, 'backlog');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P32: el invitado vio el backlog'; END IF;
+  RAISE NOTICE 'OK P32: proc_tarea_listar';
+END $$;
+
+-- P33. proc_tarea_conteos: cuenta tablero, backlog y votación; el invitado, NX005.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e); p uuid := pg_temp.proponer(e); r jsonb; ok boolean := false; BEGIN
+  r := proc_tarea_conteos(pg_temp.integrante(e, 1), e);
+  IF (r->>'tablero')::int <> 1 OR (r->>'votacion')::int <> 1 OR (r->>'backlog')::int <> 0 THEN RAISE EXCEPTION 'FALLO P33: %', r; END IF;
+  BEGIN PERFORM proc_tarea_conteos(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P33: el invitado vio los conteos'; END IF;
+  RAISE NOTICE 'OK P33: proc_tarea_conteos';
+END $$;
+
+-- P34. proc_tarea_obtener: detalle con subtareas e historial; al invitado sin compartir, NX006.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.proponer(e); r jsonb; ok boolean := false; BEGIN
+  r := proc_tarea_obtener(pg_temp.integrante(e, 1), e, t);
+  IF jsonb_array_length(r->'subtareas') <> 2 OR jsonb_array_length(r->'historial') <> 1
+     OR r->'votacion'->>'abierta' <> 'true' OR r->'proponente'->>'nombre' <> 'Líder Prueba' THEN
+    RAISE EXCEPTION 'FALLO P34: %', r;
+  END IF;
+  BEGIN PERFORM proc_tarea_obtener(pg_temp.invitado(e), e, t);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P34: el invitado vio una tarea no compartida'; END IF;
+  RAISE NOTICE 'OK P34: proc_tarea_obtener';
+END $$;
+
+-- P35. proc_tarea_editar: el líder edita; el integrante solo el avance de su tarea; versión vieja NX008.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e, 1); r jsonb; ok int := 0; BEGIN
+  r := proc_tarea_editar(pg_temp.lider(e), e, t, pg_temp.version(t), '{"titulo":"Editada","etiquetas":["qa"],"vence_en":null}');
+  IF r->>'titulo' <> 'Editada' OR r->'etiquetas'->>0 <> 'qa' THEN RAISE EXCEPTION 'FALLO P35: %', r; END IF;
+  BEGIN PERFORM proc_tarea_editar(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), '{"titulo":"No puedo"}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_editar(pg_temp.integrante(e, 2), e, t, pg_temp.version(t), '{"progreso":50}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_editar(pg_temp.lider(e), e, t, pg_temp.version(t) + 3, '{"titulo":"Vieja"}');
+  EXCEPTION WHEN SQLSTATE 'NX008' THEN ok := ok + 1; END;
+  r := proc_tarea_editar(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), '{"progreso":40}');
+  IF ok <> 3 OR (r->>'progreso')::int <> 40 THEN RAISE EXCEPTION 'FALLO P35: % de 3', ok; END IF;
+  RAISE NOTICE 'OK P35: proc_tarea_editar';
+END $$;
+
+-- P36. proc_tarea_eliminar: solo el líder.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e, 1); ok boolean := false; BEGIN
+  BEGIN PERFORM proc_tarea_eliminar(pg_temp.integrante(e, 1), e, t);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  PERFORM proc_tarea_eliminar(pg_temp.lider(e), e, t);
+  IF NOT ok OR EXISTS (SELECT 1 FROM tareas WHERE id = t) THEN RAISE EXCEPTION 'FALLO P36'; END IF;
+  RAISE NOTICE 'OK P36: proc_tarea_eliminar';
+END $$;
+
+-- P37. proc_tarea_cambiar_estado: la máquina de estados en la BD.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e, 1); r jsonb; ok int := 0; BEGIN
+  PERFORM proc_subtarea_crear(pg_temp.lider(e), e, t, 'Paso');
+  BEGIN PERFORM proc_tarea_cambiar_estado(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), 'habilitada');   -- solo el líder habilita
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_cambiar_estado(pg_temp.integrante(e, 2), e, t, pg_temp.version(t), 'habilitada');   -- no es su tarea
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(e), e, t, pg_temp.version(t), 'habilitada');
+  BEGIN PERFORM proc_tarea_cambiar_estado(pg_temp.lider(e), e, t, pg_temp.version(t), 'completada');          -- se salta en_curso
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  r := proc_tarea_cambiar_estado(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), 'en_curso');
+  IF (r->>'progreso')::int <> 5 THEN RAISE EXCEPTION 'FALLO P37: avance %', r->>'progreso'; END IF;
+  BEGIN PERFORM proc_tarea_cambiar_estado(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), 'atascada');    -- sin motivo
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_cambiar_estado(pg_temp.integrante(e, 1), e, t, pg_temp.version(t) - 1, 'completada');
+  EXCEPTION WHEN SQLSTATE 'NX008' THEN ok := ok + 1; END;
+  r := proc_tarea_cambiar_estado(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), 'completada');
+  IF ok <> 5 OR (r->>'progreso')::int <> 100 OR r->>'resultado' <> 'a_tiempo' OR (r->>'subtareas_hechas')::int <> 1 THEN
+    RAISE EXCEPTION 'FALLO P37: % de 5, %', ok, r;
+  END IF;
+  RAISE NOTICE 'OK P37: proc_tarea_cambiar_estado';
+END $$;
+
+-- P38. proc_tarea_mover: el líder reordena; un integrante no; vecina de otra columna, NX012.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 0, 'A'); b uuid := pg_temp.aceptada(e, 0, 'B'); c uuid := pg_temp.aceptada(e, 1, 'C');
+  p uuid := pg_temp.proponer(e); v_orden text; ok int := 0; BEGIN
+  PERFORM proc_tarea_mover(pg_temp.lider(e), e, c, pg_temp.version(c), a, b);          -- C entre A y B
+  SELECT string_agg(titulo, '' ORDER BY orden COLLATE "C") INTO v_orden FROM tareas WHERE id IN (a, b, c);
+  IF v_orden <> 'ACB' THEN RAISE EXCEPTION 'FALLO P38: orden %', v_orden; END IF;
+  BEGIN PERFORM proc_tarea_mover(pg_temp.integrante(e, 1), e, c, pg_temp.version(c), NULL, a);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_mover(pg_temp.lider(e), e, c, pg_temp.version(c), p, NULL);  -- `p` está en otra columna
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P38: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P38: proc_tarea_mover';
+END $$;
+
+-- P39. proc_tarea_asignar: solo el líder, a un miembro, y no mientras se vota.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e); p uuid := pg_temp.proponer(e); r jsonb; ok int := 0; BEGIN
+  r := proc_tarea_asignar(pg_temp.lider(e), e, t, pg_temp.version(t), pg_temp.integrante(e, 1));
+  IF NOT (r->>'asignacion_pendiente')::boolean OR r->'responsable'->>'nombre' <> 'Integrante 1' THEN RAISE EXCEPTION 'FALLO P39: %', r; END IF;
+  BEGIN PERFORM proc_tarea_asignar(pg_temp.integrante(e, 1), e, t, pg_temp.version(t), pg_temp.integrante(e, 2));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_asignar(pg_temp.lider(e), e, t, pg_temp.version(t), pg_temp.invitado(e));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_asignar(pg_temp.lider(e), e, p, pg_temp.version(p), pg_temp.integrante(e, 1));
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P39: % de 3', ok; END IF;
+  RAISE NOTICE 'OK P39: proc_tarea_asignar';
+END $$;
+
+-- P40. proc_tarea_responder_asignacion: responde el asignado; al rechazar queda sin responsable (V-11).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e); r jsonb; ok boolean := false; BEGIN
+  PERFORM proc_tarea_asignar(pg_temp.lider(e), e, t, pg_temp.version(t), pg_temp.integrante(e, 1));
+  BEGIN PERFORM proc_tarea_responder_asignacion(pg_temp.integrante(e, 2), e, t, true);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := true; END;
+  r := proc_tarea_responder_asignacion(pg_temp.integrante(e, 1), e, t, false, 'Estoy saturado');
+  IF NOT ok OR r->'responsable' <> 'null'::jsonb OR r->>'estado' <> 'aceptada' OR (r->>'asignacion_pendiente')::boolean THEN
+    RAISE EXCEPTION 'FALLO P40: %', r;
+  END IF;
+  RAISE NOTICE 'OK P40: proc_tarea_responder_asignacion';
+END $$;
+
+-- P41. proc_tarea_compartir: el líder comparte con invitados; con un integrante, NX010.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e); r jsonb; ok int := 0; BEGIN
+  r := proc_tarea_compartir(pg_temp.lider(e), e, t, ARRAY[pg_temp.membresia(e, pg_temp.invitado(e))]);
+  IF jsonb_array_length(r->'compartida_con') <> 1 THEN RAISE EXCEPTION 'FALLO P41: %', r; END IF;
+  BEGIN PERFORM proc_tarea_compartir(pg_temp.lider(e), e, t, ARRAY[pg_temp.membresia(e, pg_temp.integrante(e, 1))]);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_compartir(pg_temp.integrante(e, 1), e, t, ARRAY[]::uuid[]);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P41: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P41: proc_tarea_compartir';
+END $$;
+
+-- P42. Subtareas de equipo: las gestiona el líder o el responsable.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e, 1); s uuid; ok int := 0; BEGIN
+  s := (proc_subtarea_crear(pg_temp.integrante(e, 1), e, t, 'Del responsable')->>'id')::uuid;
+  IF NOT (proc_subtarea_actualizar(pg_temp.lider(e), e, t, s, '{"hecha":true}')->>'hecha')::boolean THEN RAISE EXCEPTION 'FALLO P42'; END IF;
+  BEGIN PERFORM proc_subtarea_crear(pg_temp.integrante(e, 2), e, t, 'Ajena');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_subtarea_actualizar(pg_temp.integrante(e, 2), e, t, s, '{"hecha":false}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_subtarea_eliminar(pg_temp.integrante(e, 2), e, t, s);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_subtarea_eliminar(pg_temp.integrante(e, 1), e, t, s);
+  BEGIN PERFORM proc_subtarea_eliminar(pg_temp.integrante(e, 1), e, t, s);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P42: % de 4', ok; END IF;
+  RAISE NOTICE 'OK P42: proc_subtarea_crear, proc_subtarea_actualizar y proc_subtarea_eliminar';
+END $$;
+
+-- P43. Comentarios de equipo: comenta quien alcanza la tarea; cada quien borra los suyos.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid := pg_temp.aceptada(e); c uuid; ok int := 0; BEGIN
+  c := (proc_comentario_crear(pg_temp.integrante(e, 1), e, t, 'Un comentario')->>'id')::uuid;
+  BEGIN PERFORM proc_comentario_crear(pg_temp.invitado(e), e, t, 'Sin compartir');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_comentario_eliminar(pg_temp.integrante(e, 2), e, t, c);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  PERFORM proc_comentario_eliminar(pg_temp.lider(e), e, t, c);
+  IF ok <> 2 OR EXISTS (SELECT 1 FROM comentarios_tarea WHERE id = c) THEN RAISE EXCEPTION 'FALLO P43: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P43: proc_comentario_crear y proc_comentario_eliminar';
+END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Espacio personal (0007): todo es privado; una tarea ajena responde NX006.
+-- ---------------------------------------------------------------------------------------------
+
+-- P44. proc_personal_tarea_crear y proc_personal_tarea_obtener.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); r jsonb; ok boolean := false; BEGIN
+  r := proc_personal_tarea_crear(u, '{"titulo":"Mi tarea","etiquetas":["Casa","casa"]}');
+  IF r->>'estado' <> 'habilitada' OR jsonb_array_length(r->'etiquetas') <> 1 OR (r->>'codigo')::int <> 1 THEN
+    RAISE EXCEPTION 'FALLO P44: %', r;
+  END IF;
+  IF proc_personal_tarea_obtener(u, (r->>'id')::uuid)->>'titulo' <> 'Mi tarea' THEN RAISE EXCEPTION 'FALLO P44: obtener'; END IF;
+  BEGIN PERFORM proc_personal_tarea_obtener(otro, (r->>'id')::uuid);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P44: otra persona vio la tarea'; END IF;
+  RAISE NOTICE 'OK P44: proc_personal_tarea_crear y proc_personal_tarea_obtener';
+END $$;
+
+-- P45. proc_personal_tarea_listar: solo las propias, con filtros; los comodines se buscan tal cual.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); BEGIN
+  PERFORM proc_personal_tarea_crear(u, '{"titulo":"Comprar 100% algodón","prioridad":"alta"}');
+  PERFORM proc_personal_tarea_crear(u, '{"titulo":"Leer el capítulo 3"}');
+  PERFORM proc_personal_tarea_crear(otro, '{"titulo":"Ajena"}');
+  IF jsonb_array_length(proc_personal_tarea_listar(u, '{}')) <> 2
+     OR jsonb_array_length(proc_personal_tarea_listar(u, '{"prioridad":["alta"]}')) <> 1
+     OR jsonb_array_length(proc_personal_tarea_listar(u, '{"q":"100%"}')) <> 1
+     OR jsonb_array_length(proc_personal_tarea_listar(u, '{"q":"%"}')) <> 1
+     OR jsonb_array_length(proc_personal_tarea_listar(u, '{"estado":["completada"]}')) <> 0
+     OR jsonb_array_length(proc_personal_tarea_listar(u, '{"archivadas":true}')) <> 0 THEN
+    RAISE EXCEPTION 'FALLO P45';
+  END IF;
+  RAISE NOTICE 'OK P45: proc_personal_tarea_listar';
+END $$;
+
+-- P46. proc_personal_tarea_actualizar: completar, reabrir, versión y privacidad.
+DO $$ DECLARE u uuid := pg_temp.usuario(); t uuid; r jsonb; ok int := 0; BEGIN
+  t := (proc_personal_tarea_crear(u, '{"titulo":"Para completar"}')->>'id')::uuid;
+  BEGIN PERFORM proc_personal_tarea_actualizar(u, t, '{"version":99,"titulo":"Vieja"}');
+  EXCEPTION WHEN SQLSTATE 'NX008' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_personal_tarea_actualizar(pg_temp.usuario(), t, jsonb_build_object('version', pg_temp.version(t), 'titulo', 'Ajena'));
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_personal_tarea_actualizar(u, t, jsonb_build_object('version', pg_temp.version(t), 'estado', 'atascada'));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  r := proc_personal_tarea_actualizar(u, t, jsonb_build_object('version', pg_temp.version(t), 'estado', 'completada'));
+  IF (r->>'progreso')::int <> 100 OR r->>'resultado' <> 'a_tiempo' OR r->>'completada_en' IS NULL THEN RAISE EXCEPTION 'FALLO P46: %', r; END IF;
+  r := proc_personal_tarea_actualizar(u, t, jsonb_build_object('version', pg_temp.version(t), 'estado', 'en_curso'));
+  IF ok <> 3 OR r->>'resultado' IS NOT NULL OR r->>'completada_en' IS NOT NULL THEN RAISE EXCEPTION 'FALLO P46: % de 3, %', ok, r; END IF;
+  RAISE NOTICE 'OK P46: proc_personal_tarea_actualizar';
+END $$;
+
+-- P47. proc_personal_tarea_eliminar.
+DO $$ DECLARE u uuid := pg_temp.usuario(); t uuid; ok boolean := false; BEGIN
+  t := (proc_personal_tarea_crear(u, '{"titulo":"Para borrar"}')->>'id')::uuid;
+  BEGIN PERFORM proc_personal_tarea_eliminar(pg_temp.usuario(), t);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  PERFORM proc_personal_tarea_eliminar(u, t);
+  IF NOT ok OR EXISTS (SELECT 1 FROM tareas WHERE id = t) THEN RAISE EXCEPTION 'FALLO P47'; END IF;
+  RAISE NOTICE 'OK P47: proc_personal_tarea_eliminar';
+END $$;
+
+-- P48. Subtareas personales.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); t uuid; s uuid; ok int := 0; BEGIN
+  t := (proc_personal_tarea_crear(u, '{"titulo":"Con pasos"}')->>'id')::uuid;
+  s := (proc_personal_subtarea_crear(u, t, 'Paso 1')->>'id')::uuid;
+  IF NOT (proc_personal_subtarea_actualizar(u, t, s, '{"hecha":true}')->>'hecha')::boolean THEN RAISE EXCEPTION 'FALLO P48'; END IF;
+  BEGIN PERFORM proc_personal_subtarea_crear(otro, t, 'Ajena');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_personal_subtarea_actualizar(otro, t, s, '{"hecha":false}');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_personal_subtarea_eliminar(otro, t, s);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  PERFORM proc_personal_subtarea_eliminar(u, t, s);
+  IF ok <> 3 OR EXISTS (SELECT 1 FROM subtareas WHERE id = s) THEN RAISE EXCEPTION 'FALLO P48: % de 3', ok; END IF;
+  RAISE NOTICE 'OK P48: proc_personal_subtarea_crear, _actualizar y _eliminar';
+END $$;
+
+-- P49. Comentarios personales.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); t uuid; c uuid; ok int := 0; BEGIN
+  t := (proc_personal_tarea_crear(u, '{"titulo":"Con notas"}')->>'id')::uuid;
+  c := (proc_personal_comentario_crear(u, t, 'Una nota')->>'id')::uuid;
+  BEGIN PERFORM proc_personal_comentario_crear(otro, t, 'Ajena');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_personal_comentario_eliminar(otro, t, c);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  PERFORM proc_personal_comentario_eliminar(u, t, c);
+  IF ok <> 2 OR EXISTS (SELECT 1 FROM comentarios_tarea WHERE id = c) THEN RAISE EXCEPTION 'FALLO P49: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P49: proc_personal_comentario_crear y proc_personal_comentario_eliminar';
+END $$;
+
+-- P50. proc_personal_etiquetas: solo las propias.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); BEGIN
+  PERFORM proc_personal_tarea_crear(u, '{"titulo":"Etiquetada","etiquetas":["zeta","alfa"]}');
+  PERFORM proc_personal_tarea_crear(otro, '{"titulo":"Ajena","etiquetas":["secreta"]}');
+  IF proc_personal_etiquetas(u) <> '["alfa","zeta"]'::jsonb THEN RAISE EXCEPTION 'FALLO P50: %', proc_personal_etiquetas(u); END IF;
+  RAISE NOTICE 'OK P50: proc_personal_etiquetas';
+END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Reglas transversales: forma de los procesos y roles de la BD (0008)
+-- ---------------------------------------------------------------------------------------------
+
+-- P51. Todo `proc_*` es SECURITY DEFINER con `search_path` fijo (docs/08, convenciones).
+DO $$ DECLARE malos text; BEGIN
+  SELECT string_agg(p.proname, ', ') INTO malos
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public' AND p.proname LIKE 'proc\_%'
+     AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%'));
+  IF malos IS NOT NULL THEN RAISE EXCEPTION 'FALLO P51: sin SECURITY DEFINER o sin search_path: %', malos; END IF;
+  RAISE NOTICE 'OK P51: todos los procesos son SECURITY DEFINER con search_path fijo';
+END $$;
+
+-- P52. Rol `nexo_app`: ejecuta procesos y nada más (ni tablas, ni vistas, ni auxiliares, ni dev).
+DO $$ DECLARE malos text; ok int := 0; BEGIN
+  SELECT string_agg(p.proname, ', ') INTO malos
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND ((p.proname LIKE 'proc\_%' AND p.proname NOT LIKE 'proc\_dev\_%') <> has_function_privilege('nexo_app', p.oid, 'EXECUTE'))
+     AND (p.proname LIKE 'proc\_%' OR p.proname LIKE 'fn\_%');
+  IF malos IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P52: permisos de ejecución mal puestos (¿falta SELECT fn_conceder_procesos() en la migración?): %', malos;
+  END IF;
+  SELECT string_agg(c.relname, ', ') INTO malos
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'p')
+     AND has_table_privilege('nexo_app', c.oid, 'SELECT, INSERT, UPDATE, DELETE');
+  IF malos IS NOT NULL THEN RAISE EXCEPTION 'FALLO P52: nexo_app alcanza tablas: %', malos; END IF;
+
+  -- Y en la práctica, con el rol puesto:
+  SET LOCAL ROLE nexo_app;
+  BEGIN PERFORM 1 FROM tareas LIMIT 1;
+  EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
+  BEGIN PERFORM 1 FROM v_tareas_semaforo LIMIT 1;
+  EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
+  BEGIN UPDATE usuarios SET nombre = 'Intruso';
+  EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
+  BEGIN PERFORM fn_integrantes_activos(gen_random_uuid());
+  EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_dev_usuarios();
+  EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
+  IF NOT (proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Mensaje enviado con el rol nexo_app')->>'recibido')::boolean THEN
+    RAISE EXCEPTION 'FALLO P52: nexo_app no pudo ejecutar un proceso';
+  END IF;
+  RESET ROLE;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P52: % de 5 accesos directos rechazados', ok; END IF;
+  RAISE NOTICE 'OK P52: nexo_app solo ejecuta procesos; no lee ni escribe tablas';
+END $$;
