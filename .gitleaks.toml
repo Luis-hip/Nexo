@@ -17,4 +17,6 @@ regexes = [
   '''cambia-esto''',
   '''VALOR-SECRETO-\d''',
   '''pw-de-prueba''',
+  # Nombres de los documentos del proyecto: «secretos: `09_Seguridad_y_Secretos.md`» no es una clave.
+  '''\d{2}_[A-Za-z0-9_]+\.md''',
 ]
