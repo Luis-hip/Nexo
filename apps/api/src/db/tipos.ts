@@ -109,6 +109,11 @@ export interface Actividad {
   usuario_id: string | null;
 }
 
+export interface ArchivoContenidos {
+  archivo_id: string;
+  datos: Buffer;
+}
+
 export interface Archivos {
   creado_en: Generated<Timestamp>;
   eliminado_en: Timestamp | null;
@@ -683,6 +688,7 @@ export interface WhatsappWebhookEventos {
 
 export interface DB {
   actividad: Actividad;
+  archivo_contenidos: ArchivoContenidos;
   archivos: Archivos;
   codigos_respaldo_2fa: CodigosRespaldo2fa;
   comentarios_tarea: ComentariosTarea;

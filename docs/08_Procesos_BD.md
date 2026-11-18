@@ -120,6 +120,24 @@
 | `proc_equipo_configuracion` | Equipos (lectura) | `0010_procesos_liderazgo.sql` | Vigente |
 | `proc_equipo_configurar` | Equipos | `0010_procesos_liderazgo.sql` | Vigente |
 | `proc_equipo_archivar` | Equipos | `0010_procesos_liderazgo.sql` | Vigente |
+| `proc_calendario_equipo` | Calendario (lectura) | `0011_procesos_vistas.sql` | Vigente |
+| `proc_reunion_crear` | Calendario | `0011_procesos_vistas.sql` | Vigente |
+| `proc_reunion_editar` | Calendario | `0011_procesos_vistas.sql` | Vigente |
+| `proc_reunion_cancelar` | Calendario | `0011_procesos_vistas.sql` | Vigente |
+| `proc_reunion_responder` | Calendario | `0011_procesos_vistas.sql` | Vigente |
+| `proc_actividad_listar` | Actividad (lectura) | `0011_procesos_vistas.sql` | Vigente |
+| `proc_notificacion_listar` | Notificaciones (lectura) | `0011_procesos_vistas.sql` | Vigente |
+| `proc_notificacion_marcar` | Notificaciones | `0011_procesos_vistas.sql` | Vigente |
+| `proc_reporte_equipo` | Reportes (lectura) | `0011_procesos_vistas.sql` | Vigente |
+| `proc_reporte_exportar` | Reportes (lectura) | `0011_procesos_vistas.sql` | Vigente |
+| `proc_plantilla_listar` | Plantillas (lectura) | `0011_procesos_vistas.sql` | Vigente |
+| `proc_plantilla_crear` | Plantillas | `0011_procesos_vistas.sql` | Vigente |
+| `proc_plantilla_eliminar` | Plantillas | `0011_procesos_vistas.sql` | Vigente |
+| `proc_plantilla_usar` | Plantillas | `0011_procesos_vistas.sql` | Vigente |
+| `proc_archivo_listar` | Archivos (lectura) | `0012_archivos.sql` | Vigente |
+| `proc_archivo_subir` | Archivos | `0012_archivos.sql` | Vigente |
+| `proc_archivo_descargar` | Archivos (lectura) | `0012_archivos.sql` | Vigente |
+| `proc_archivo_eliminar` | Archivos | `0012_archivos.sql` | Vigente |
 
 **Auxiliares (`fn_*`, no las llama la aplicación)** creadas en `0003`: índice fraccionario (`fn_orden_entre`, `fn_orden_al_final` y sus partes), `fn_votacion_resultado`, `fn_votacion_resumen`, `fn_integrantes_activos`, `fn_registrar_evento`, `fn_membresia_actor`, `fn_exigir_lider`, `fn_exigir_equipo_activo`, `fn_exigir_responsable`, `fn_exigir_version`, `fn_bloquear_tarea`, `fn_fijar_etiquetas`, `fn_tarea_insertar_propuesta`, y los disparadores `fn_voto_propuesta_valido` y `fn_membresia_descarta_votos`.
 
@@ -128,6 +146,8 @@
 **Auxiliares de `0009` (sprints y retrospectiva):** permisos (`fn_exigir_ve_sprints`, `fn_exigir_gestion_sprints`, que además bloquea la fila del equipo, y `fn_exigir_moderar_retro`), fechas (`fn_hoy_equipo`, «hoy» en la zona horaria del equipo), sprints (`fn_sprint_bloquear`, `fn_sprint_conteo`, `fn_sprint_instantanea`, `fn_sprint_json`, `fn_sprint_serie`, `fn_sprint_capacidad_json`, `fn_sprint_detalle`, `fn_estado_planeable`, `fn_tarea_de_sprint_cerrado`) y retrospectiva (`fn_retro_asegurar`, `fn_retro_detalle`, `fn_retro_nota_bloquear`). La `0009` también cambia `fn_registrar_evento`: los eventos `sprint.*` quedan en `actividad` con tipo `sprint` (antes, todo lo que no era tarea era `equipo`).
 
 **Auxiliares de `0010` (liderazgo y equipo):** avisos (`fn_notificar`, `fn_notificar_equipo`, `fn_enlace_liderazgo`), membresías (`fn_membresia_bloquear`, `fn_miembro_retirado`, `fn_votaciones_reevaluar`: recuenta las propuestas abiertas cuando cambian los integrantes, misma regla que `proc_tarea_votar`), cambio de líder (`fn_cambiar_lider`) y elección (`fn_eleccion_finalistas`, `fn_eleccion_votantes`, `fn_eleccion_resolver`, `fn_eleccion_json`, `fn_transferencia_json`, `fn_liderazgo_json`).
+
+**Auxiliares de `0011` y `0012` (vistas y archivos):** `fn_exigir_no_invitado`, reuniones (`fn_reunion_ocurrencias`, que expande las repeticiones; `fn_reunion_json`, `fn_reunion_editable`), `fn_plantilla_json`, archivos (`fn_archivo_tipo`, la lista de tipos permitidos; `fn_archivo_json`) y la tabla `archivo_contenidos` (0012). La `0011` cambia otra vez `fn_registrar_evento`: los eventos `reunion.*` quedan en `actividad` con tipo `reunion`.
 
 ## 4b. Roles de la BD
 
@@ -1227,3 +1247,255 @@
 - **Pruebas:** `pruebas_procesos.sql` P82; `liderazgo.test.ts`.
 - **Ejemplo de llamada:** `select proc_equipo_archivar($1, $2, true)`
 - **Historial:** 2026-11-18 · creación · `0010`.
+
+### proc_calendario_equipo
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Calendario del equipo (EQ-14): reuniones y entregas entre dos fechas.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_desde timestamptz`, `p_hasta timestamptz` · rango (de 1 a 62 días).
+- **Retorno:** `jsonb` `{ reuniones[], entregas[] }`: cada **ocurrencia** de cada reunión (`Reunion`, con el `inicio` de esa fecha, la asistencia y `mi_respuesta`) y las tareas (`TareaEquipo`) que vencen en el rango.
+- **Reglas y validaciones:** los invitados no lo ven. Las reuniones `semanal` se repiten cada 7 días y las `diaria_lv` de lunes a viernes (el día se mira en la zona horaria del equipo), hasta dos años; las canceladas no salen. Las entregas excluyen propuestas, rechazadas, retiradas y archivadas.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404). `NX010` · rango inválido.
+- **Tablas que toca:** lectura `reuniones`, `reunion_asistencia`, `tareas`, `v_tareas_semaforo`, `equipos`, `membresias`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `calendario()`; `GET /equipos/:equipoId/calendario?desde=&hasta=`.
+- **Pruebas:** `pruebas_procesos.sql` P84; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_calendario_equipo($1, $2, $3, $4)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_reunion_crear
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Crear una reunión del equipo (EQ-15).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_datos jsonb` · `{ titulo, inicio, duracion_min?, repeticion?, lugar?, descripcion?, recordatorio_min?, avisar_wa? }`.
+- **Retorno:** `jsonb` `Reunion`.
+- **Reglas y validaciones:** líder o integrante (matriz `crear_reunion`), con el equipo activo. Se invita a todo el equipo (sin invitados): quien la crea queda con «sí» y los demás con «pendiente» y reciben un aviso (`ver_reunion`). Título de 1 a 120 caracteres y duración de 5 a 720 minutos (los `CHECK` se traducen a `NX010`).
+- **Errores:** `NX005` · un invitado. `NX009` · equipo archivado. `NX010` · datos inválidos.
+- **Tablas que toca:** escritura `reuniones`, `reunion_asistencia`, `notificaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `reunion.creada` (la actividad queda con tipo `reunion`).
+- **Lo llama:** `repositorios/vistas.ts` → `crearReunion()`; `POST /equipos/:equipoId/reuniones`.
+- **Pruebas:** `pruebas_procesos.sql` P83; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_reunion_crear($1, $2, '{"titulo": "Revisión", "inicio": "…"}')`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_reunion_editar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Cambiar una reunión (toda la serie).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_reunion_id uuid`. `p_cambios jsonb` · solo lo que cambia.
+- **Retorno:** `jsonb` `Reunion`.
+- **Reglas y validaciones:** quien la creó o el líder, con el equipo activo; no una cancelada. Mismas validaciones que al crear.
+- **Errores:** `NX005` · no la creó ni es líder, o un invitado. `NX006` · no existe o está cancelada. `NX009` · equipo archivado. `NX010` · datos inválidos.
+- **Tablas que toca:** escritura `reuniones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `reunion.editada`.
+- **Lo llama:** `repositorios/vistas.ts` → `editarReunion()`; `PATCH /equipos/:equipoId/reuniones/:id`.
+- **Pruebas:** `pruebas_procesos.sql` P85; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_reunion_editar($1, $2, $3, '{"lugar": "Sala 2"}')`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_reunion_cancelar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Cancelar una reunión (toda la serie).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_reunion_id uuid`.
+- **Retorno:** `jsonb` `{ cancelada: true }`.
+- **Reglas y validaciones:** quien la creó o el líder, con el equipo activo. Avisa a quienes no habían dicho que no.
+- **Errores:** `NX005` · no la creó ni es líder. `NX006` · no existe o ya está cancelada. `NX009` · equipo archivado.
+- **Tablas que toca:** escritura `reuniones`, `notificaciones`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `reunion.cancelada`.
+- **Lo llama:** `repositorios/vistas.ts` → `cancelarReunion()`; `POST /equipos/:equipoId/reuniones/:id/cancelar`.
+- **Pruebas:** `pruebas_procesos.sql` P86; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_reunion_cancelar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_reunion_responder
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Responder la asistencia a una reunión.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_reunion_id uuid`. `p_respuesta text` · `si` | `no` | `quiza`.
+- **Retorno:** `jsonb` `Reunion`.
+- **Reglas y validaciones:** líder o integrante, con el equipo activo; la respuesta vale para toda la serie.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404). `NX006` · no existe o está cancelada. `NX009` · equipo archivado. `NX010` · respuesta inválida.
+- **Tablas que toca:** escritura `reunion_asistencia`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/vistas.ts` → `responderReunion()`; `POST /equipos/:equipoId/reuniones/:id/asistencia`.
+- **Pruebas:** `pruebas_procesos.sql` P87; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_reunion_responder($1, $2, $3, 'si')`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_actividad_listar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Registro de actividad del equipo (EQ-18).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tipo text` · `tarea` | `sprint` | `reunion` | `equipo` o nulo. `p_antes timestamptz` · para paginar. `p_limite int` · de 1 a 100 (50).
+- **Retorno:** `jsonb` `{ items[], hay_mas }`; cada item con `tipo`, `accion`, `resumen`, `autor`, `objeto_tipo`, `objeto_id` y `creado_en`, del más reciente al más antiguo.
+- **Reglas y validaciones:** los invitados no lo ven. Las notas y los votos de la retrospectiva no generan actividad (anonimato, DEC-031).
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404). `NX010` · tipo inválido.
+- **Tablas que toca:** lectura `actividad`, `usuarios`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `actividad()`; `GET /equipos/:equipoId/actividad?tipo=&antes=`.
+- **Pruebas:** `pruebas_procesos.sql` P88; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_actividad_listar($1, $2, 'tarea', null, 50)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_notificacion_listar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Notificaciones de la persona (NT-01).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_solo_no_leidas boolean`. `p_limite int` · de 1 a 100 (50).
+- **Retorno:** `jsonb` `{ no_leidas, items[] }`; cada item con `equipo` (nombre), `categoria`, `titulo`, `texto`, `enlace`, `accion_tipo`, `creada_en` y `leida_en`.
+- **Reglas y validaciones:** solo las del actor; no dependen de un equipo (una persona expulsada recibe la suya).
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `notificaciones`, `equipos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `notificaciones()`; `GET /notificaciones`.
+- **Pruebas:** `pruebas_procesos.sql` P89; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_notificacion_listar($1, false, 50)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_notificacion_marcar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Marcar notificaciones como leídas (NT-01).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_id uuid` · una notificación, o nulo para todas.
+- **Retorno:** `jsonb` `{ no_leidas }`.
+- **Reglas y validaciones:** solo las del actor.
+- **Errores:** `NX006` · la notificación no es del actor.
+- **Tablas que toca:** escritura `notificaciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/vistas.ts` → `marcarNotificacion()`; `POST /notificaciones/leidas` y `POST /notificaciones/:id/leida`.
+- **Pruebas:** `pruebas_procesos.sql` P90; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_notificacion_marcar($1, null)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_reporte_equipo
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Reporte del equipo (EQ-16).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `ReporteEquipo`: `por_estado{}`, `completadas`, `a_tiempo`, `con_retraso`, `vencidas`, `por_persona[]` (abiertas, completadas y a tiempo de cada miembro) y `sprints[]` (los últimos 6 iniciados con su total y completadas).
+- **Reglas y validaciones:** los invitados no lo ven; no cuenta archivadas.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `tareas`, `sprints`, `sprint_instantaneas`, `membresias`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `reporte()`; `GET /equipos/:equipoId/reportes`.
+- **Pruebas:** `pruebas_procesos.sql` P91; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_reporte_equipo($1, $2)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_reporte_exportar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Filas para exportar el reporte (EQ-17).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_solo_mias boolean` · solo las tareas del actor.
+- **Retorno:** `jsonb` arreglo de filas (`codigo`, `titulo`, `estado`, `prioridad`, `responsable`, `sprint`, `progreso`, `vence_en`, `completada_en`, `resultado`, `creado_en`). La API arma el CSV.
+- **Reglas y validaciones:** el líder exporta todo o lo suyo; un integrante **solo lo suyo** (matriz `exportar_reportes` «propio»); los invitados no.
+- **Errores:** `NX005` · un invitado, o un integrante que pide todo. `NX006` · el actor no pertenece al equipo.
+- **Tablas que toca:** lectura `tareas`, `usuarios`, `sprints`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `exportar()`; `GET /equipos/:equipoId/reportes/exportar?solo_mias=`.
+- **Pruebas:** `pruebas_procesos.sql` P92; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_reporte_exportar($1, $2, true)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_plantilla_listar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Plantillas del equipo (EQ-20).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` arreglo de `Plantilla` (`nombre`, `tipo`, `descripcion`, `elementos[]`).
+- **Reglas y validaciones:** líder e integrantes; los invitados no.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `plantillas`, `plantilla_elementos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `plantillas()`; `GET /equipos/:equipoId/plantillas`.
+- **Pruebas:** `pruebas_procesos.sql` P94; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_plantilla_listar($1, $2)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_plantilla_crear
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Crear una plantilla del equipo (EQ-20).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_datos jsonb` · `{ nombre, tipo: sprint|proyecto|retro, descripcion?, elementos: text[] }`.
+- **Retorno:** `jsonb` `Plantilla`.
+- **Reglas y validaciones:** solo el líder (matriz `crear_plantilla`), con el equipo activo. De 1 a 30 elementos de 1 a 140 caracteres; nombre de 1 a 80.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX010` · datos inválidos.
+- **Tablas que toca:** escritura `plantillas`, `plantilla_elementos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.plantilla_creada`.
+- **Lo llama:** `repositorios/vistas.ts` → `crearPlantilla()`; `POST /equipos/:equipoId/plantillas`.
+- **Pruebas:** `pruebas_procesos.sql` P93; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_plantilla_crear($1, $2, '{"nombre": "Arranque", "tipo": "proyecto", "elementos": ["CI"]}')`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_plantilla_eliminar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Eliminar una plantilla del equipo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_plantilla_id uuid`.
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo.
+- **Errores:** `NX005` · no es el líder. `NX006` · la plantilla no es del equipo. `NX009` · equipo archivado.
+- **Tablas que toca:** escritura `plantillas`, `plantilla_elementos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.plantilla_eliminada`.
+- **Lo llama:** `repositorios/vistas.ts` → `eliminarPlantilla()`; `DELETE /equipos/:equipoId/plantillas/:id`.
+- **Pruebas:** `pruebas_procesos.sql` P96; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_plantilla_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_plantilla_usar
+- **Migración:** `0011_procesos_vistas.sql`
+- **Propósito:** Usar una plantilla de proyecto: propone sus elementos como tareas.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_plantilla_id uuid`.
+- **Retorno:** `jsonb` `{ creadas }`.
+- **Reglas y validaciones:** solo el líder (las tareas nacen como **propuestas** y van a votación, DEC-024). Solo las plantillas de tipo `proyecto` crean tareas; las de sprint y retrospectiva son guías.
+- **Errores:** `NX005` · no es el líder. `NX006` · la plantilla no es del equipo. `NX007` · es una guía. `NX009` · equipo archivado.
+- **Tablas que toca:** escritura `tareas`, `subtareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.propuestas_de_plantilla`.
+- **Lo llama:** `repositorios/vistas.ts` → `usarPlantilla()`; `POST /equipos/:equipoId/plantillas/:id/usar`.
+- **Pruebas:** `pruebas_procesos.sql` P95; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_plantilla_usar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0011`.
+
+### proc_archivo_listar
+- **Migración:** `0012_archivos.sql`
+- **Propósito:** Archivos del equipo o de una tarea (EQ-19).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_tarea_id uuid` · opcional.
+- **Retorno:** `jsonb` arreglo de `Archivo` (`nombre`, `mime`, `tipo`, `tamano_bytes`, `subido_por`, `tarea`, `puedo_eliminar`), los más recientes primero.
+- **Reglas y validaciones:** líder e integrantes; los invitados no (matriz `ver_archivos`). No incluye los eliminados.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `archivos`, `tareas`, `usuarios`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `archivos()`; `GET /equipos/:equipoId/archivos?tarea_id=`.
+- **Pruebas:** `pruebas_procesos.sql` P98; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_archivo_listar($1, $2, null)`
+- **Historial:** 2026-11-18 · creación · `0012`.
+
+### proc_archivo_subir
+- **Migración:** `0012_archivos.sql`
+- **Propósito:** Subir un archivo, opcionalmente adjunto a una tarea (EQ-19).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_nombre text`, `p_mime text`, `p_datos bytea`, `p_tarea_id uuid` · opcional.
+- **Retorno:** `jsonb` `Archivo`.
+- **Reglas y validaciones:** líder e integrantes (matriz `adjuntar_archivos`), con el equipo activo. **Máximo 5 MB** y solo los tipos de `fn_archivo_tipo`: PDF, imágenes PNG/JPEG/GIF/WebP, texto, Markdown, CSV, documentos y hojas de Office y OpenDocument, presentaciones .pptx y ZIP (ni ejecutables ni SVG). Guarda el SHA-256. El contenido va a `archivo_contenidos` (DEC-033).
+- **Errores:** `NX005` · un invitado. `NX006` · la tarea no es del equipo. `NX009` · equipo archivado. `NX010` · tipo no permitido, tamaño o nombre inválido.
+- **Tablas que toca:** escritura `archivos`, `archivo_contenidos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.archivo_subido`, o `tarea.archivo_adjuntado` (en el historial de la tarea).
+- **Lo llama:** `repositorios/vistas.ts` → `subirArchivo()`; `POST /equipos/:equipoId/archivos`.
+- **Pruebas:** `pruebas_procesos.sql` P97; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_archivo_subir($1, $2, 'notas.txt', 'text/plain', $3, null)`
+- **Historial:** 2026-11-18 · creación · `0012`.
+
+### proc_archivo_descargar
+- **Migración:** `0012_archivos.sql`
+- **Propósito:** Contenido de un archivo para descargarlo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_archivo_id uuid`.
+- **Retorno:** `jsonb` `{ nombre, mime, contenido }` (base64); la API lo entrega como binario con `Content-Disposition: attachment`.
+- **Reglas y validaciones:** líder e integrantes; no los eliminados.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404). `NX006` · el archivo no es del equipo o se eliminó.
+- **Tablas que toca:** lectura `archivos`, `archivo_contenidos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/vistas.ts` → `descargarArchivo()`; `GET /equipos/:equipoId/archivos/:id/descarga`.
+- **Pruebas:** `pruebas_procesos.sql` P99; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_archivo_descargar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0012`.
+
+### proc_archivo_eliminar
+- **Migración:** `0012_archivos.sql`
+- **Propósito:** Eliminar un archivo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_archivo_id uuid`.
+- **Retorno:** `jsonb` `{ eliminado: true }`.
+- **Reglas y validaciones:** quien lo subió o el líder, con el equipo activo. Se borra el contenido y el registro queda con `eliminado_en`.
+- **Errores:** `NX005` · no lo subió ni es líder, o un invitado. `NX006` · no existe o ya se eliminó. `NX009` · equipo archivado.
+- **Tablas que toca:** escritura `archivos`, `archivo_contenidos`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.archivo_eliminado`.
+- **Lo llama:** `repositorios/vistas.ts` → `eliminarArchivo()`; `DELETE /equipos/:equipoId/archivos/:id`.
+- **Pruebas:** `pruebas_procesos.sql` P100; `vistas.test.ts`.
+- **Ejemplo de llamada:** `select proc_archivo_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-18 · creación · `0012`.

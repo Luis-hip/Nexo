@@ -1411,3 +1411,271 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(2); ok int := 0; BEGIN
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P82: % de 2 rechazos', ok; END IF;
   RAISE NOTICE 'OK P82: proc_equipo_archivar';
 END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Vistas secundarias (0011, Fase 3.4)
+-- ---------------------------------------------------------------------------------------------
+
+CREATE FUNCTION pg_temp.reunion(p_equipo uuid, p_autor uuid, p_datos jsonb DEFAULT '{}') RETURNS uuid AS $$
+  SELECT (proc_reunion_crear(p_autor, p_equipo,
+            jsonb_build_object('titulo', 'Reunión de prueba', 'inicio', date_trunc('day', now()) + interval '1 day 10 hours') || p_datos)->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P83. proc_reunion_crear: líder o integrante; invita al equipo (quien crea dice «sí») y avisa a los
+--      demás. El invitado no crea (NX005) y un título vacío no entra (NX010).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r uuid; ok int := 0; BEGIN
+  r := pg_temp.reunion(e, pg_temp.integrante(e, 1));
+  IF (SELECT count(*) FROM reunion_asistencia WHERE reunion_id = r) <> 3
+     OR (SELECT respuesta::text FROM reunion_asistencia WHERE reunion_id = r AND usuario_id = pg_temp.integrante(e, 1)) <> 'si'
+     OR NOT EXISTS (SELECT 1 FROM notificaciones WHERE usuario_id = pg_temp.lider(e) AND accion_tipo = 'ver_reunion') THEN
+    RAISE EXCEPTION 'FALLO P83: asistencia o aviso';
+  END IF;
+  BEGIN PERFORM pg_temp.reunion(e, pg_temp.invitado(e));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.reunion(e, pg_temp.lider(e), '{"titulo": "  "}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P83: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P83: proc_reunion_crear';
+END $$;
+
+-- P84. proc_calendario_equipo: una reunión semanal aparece cada semana del rango y la diaria solo de
+--      lunes a viernes; también las entregas. El invitado no ve el calendario (NX005) y el rango es
+--      de 62 días como máximo (NX010).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid; d jsonb; v_lunes timestamptz; ok int := 0; BEGIN
+  v_lunes := (date_trunc('week', now() AT TIME ZONE 'America/Mexico_City') + interval '7 days 9 hours') AT TIME ZONE 'America/Mexico_City';
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), jsonb_build_object('titulo', 'Semanal', 'inicio', v_lunes, 'repeticion', 'semanal'));
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), jsonb_build_object('titulo', 'Diaria', 'inicio', v_lunes, 'repeticion', 'diaria_lv'));
+  t := pg_temp.aceptada(e, 0, 'Con entrega');
+  UPDATE tareas SET vence_en = v_lunes + interval '2 days' WHERE id = t;
+  d := proc_calendario_equipo(pg_temp.integrante(e, 1), e, v_lunes, v_lunes + interval '14 days');
+  IF (SELECT count(*) FROM jsonb_array_elements(d->'reuniones') x WHERE x->>'titulo' = 'Semanal') <> 2
+     OR (SELECT count(*) FROM jsonb_array_elements(d->'reuniones') x WHERE x->>'titulo' = 'Diaria') <> 10
+     OR jsonb_array_length(d->'entregas') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P84: %', jsonb_build_object('n', jsonb_array_length(d->'reuniones'), 'e', jsonb_array_length(d->'entregas'));
+  END IF;
+  BEGIN PERFORM proc_calendario_equipo(pg_temp.invitado(e), e, v_lunes, v_lunes + interval '7 days');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_calendario_equipo(pg_temp.lider(e), e, v_lunes, v_lunes + interval '90 days');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P84: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P84: proc_calendario_equipo (reuniones repetidas y entregas)';
+END $$;
+
+-- P85. proc_reunion_editar: quien la creó o el líder; otro integrante no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r uuid; ok boolean := false; BEGIN
+  r := pg_temp.reunion(e, pg_temp.integrante(e, 1));
+  BEGIN PERFORM proc_reunion_editar(pg_temp.integrante(e, 2), e, r, '{"titulo": "Ajena"}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF proc_reunion_editar(pg_temp.lider(e), e, r, '{"lugar": "Sala 2"}')->>'lugar' <> 'Sala 2' THEN RAISE EXCEPTION 'FALLO P85: el líder no editó'; END IF;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P85: otro integrante editó'; END IF;
+  RAISE NOTICE 'OK P85: proc_reunion_editar';
+END $$;
+
+-- P86. proc_reunion_cancelar: deja de verse en el calendario y no se cancela dos veces (NX006).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); r uuid; ok boolean := false; BEGIN
+  r := pg_temp.reunion(e, pg_temp.lider(e));
+  PERFORM proc_reunion_cancelar(pg_temp.lider(e), e, r);
+  IF jsonb_array_length(proc_calendario_equipo(pg_temp.lider(e), e, now(), now() + interval '7 days')->'reuniones') <> 0 THEN
+    RAISE EXCEPTION 'FALLO P86: sigue en el calendario';
+  END IF;
+  BEGIN PERFORM proc_reunion_cancelar(pg_temp.lider(e), e, r);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P86: se canceló dos veces'; END IF;
+  RAISE NOTICE 'OK P86: proc_reunion_cancelar';
+END $$;
+
+-- P87. proc_reunion_responder: sí/no/quizá; otra respuesta no (NX010) ni el invitado (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r uuid; d jsonb; ok int := 0; BEGIN
+  r := pg_temp.reunion(e, pg_temp.lider(e));
+  d := proc_reunion_responder(pg_temp.integrante(e, 1), e, r, 'quiza');
+  IF d->>'mi_respuesta' <> 'quiza' OR (d->'asistencia'->>'quiza')::int <> 1 THEN RAISE EXCEPTION 'FALLO P87: %', d; END IF;
+  BEGIN PERFORM proc_reunion_responder(pg_temp.integrante(e, 1), e, r, 'tal_vez');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_reunion_responder(pg_temp.invitado(e), e, r, 'si');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P87: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P87: proc_reunion_responder';
+END $$;
+
+-- P88. proc_actividad_listar: por tipo y por páginas; el invitado no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); d jsonb; ok boolean := false; BEGIN
+  PERFORM pg_temp.proponer(e, 'Una'); PERFORM pg_temp.proponer(e, 'Dos'); PERFORM pg_temp.reunion(e, pg_temp.lider(e));
+  d := proc_actividad_listar(pg_temp.integrante(e, 1), e, 'tarea', NULL, 1);
+  IF jsonb_array_length(d->'items') <> 1 OR NOT (d->>'hay_mas')::boolean OR d->'items'->0->>'tipo' <> 'tarea' THEN
+    RAISE EXCEPTION 'FALLO P88: %', d;
+  END IF;
+  IF jsonb_array_length(proc_actividad_listar(pg_temp.lider(e), e, 'reunion')->'items') <> 1 THEN RAISE EXCEPTION 'FALLO P88: reuniones'; END IF;
+  BEGIN PERFORM proc_actividad_listar(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P88: el invitado vio la actividad'; END IF;
+  RAISE NOTICE 'OK P88: proc_actividad_listar';
+END $$;
+
+-- P89. proc_notificacion_listar: solo las propias, con el total de no leídas.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); d jsonb; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e));
+  d := proc_notificacion_listar(pg_temp.integrante(e, 1));
+  IF (d->>'no_leidas')::int <> 1 OR jsonb_array_length(d->'items') <> 1 OR d->'items'->0->>'equipo' <> 'Equipo de prueba' THEN
+    RAISE EXCEPTION 'FALLO P89: %', d;
+  END IF;
+  IF jsonb_array_length(proc_notificacion_listar(pg_temp.lider(e))->'items') <> 0 THEN RAISE EXCEPTION 'FALLO P89: avisó a quien la creó'; END IF;
+  RAISE NOTICE 'OK P89: proc_notificacion_listar';
+END $$;
+
+-- P90. proc_notificacion_marcar: una o todas; la de otra persona no (NX006).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); n uuid; ok boolean := false; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e)); PERFORM pg_temp.reunion(e, pg_temp.lider(e));
+  n := (proc_notificacion_listar(pg_temp.integrante(e, 1))->'items'->0->>'id')::uuid;
+  BEGIN PERFORM proc_notificacion_marcar(pg_temp.integrante(e, 2), n);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF (proc_notificacion_marcar(pg_temp.integrante(e, 1), n)->>'no_leidas')::int <> 1 THEN RAISE EXCEPTION 'FALLO P90: una'; END IF;
+  IF (proc_notificacion_marcar(pg_temp.integrante(e, 1))->>'no_leidas')::int <> 0 THEN RAISE EXCEPTION 'FALLO P90: todas'; END IF;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P90: marcó una ajena'; END IF;
+  RAISE NOTICE 'OK P90: proc_notificacion_marcar';
+END $$;
+
+-- P91. proc_reporte_equipo: estados, cumplimiento y personas; el invitado no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); t uuid; d jsonb; ok boolean := false; BEGIN
+  t := pg_temp.aceptada(e, 1, 'Hecha');
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(e), e, t, NULL, 'habilitada');
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(e), e, t, NULL, 'en_curso');
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(e), e, t, NULL, 'completada');
+  PERFORM pg_temp.proponer(e, 'Abierta');
+  d := proc_reporte_equipo(pg_temp.integrante(e, 2), e);
+  IF (d->'por_estado'->>'completada')::int <> 1 OR (d->'por_estado'->>'propuesta')::int <> 1 OR (d->>'a_tiempo')::int <> 1
+     OR (SELECT (x->>'completadas')::int FROM jsonb_array_elements(d->'por_persona') x WHERE (x->>'usuario_id')::uuid = pg_temp.integrante(e, 1)) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P91: %', d;
+  END IF;
+  BEGIN PERFORM proc_reporte_equipo(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P91: el invitado vio el reporte'; END IF;
+  RAISE NOTICE 'OK P91: proc_reporte_equipo';
+END $$;
+
+-- P92. proc_reporte_exportar: el líder exporta todo; un integrante solo lo suyo (NX005 si pide todo).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); ok boolean := false; BEGIN
+  PERFORM pg_temp.aceptada(e, 1, 'De uno'); PERFORM pg_temp.aceptada(e, 2, 'De otro');
+  IF jsonb_array_length(proc_reporte_exportar(pg_temp.lider(e), e, false)) <> 2 THEN RAISE EXCEPTION 'FALLO P92: líder'; END IF;
+  IF jsonb_array_length(proc_reporte_exportar(pg_temp.integrante(e, 1), e, true)) <> 1 THEN RAISE EXCEPTION 'FALLO P92: propias'; END IF;
+  BEGIN PERFORM proc_reporte_exportar(pg_temp.integrante(e, 1), e, false);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P92: el integrante exportó todo'; END IF;
+  RAISE NOTICE 'OK P92: proc_reporte_exportar';
+END $$;
+
+-- P93. proc_plantilla_crear: la líder, con 1 a 30 elementos (NX010); el integrante no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); d jsonb; ok int := 0; BEGIN
+  d := proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Arranque", "tipo": "proyecto", "elementos": ["Repositorio", "CI"]}');
+  IF d->'elementos' <> '["Repositorio", "CI"]'::jsonb THEN RAISE EXCEPTION 'FALLO P93: %', d; END IF;
+  BEGIN PERFORM proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Vacía", "tipo": "sprint", "elementos": []}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Rara", "tipo": "otra", "elementos": ["x"]}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_plantilla_crear(pg_temp.integrante(e, 1), e, '{"nombre": "Mía", "tipo": "retro", "elementos": ["x"]}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P93: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P93: proc_plantilla_crear';
+END $$;
+
+-- P94. proc_plantilla_listar: el equipo las ve; el invitado no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); ok boolean := false; BEGIN
+  PERFORM proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Retro rápida", "tipo": "retro", "elementos": ["¿Qué repetimos?"]}');
+  IF jsonb_array_length(proc_plantilla_listar(pg_temp.integrante(e, 1), e)) <> 1 THEN RAISE EXCEPTION 'FALLO P94'; END IF;
+  BEGIN PERFORM proc_plantilla_listar(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P94: el invitado vio las plantillas'; END IF;
+  RAISE NOTICE 'OK P94: proc_plantilla_listar';
+END $$;
+
+-- P95. proc_plantilla_usar: una de proyecto propone sus elementos como tareas en votación; una
+--      guía no crea tareas (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); p uuid; g uuid; ok boolean := false; BEGIN
+  p := (proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Arranque", "tipo": "proyecto", "elementos": ["Repositorio", "CI"]}')->>'id')::uuid;
+  g := (proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Guía", "tipo": "sprint", "elementos": ["Revisar capacidad"]}')->>'id')::uuid;
+  IF (proc_plantilla_usar(pg_temp.lider(e), e, p)->>'creadas')::int <> 2 THEN RAISE EXCEPTION 'FALLO P95: no propuso'; END IF;
+  IF (SELECT count(*) FROM tareas WHERE equipo_id = e AND estado = 'propuesta') <> 2 THEN RAISE EXCEPTION 'FALLO P95: no están en votación'; END IF;
+  BEGIN PERFORM proc_plantilla_usar(pg_temp.lider(e), e, g);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P95: una guía creó tareas'; END IF;
+  RAISE NOTICE 'OK P95: proc_plantilla_usar';
+END $$;
+
+-- P96. proc_plantilla_eliminar: la líder; dos veces no (NX006) y el integrante tampoco (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); p uuid; ok int := 0; BEGIN
+  p := (proc_plantilla_crear(pg_temp.lider(e), e, '{"nombre": "Borrar", "tipo": "retro", "elementos": ["x"]}')->>'id')::uuid;
+  BEGIN PERFORM proc_plantilla_eliminar(pg_temp.integrante(e, 1), e, p);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_plantilla_eliminar(pg_temp.lider(e), e, p);
+  BEGIN PERFORM proc_plantilla_eliminar(pg_temp.lider(e), e, p);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P96: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P96: proc_plantilla_eliminar';
+END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Archivos (0012, Fase 3.4)
+-- ---------------------------------------------------------------------------------------------
+
+CREATE FUNCTION pg_temp.archivo(p_equipo uuid, p_autor uuid, p_tarea uuid DEFAULT NULL) RETURNS uuid AS $$
+  SELECT (proc_archivo_subir(p_autor, p_equipo, 'notas.txt', 'text/plain', convert_to('Hola, equipo', 'UTF8'), p_tarea)->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P97. proc_archivo_subir: guarda metadatos, contenido y huella; adjunto a una tarea queda en su
+--      historial. Tipo no permitido (NX010), más de 5 MB (NX010), tarea ajena (NX006) e invitado (NX005), no.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); otro uuid := pg_temp.equipo_con(1); t uuid; a uuid; ok int := 0; BEGIN
+  t := pg_temp.aceptada(e, 1, 'Con adjunto');
+  a := pg_temp.archivo(e, pg_temp.integrante(e, 1), t);
+  IF (SELECT tamano_bytes FROM archivos WHERE id = a) <> 12 OR (SELECT tipo::text FROM archivos WHERE id = a) <> 'doc'
+     OR NOT EXISTS (SELECT 1 FROM archivo_contenidos WHERE archivo_id = a)
+     OR NOT EXISTS (SELECT 1 FROM actividad WHERE objeto_id = t AND accion = 'archivo_adjuntado') THEN
+    RAISE EXCEPTION 'FALLO P97: no se guardó bien';
+  END IF;
+  BEGIN PERFORM proc_archivo_subir(pg_temp.lider(e), e, 'x.svg', 'image/svg+xml', '\x3c73', NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_archivo_subir(pg_temp.lider(e), e, 'grande.pdf', 'application/pdf', decode(repeat('00', 5242881), 'hex'), NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.archivo(e, pg_temp.lider(e), pg_temp.aceptada(otro, 1, 'Ajena'));
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.archivo(e, pg_temp.invitado(e));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P97: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P97: proc_archivo_subir (tipo y tamaño permitidos)';
+END $$;
+
+-- P98. proc_archivo_listar: del equipo o de una tarea; el invitado no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); t uuid; ok boolean := false; BEGIN
+  t := pg_temp.aceptada(e, 1, 'Con adjunto');
+  PERFORM pg_temp.archivo(e, pg_temp.lider(e)); PERFORM pg_temp.archivo(e, pg_temp.lider(e), t);
+  IF jsonb_array_length(proc_archivo_listar(pg_temp.integrante(e, 1), e)) <> 2
+     OR jsonb_array_length(proc_archivo_listar(pg_temp.integrante(e, 1), e, t)) <> 1 THEN RAISE EXCEPTION 'FALLO P98'; END IF;
+  BEGIN PERFORM proc_archivo_listar(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P98: el invitado vio los archivos'; END IF;
+  RAISE NOTICE 'OK P98: proc_archivo_listar';
+END $$;
+
+-- P99. proc_archivo_descargar: devuelve el mismo contenido; el de otro equipo no (NX006).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); otro uuid := pg_temp.equipo_con(1); a uuid; d jsonb; ok boolean := false; BEGIN
+  a := pg_temp.archivo(e, pg_temp.lider(e));
+  d := proc_archivo_descargar(pg_temp.integrante(e, 1), e, a);
+  IF convert_from(decode(d->>'contenido', 'base64'), 'UTF8') <> 'Hola, equipo' OR d->>'mime' <> 'text/plain' THEN RAISE EXCEPTION 'FALLO P99: %', d; END IF;
+  BEGIN PERFORM proc_archivo_descargar(pg_temp.lider(otro), otro, a);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P99: otro equipo lo descargó'; END IF;
+  RAISE NOTICE 'OK P99: proc_archivo_descargar';
+END $$;
+
+-- P100. proc_archivo_eliminar: quien lo subió o la líder (se borra el contenido); otro integrante no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid; ok int := 0; BEGIN
+  a := pg_temp.archivo(e, pg_temp.integrante(e, 1));
+  BEGIN PERFORM proc_archivo_eliminar(pg_temp.integrante(e, 2), e, a);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_archivo_eliminar(pg_temp.integrante(e, 1), e, a);
+  IF EXISTS (SELECT 1 FROM archivo_contenidos WHERE archivo_id = a) OR jsonb_array_length(proc_archivo_listar(pg_temp.lider(e), e)) <> 0 THEN
+    RAISE EXCEPTION 'FALLO P100: sigue ahí';
+  END IF;
+  BEGIN PERFORM proc_archivo_descargar(pg_temp.lider(e), e, a);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P100: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P100: proc_archivo_eliminar';
+END $$;
