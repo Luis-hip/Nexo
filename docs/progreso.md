@@ -113,3 +113,28 @@
 - **CI en verde** con PostgreSQL 16 real en el PR #10 (`feat/fase-2-5` → `Dev_Luis`), commit `4b93540`: gitleaks sobre todo el historial, migraciones `0001`–`0008`, 11 pruebas SQL de integridad y 52 de procesos, control de `docs/08`, tipos al día, `typecheck`, lint, formato, 361 pruebas (170 `shared`, 104 API, 87 web) y build.
 - **gitleaks en la CI:** en la primera corrida marcó dos falsos positivos (los valores de ejemplo de las pruebas de seguridad y la frase «secretos: `09_Seguridad_y_Secretos.md`» de `docs/01`); se permitieron con expresiones concretas en `.gitleaks.toml`, sin excluir archivos. Ahora cada hallazgo aparece como anotación del PR (archivo, línea y regla; el valor va redactado).
 - **Criterio de terminado de la `07` (sección 7):** documentos 07–10 ✔; informe de secretos, redacción, arranque seguro y gitleaks ✔; votación probada (3 → 2, 4 → 3, líder e invitado no votan, la API no devuelve votos ajenos) ✔; todo acceso a datos por `proc_*` documentados, regla de lint y `nexo_app` sin tablas ✔; pruebas de la Fase 2 en verde sin cambiar expectativas (salvo las de triaje, a propósito) ✔; `progreso.md` y `decisiones.md` ✔; tag `fase-2-5` ✔. Solo falta abrir el PR a `dev` (ver arriba).
+
+## Fase 3 · Hill Chart, sprints y vistas secundarias
+
+**Estado:** en curso (rama `feat/fase-3`, desde `Dev_Luis` en `ce13db8`, tag `fase-2-5`).
+
+### Hecho
+
+- **3.1 Hill Chart arrastrable.** Las figuras se arrastran (ratón o dedo) o se mueven con las flechas (de 5 en 5, un solo guardado) y el avance se guarda con `proc_tarea_editar` (equipo) o `proc_personal_tarea_actualizar` (inicio personal). Mueve el líder cualquier tarea y el responsable las suyas con la asignación aceptada; las completadas no se mueven. El historial es el de cada tarea («Valeria actualizó el avance de T-01 (75 %)»). Pruebas: 4 del componente (`HillChart.test.tsx`). **Verificado** en la app: dos flechas seguidas suben T-01 de 65 a 75 % con un solo guardado y el historial lo registra.
+- **3.2 Color de miembros** en `packages/shared/src/color.ts` (la web lo reexporta), con prueba: ningún tono en las bandas del semáforo, los 8 colores se distinguen entre sí (ΔE > 0,08) y de las señales de su tema (ΔE > 0,06). Ver DEC-030: par más cercano y por qué la forma sigue indicando el estado (**para revisión**).
+
+### Siguiente sesión: por dónde seguir
+
+Trabajar en `feat/fase-3`. Reglas que ya están en marcha (DEC-025): **todo acceso a datos es un proceso `proc_*`** en una migración nueva (la siguiente es `0009_…`), que termina con `SELECT fn_conceder_procesos();`, se documenta en `docs/08` (la CI falla si no: `pnpm procesos:verificar`), tiene casos en `apps/api/db/tests/pruebas_procesos.sql` (hoy P1–P52; al agregar, subir el número en `apps/api/scripts/pruebas-procesos.ts` y en el texto del paso de `.github/workflows/ci.yml`) y se llama desde `apps/api/src/repositorios/` con `llamarProceso()` y un esquema Zod de `packages/shared/src/respuestas.ts`. ESLint impide SQL fuera de ahí.
+
+1. **3.3 Sprints** (las tablas ya existen en `0001`: `sprints`, `sprint_capacidad`, `sprint_instantaneas`, `retrospectivas`, `retro_notas`, `retro_votos`; un solo sprint activo por equipo, `NX003` al cuarto voto de retro): EQ-09 sprint activo, EQ-10 planear con capacidad (las tareas `aceptada` del backlog entran al sprint), EQ-11 cerrar con instantánea, EQ-13 historial, EQ-12 retrospectiva. Hoy la web muestra «Próximamente» en `sprints/*` (`apps/web/src/enrutador.tsx`).
+2. **3.4 Vistas secundarias**: calendario y reuniones (`reuniones`), reportes, actividad del equipo (`actividad`), archivos (`archivos`; subida con límite de tamaño y tipos), plantillas (`plantillas`), miembros (AD-04, AD-05), configuración del equipo (AD-06), notificaciones (NT-01).
+3. **3.5 Liderazgo**: transferencia (`transferencias_liderazgo`), elección de 72 h con 24 h de desempate (`elecciones`; `NX002`), salir, expulsar (al expulsar, volver a evaluar las votaciones abiertas: ver DEC-024) y archivar. Los plazos necesitan `pg-boss` (aún no instalado).
+4. **3.6 Ajustes** PF-01 a PF-09 y **3.7** pantallas faltantes «Fase 3» de `03` 9.2.
+
+**BD local sin Docker:** `node node_modules/@electric-sql/pglite-socket/dist/scripts/server.js --db=memory:// --port=5432 --extensions=citext --max-connections=10` desde una carpeta con `@electric-sql/pglite@0.5.16` y `@electric-sql/pglite-socket@0.2.19` instalados; después `pnpm db:reset`, `pnpm db:test`, `pnpm db:test:procesos` y `DATABASE_URL=postgres://nexo:nexo@localhost:5432/nexo pnpm test`.
+
+### Pendiente
+
+- [ ] 3.3 a 3.7 (ver arriba). Criterio de terminado en `03`, Fase 3.
+- [ ] Revisar DEC-030 (forma por miembro) y los pendientes de la Fase 2.5 (PR `Dev_Luis` → `dev`, secret scanning, V-10 y V-11).
