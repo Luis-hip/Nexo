@@ -27,7 +27,7 @@
 |---|---|---|---|
 | `NX001` | Equipo lleno | «Este equipo ya tiene 8 miembros activos.» | `0001` |
 | `NX002` | El líder saliente no vota (elección) | «El líder saliente no participa en la votación.» | `0001` |
-| `NX003` | Límite de votos de retrospectiva | «Ya usaste tus 3 votos.» | `0001` |
+| `NX003` | Límite de votos de retrospectiva (3 por persona) | «Ya usaste tus 3 votos en esta retrospectiva.» | `0001` (disparador), `0009` (`proc_retro_votar`) |
 | `NX004` | Voto de propuesta no permitido (vota el líder o un invitado, o la tarea no está en votación) | «Solo los integrantes votan las propuestas; el líder propone.» | `0003` |
 | `NX005` | El actor no tiene permiso para la operación (no es el líder, invitado caducado…) | El mensaje del proceso, en español | `0003` |
 | `NX006` | No encontrado: el equipo o la tarea no existen **para ese actor** (DEC-014, DEC-018) | «No encontramos ese equipo.» / «No encontramos esa tarea.» | `0003` |
@@ -38,7 +38,7 @@
 | `NX011` | Ya no disponible: invitación caducada, usada o revocada | «Esta invitación caducó. Pide una nueva al líder del equipo.» y variantes | `0005` |
 | `NX012` | Conflicto que no es de versión: ya es miembro, o el tablero cambió mientras se movía una tarjeta | El mensaje del proceso | `0005` |
 
-**Forma de un error de proceso.** `SQLSTATE` (la clase del error) + `MESSAGE` (texto en español para el usuario) + `HINT` (código de la API, p. ej. `tarea_no_encontrada`) + `DETAIL` opcional en JSON (p. ej. `{"version_actual": 5}`). La API los traduce en un solo lugar (`repositorios/procesos.ts`): `NX004`/`NX005`/`NX009` → 403, `NX006` → 404, `NX007` → 422, `NX001`/`NX008`/`NX012` → 409, `NX010` → 400, `NX011` → 410. Para `NX001` (equipo lleno) la API arma el mensaje con `mensajeEquipoLleno()` de `packages/shared` a partir de `max_miembros`, que viaja en el detalle. Los códigos nuevos se agregan aquí al crearlos.
+**Forma de un error de proceso.** `SQLSTATE` (la clase del error) + `MESSAGE` (texto en español para el usuario) + `HINT` (código de la API, p. ej. `tarea_no_encontrada`) + `DETAIL` opcional en JSON (p. ej. `{"version_actual": 5}`). La API los traduce en un solo lugar (`repositorios/procesos.ts`): `NX004`/`NX005`/`NX009` → 403, `NX006` → 404, `NX007` → 422, `NX001`/`NX003`/`NX008`/`NX012` → 409, `NX010` → 400, `NX011` → 410. Para `NX001` (equipo lleno) la API arma el mensaje con `mensajeEquipoLleno()` de `packages/shared` a partir de `max_miembros`, que viaja en el detalle. Los códigos nuevos se agregan aquí al crearlos.
 
 ## 4. Índice de procesos
 
@@ -67,8 +67,8 @@
 | `proc_invitacion_revocar` | Invitaciones | `0005_procesos_equipos.sql` | Vigente |
 | `proc_invitacion_ver` | Invitaciones (lectura) | `0005_procesos_equipos.sql` | Vigente |
 | `proc_invitacion_aceptar` | Invitaciones | `0005_procesos_equipos.sql` | Vigente |
-| `proc_tarea_listar` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` | Vigente |
-| `proc_tarea_conteos` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` | Vigente |
+| `proc_tarea_listar` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` (cambia en `0009`) | Vigente |
+| `proc_tarea_conteos` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` (cambia en `0009`) | Vigente |
 | `proc_tarea_obtener` | Tareas de equipo (lectura) | `0006_procesos_tareas_equipo.sql` | Vigente |
 | `proc_tarea_editar` | Tareas de equipo | `0006_procesos_tareas_equipo.sql` | Vigente |
 | `proc_tarea_eliminar` | Tareas de equipo | `0006_procesos_tareas_equipo.sql` | Vigente |
@@ -93,10 +93,26 @@
 | `proc_personal_comentario_crear` | Espacio personal · comentarios | `0007_procesos_tareas_personales.sql` | Vigente |
 | `proc_personal_comentario_eliminar` | Espacio personal · comentarios | `0007_procesos_tareas_personales.sql` | Vigente |
 | `proc_personal_etiquetas` | Espacio personal (lectura) | `0007_procesos_tareas_personales.sql` | Vigente |
+| `proc_sprint_listar` | Sprints (lectura) | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_obtener` | Sprints (lectura) | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_disponibles` | Sprints (lectura) | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_planear` | Sprints | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_iniciar` | Sprints | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_cerrar` | Sprints | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_eliminar` | Sprints | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_iniciar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_obtener` | Retrospectiva (lectura) | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_nota_agregar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_nota_eliminar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_votar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_avanzar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
+| `proc_retro_nota_a_tarea` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
 
 **Auxiliares (`fn_*`, no las llama la aplicación)** creadas en `0003`: índice fraccionario (`fn_orden_entre`, `fn_orden_al_final` y sus partes), `fn_votacion_resultado`, `fn_votacion_resumen`, `fn_integrantes_activos`, `fn_registrar_evento`, `fn_membresia_actor`, `fn_exigir_lider`, `fn_exigir_equipo_activo`, `fn_exigir_responsable`, `fn_exigir_version`, `fn_bloquear_tarea`, `fn_fijar_etiquetas`, `fn_tarea_insertar_propuesta`, y los disparadores `fn_voto_propuesta_valido` y `fn_membresia_descarta_votos`.
 
 **Auxiliares de `0004` a `0007`:** `fn_iso` (fechas como `Date.toISOString()`), formas JSON (`fn_usuario_json`, `fn_preferencias_json`, `fn_miembros_json`, `fn_invitacion_json`, `fn_persona_json`, `fn_tarea_equipo_json`, `fn_tarea_equipo_detalle`, `fn_comentario_equipo_json`, `fn_tarea_personal_json`, `fn_tarea_personal_detalle`, `fn_comentario_personal_json`), invitaciones (`fn_codigo_invitacion`, `fn_invitacion_vigente`), tareas (`fn_exigir_tarea_visible`, `fn_bloquear_tarea_visible`, `fn_columna_ordenar`, `fn_transicion_permitida`, `fn_exigir_trabajo_en_tarea`, `fn_tarea_aplicar_estado`, `fn_exigir_gestion_subtareas`, `fn_nombre_estado`), espacio personal (`fn_tarea_propia`, `fn_fijar_etiquetas_personales`, `fn_actividad_personal`) y la tabla `transiciones_estado` (copia de `estados.ts`). La `0008` agrega `fn_conceder_procesos`.
+
+**Auxiliares de `0009` (sprints y retrospectiva):** permisos (`fn_exigir_ve_sprints`, `fn_exigir_gestion_sprints`, que además bloquea la fila del equipo, y `fn_exigir_moderar_retro`), fechas (`fn_hoy_equipo`, «hoy» en la zona horaria del equipo), sprints (`fn_sprint_bloquear`, `fn_sprint_conteo`, `fn_sprint_instantanea`, `fn_sprint_json`, `fn_sprint_serie`, `fn_sprint_capacidad_json`, `fn_sprint_detalle`, `fn_estado_planeable`, `fn_tarea_de_sprint_cerrado`) y retrospectiva (`fn_retro_asegurar`, `fn_retro_detalle`, `fn_retro_nota_bloquear`). La `0009` también cambia `fn_registrar_evento`: los eventos `sprint.*` quedan en `actividad` con tipo `sprint` (antes, todo lo que no era tarea era `equipo`).
 
 ## 4b. Roles de la BD
 
@@ -460,14 +476,14 @@
 - **Propósito:** Tareas del equipo según la vista.
 - **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_vista text` · `tablero` | `backlog` | `votacion` | `mias` | `todas`.
 - **Retorno:** `jsonb` arreglo de `TareaEquipo`, por orden de columna (índice fraccionario) y código. En `votacion` y `mias` cada propuesta lleva `votacion` (resumen, V-8).
-- **Reglas y validaciones:** no incluye archivadas; `tablero` = aceptada a completada; `votacion` = propuestas abiertas y las que no prosperaron; `mias` = propuestas abiertas y las que el actor ya votó (FALT-08); un **invitado** solo recibe las compartidas con su membresía y no tiene `backlog`, `votacion` ni `mias`.
+- **Reglas y validaciones:** no incluye archivadas; `tablero` = aceptada a completada, sin las tareas de sprints cerrados; `votacion` = propuestas abiertas y las que no prosperaron; `mias` = propuestas abiertas y las que el actor ya votó (FALT-08); un **invitado** solo recibe las compartidas con su membresía y no tiene `backlog`, `votacion` ni `mias`.
 - **Errores:** `NX005` · invitado en una vista que no le corresponde. `NX010` · vista inválida. `NX006` · el actor no pertenece al equipo (404).
 - **Tablas que toca:** lectura `tareas`, `v_tareas_semaforo`, `tarea_compartida`, `tarea_votos`, `tarea_etiquetas`, `etiquetas`, `subtareas`, `comentarios_tarea`, `usuarios`, `membresias`.
 - **Eventos que genera:** ninguno (lectura).
 - **Lo llama:** `repositorios/tareasEquipo.ts` → `listar()`; `GET /equipos/:equipoId/tareas?vista=`.
-- **Pruebas:** `pruebas_procesos.sql` P32; `tareasEquipo.test.ts` «ver tareas».
+- **Pruebas:** `pruebas_procesos.sql` P32 y P61; `tareasEquipo.test.ts` «ver tareas».
 - **Ejemplo de llamada:** `select proc_tarea_listar($1, $2, 'tablero')`
-- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`. 2026-11-17 · `tablero` ya no incluye las tareas de un sprint cerrado (siguen en `todas` y en el detalle del sprint) · `0009`.
 
 ### proc_tarea_conteos
 - **Migración:** `0006_procesos_tareas_equipo.sql`
@@ -479,9 +495,9 @@
 - **Tablas que toca:** lectura `tareas`, `membresias`.
 - **Eventos que genera:** ninguno (lectura).
 - **Lo llama:** `repositorios/tareasEquipo.ts` → `conteos()`; `GET /equipos/:equipoId/tareas/conteos`.
-- **Pruebas:** `pruebas_procesos.sql` P33; `tareasEquipo.test.ts`.
+- **Pruebas:** `pruebas_procesos.sql` P33 y P61; `tareasEquipo.test.ts`.
 - **Ejemplo de llamada:** `select proc_tarea_conteos($1, $2)`
-- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`.
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0006`. 2026-11-17 · `tablero` ya no cuenta las tareas de un sprint cerrado · `0009`.
 
 ### proc_tarea_obtener
 - **Migración:** `0006_procesos_tareas_equipo.sql`
@@ -818,3 +834,199 @@
 - **Pruebas:** `pruebas_procesos.sql` P50; `personal.test.ts`.
 - **Ejemplo de llamada:** `select proc_personal_etiquetas($1)`
 - **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0007`.
+
+### proc_sprint_listar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Todos los sprints del equipo (planificados, activo e historial, EQ-13).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` arreglo de `SprintResumen` (`id`, `numero`, `objetivo`, `inicio`, `fin`, `estado`, `cerrado_en`, `total`, `completadas`, `retro`), del más reciente al más antiguo.
+- **Reglas y validaciones:** los invitados no ven los sprints. En un sprint cerrado, `total` y `completadas` salen de su última instantánea (la de cierre); en los demás se cuentan en vivo.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `sprints`, `sprint_instantaneas`, `tareas`, `retrospectivas`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/sprints.ts` → `listarSprints()`; `GET /equipos/:equipoId/sprints`.
+- **Pruebas:** `pruebas_procesos.sql` P57; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_listar($1, $2)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_sprint_obtener
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Detalle de un sprint; sin `p_sprint_id`, el sprint activo (EQ-09).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint (opcional; `NULL` = el activo).
+- **Retorno:** `jsonb` `SprintDetalle` (el resumen más `capacidad[]` por miembro activo con `horas` y `tareas`, `serie[]` del burndown con `dia`, `total` y `completadas`, y `tareas[]` como `TareaEquipo`), o `null` si se pidió el activo y no hay.
+- **Reglas y validaciones:** los invitados no ven los sprints. Mientras el sprint está activo, el último punto de `serie` es el de hoy calculado en vivo (no espera a la instantánea nocturna). «Hoy» es la fecha en la zona horaria del equipo.
+- **Errores:** `NX005` · un invitado. `NX006` · el sprint no es del equipo, o el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `sprints`, `sprint_capacidad`, `sprint_instantaneas`, `tareas`, `v_tareas_semaforo`, `retrospectivas`, `membresias`, `usuarios`, `equipos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/sprints.ts` → `obtenerSprint()`; `GET /equipos/:equipoId/sprints/activo` y `GET /equipos/:equipoId/sprints/:sprintId`.
+- **Pruebas:** `pruebas_procesos.sql` P56; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_obtener($1, $2, null)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_sprint_disponibles
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Tareas que pueden entrar a un sprint al planearlo (EQ-10).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` arreglo de `TareaEquipo`, por código.
+- **Reglas y validaciones:** tareas del equipo sin sprint, no archivadas, en `backlog`, `aceptada`, `habilitada`, `en_curso` o `atascada` (las aceptadas por votación que no se han terminado; DEC-031). Las propuestas, rechazadas, retiradas y completadas no entran. Los invitados no la consultan.
+- **Errores:** `NX005` · un invitado. `NX006` · el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `tareas`, `v_tareas_semaforo`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/sprints.ts` → `disponibles()`; `GET /equipos/:equipoId/sprints/disponibles`.
+- **Pruebas:** `pruebas_procesos.sql` P58; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_disponibles($1, $2)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_sprint_planear
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Crea un sprint planificado o cambia el plan de uno planificado: objetivo, fechas, capacidad y tareas (EQ-10).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · `NULL` para crear; el sprint planificado para cambiarlo. `p_datos jsonb` · `{ objetivo?, inicio?, fin?, capacidad?: [{ usuario_id, horas }], tarea_ids?: uuid[] }`; solo lo que cambia.
+- **Retorno:** `jsonb` `SprintDetalle`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo. Número consecutivo por equipo. Fechas por defecto: empieza hoy o el día después del último sprint (lo que sea más tarde) y dura `duracion_sprint_semanas` del equipo. `fin > inicio` y las fechas no se cruzan con las de otro sprint planificado o activo. `capacidad` y `tarea_ids` **reemplazan** la lista completa: las horas van de 0 a 300 y solo para miembros activos (no invitados); las tareas deben estar disponibles (ver `proc_sprint_disponibles`) o ya ser de este sprint. Las que salen del plan quedan sin sprint; las del backlog que entran pasan a `aceptada` (al final de la columna). Solo se cambia un sprint **planificado**.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint ya no está planificado. `NX010` · fechas inválidas o cruzadas, objetivo de más de 300 caracteres, horas fuera de rango o capacidad para quien no es miembro. `NX012` · alguna tarea ya no está disponible (está en otro sprint, se completó o se archivó).
+- **Tablas que toca:** lectura `equipos`, `membresias`; escritura `sprints`, `sprint_capacidad`, `tareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `sprint.planeado` o `sprint.plan_actualizado` («Valeria planeó el Sprint 4 (3 tareas)») y un `tarea.sprint_asignado` por cada tarea que entra («Valeria puso T-09 «…» en el Sprint 4», en el historial de la tarea).
+- **Lo llama:** `repositorios/sprints.ts` → `planear()`; `POST /equipos/:equipoId/sprints` y `PATCH /equipos/:equipoId/sprints/:sprintId`.
+- **Pruebas:** `pruebas_procesos.sql` P53 y P54; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_planear($1, $2, null, '{"objetivo": "Chat", "tarea_ids": ["…"]}')`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_sprint_iniciar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Inicia un sprint planificado (EQ-09).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint.
+- **Retorno:** `jsonb` `SprintDetalle`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo; el sprint debe estar planificado y no puede haber otro activo (además lo garantiza el índice `ux_un_sprint_activo`). Guarda la instantánea del día de inicio. Las fechas no cambian.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint ya no está planificado. `NX012` · hay otro sprint activo.
+- **Tablas que toca:** escritura `sprints`, `sprint_instantaneas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `sprint.iniciado` («Valeria inició el Sprint 4»).
+- **Lo llama:** `repositorios/sprints.ts` → `iniciar()`; `POST /equipos/:equipoId/sprints/:sprintId/iniciar`.
+- **Pruebas:** `pruebas_procesos.sql` P55; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_iniciar($1, $2, $3)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_sprint_cerrar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Cierra el sprint activo con su instantánea final y crea la retrospectiva (EQ-11).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint. `p_pendientes text` · `liberar` (por defecto: las tareas sin terminar quedan sin sprint) o `siguiente` (pasan al sprint planificado más próximo).
+- **Retorno:** `jsonb` `SprintDetalle` del sprint cerrado (sus `tareas` son las completadas; `total` y `completadas`, los de la instantánea final).
+- **Reglas y validaciones:** solo el líder, con el equipo activo, y solo el sprint activo. La instantánea final se guarda **antes** de mover las pendientes, así cuenta todo lo que tuvo el sprint. Las completadas se quedan en el sprint (salen del tablero, `proc_tarea_listar`). Las pendientes conservan su estado. Crea la retrospectiva si no existe.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint no está activo, o se pidió `siguiente` con pendientes y no hay un sprint planificado. `NX010` · destino inválido.
+- **Tablas que toca:** escritura `sprints`, `sprint_instantaneas`, `tareas`, `retrospectivas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `sprint.cerrado` con `{ total, completadas, pendientes, destino }` («Valeria cerró el Sprint 3: 5 de 7 tareas completadas»).
+- **Lo llama:** `repositorios/sprints.ts` → `cerrar()`; `POST /equipos/:equipoId/sprints/:sprintId/cerrar`.
+- **Pruebas:** `pruebas_procesos.sql` P59, P60 y P61; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_cerrar($1, $2, $3, 'siguiente')`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_sprint_eliminar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Borra un sprint planificado.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint.
+- **Retorno:** `jsonb` `{ eliminado: true }`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo, y solo un sprint planificado. Sus tareas quedan sin sprint (vuelven a estar disponibles); su capacidad se borra.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint ya empezó o se cerró.
+- **Tablas que toca:** escritura `sprints`, `sprint_capacidad`, `tareas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `sprint.eliminado` («Valeria borró el plan del Sprint 4»).
+- **Lo llama:** `repositorios/sprints.ts` → `eliminar()`; `DELETE /equipos/:equipoId/sprints/:sprintId`.
+- **Pruebas:** `pruebas_procesos.sql` P62; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_sprint_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_iniciar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Abre la retrospectiva de un sprint cerrado que aún no tiene (al cerrar un sprint se crea sola).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint.
+- **Retorno:** `jsonb` `Retrospectiva` (ver `proc_retro_obtener`).
+- **Reglas y validaciones:** solo el líder (modera la retrospectiva), con el equipo activo; el sprint debe estar cerrado. Una retrospectiva por sprint (`retrospectivas.sprint_id UNIQUE`): repetir devuelve la misma.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint no está cerrado.
+- **Tablas que toca:** lectura `sprints`, `retro_notas`, `retro_votos`; escritura `retrospectivas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `sprint.retro_iniciada` (solo si la crea).
+- **Lo llama:** `repositorios/sprints.ts` → `iniciarRetro()`; `POST /equipos/:equipoId/sprints/:sprintId/retro`.
+- **Pruebas:** `pruebas_procesos.sql` P63; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_iniciar($1, $2, $3)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_obtener
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Retrospectiva de un sprint con sus notas (EQ-12).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint.
+- **Retorno:** `jsonb` `Retrospectiva` (`id`, `sprint_id`, `sprint_numero`, `votacion_cerrada`, `cerrada`, `votos_por_persona` = 3, `mis_votos_usados`, `notas[]` con `columna`, `texto`, `anonima`, `mia`, `autor` (nulo si es anónima), `grupo`, `tarea_id`, `votos` y `voto_mio`), o `null` si el sprint aún no tiene retrospectiva.
+- **Reglas y validaciones:** los invitados no la ven. De los votos solo se devuelve el total por nota y si el actor votó; nunca quién votó.
+- **Errores:** `NX005` · un invitado. `NX006` · el sprint no es del equipo, o el actor no pertenece al equipo (404).
+- **Tablas que toca:** lectura `sprints`, `retrospectivas`, `retro_notas`, `retro_votos`, `usuarios`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/sprints.ts` → `obtenerRetro()`; `GET /equipos/:equipoId/sprints/:sprintId/retro`.
+- **Pruebas:** `pruebas_procesos.sql` P64; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_obtener($1, $2, $3)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_nota_agregar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Agrega una nota a la retrospectiva: Bien, Mejorar o Acciones.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint. `p_columna text` · `bien` | `mejorar` | `acciones`. `p_texto text` · 1 a 500 caracteres (sin espacios sobrantes). `p_anonima boolean` · si es anónima.
+- **Retorno:** `jsonb` `{ id }`.
+- **Reglas y validaciones:** líder e integrantes (participar en la retrospectiva), con el equipo activo, mientras la votación siga abierta. Una nota anónima **no guarda** quién la escribió (`autor_id` nulo).
+- **Errores:** `NX005` · un invitado. `NX009` · equipo archivado. `NX006` · el sprint no tiene retrospectiva. `NX007` · la votación o la retrospectiva ya se cerraron. `NX010` · texto vacío o largo, o columna inválida.
+- **Tablas que toca:** lectura `membresias`; escritura `retro_notas`.
+- **Eventos que genera:** **ninguno**, a propósito: un evento con su actor revelaría quién escribió una nota anónima (DEC-031).
+- **Lo llama:** `repositorios/sprints.ts` → `agregarNota()`; `POST /equipos/:equipoId/sprints/:sprintId/retro/notas`.
+- **Pruebas:** `pruebas_procesos.sql` P65; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_nota_agregar($1, $2, $3, 'mejorar', 'Revisar antes de cerrar', true)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_nota_eliminar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Elimina una nota de la retrospectiva.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_nota_id uuid` · nota.
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** su autora mientras la votación siga abierta, o el líder hasta que se cierre la retrospectiva. Una nota anónima solo la borra el líder (no se sabe quién la escribió). Con la nota se borran sus votos.
+- **Errores:** `NX005` · un invitado, o alguien que no es la autora ni el líder. `NX009` · equipo archivado. `NX006` · la nota no es de una retrospectiva del equipo. `NX007` · la retrospectiva ya se cerró.
+- **Tablas que toca:** lectura `retrospectivas`; escritura `retro_notas`, `retro_votos`.
+- **Eventos que genera:** ninguno (ver `proc_retro_nota_agregar`).
+- **Lo llama:** `repositorios/sprints.ts` → `eliminarNota()`; `DELETE /equipos/:equipoId/retro/notas/:notaId`.
+- **Pruebas:** `pruebas_procesos.sql` P67; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_nota_eliminar($1, $2, $3)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_votar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Pone o quita un punto de voto en una nota.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_nota_id uuid` · nota. `p_dar boolean` · `true` pone el voto, `false` lo quita.
+- **Retorno:** `jsonb` `{ nota_id, votos, voto_mio, mis_votos_usados }`.
+- **Reglas y validaciones:** líder e integrantes, con el equipo activo, mientras la votación siga abierta. **3 puntos por persona y retrospectiva**, a lo más uno por nota: el proceso responde `NX003` al cuarto y, aunque alguien se salte el proceso, el disparador `trg_retro_limite_votos` (0001) también lo impide. Quitar un voto que no existe no falla.
+- **Errores:** `NX003` · ya usó sus 3 votos («Ya usaste tus 3 votos en esta retrospectiva.»). `NX005` · un invitado. `NX009` · equipo archivado. `NX006` · la nota no es de una retrospectiva del equipo. `NX007` · la votación ya se cerró. `NX012` · ya votó esa nota.
+- **Tablas que toca:** lectura `retro_notas`, `retrospectivas`; escritura `retro_votos`.
+- **Eventos que genera:** ninguno: los votos de la retrospectiva son privados.
+- **Lo llama:** `repositorios/sprints.ts` → `votarNota()`; `POST /equipos/:equipoId/retro/notas/:notaId/voto`.
+- **Pruebas:** `pruebas_procesos.sql` P66; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_votar($1, $2, $3, true)`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_avanzar
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** El líder cierra la votación o la retrospectiva completa.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint. `p_fase text` · `votacion` (ya no se vota ni se agregan notas) | `cerrada` (también cierra la votación).
+- **Retorno:** `jsonb` `Retrospectiva`.
+- **Reglas y validaciones:** solo el líder, con el equipo activo. Las fases solo avanzan: no se reabre una votación ni una retrospectiva.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no tiene retrospectiva. `NX007` · esa fase ya se cerró. `NX010` · fase inválida.
+- **Tablas que toca:** escritura `retrospectivas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `sprint.retro_votacion_cerrada` o `sprint.retro_cerrada`.
+- **Lo llama:** `repositorios/sprints.ts` → `avanzarRetro()`; `POST /equipos/:equipoId/sprints/:sprintId/retro/avanzar`.
+- **Pruebas:** `pruebas_procesos.sql` P68; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_avanzar($1, $2, $3, 'votacion')`
+- **Historial:** 2026-11-17 · creación · `0009`.
+
+### proc_retro_nota_a_tarea
+- **Migración:** `0009_procesos_sprints.sql`
+- **Propósito:** Convierte una nota (normalmente una acción) en una propuesta de tarea.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_nota_id uuid` · nota.
+- **Retorno:** `jsonb` `{ id, codigo, estado }` de la tarea nueva.
+- **Reglas y validaciones:** solo el líder, con el equipo activo; también con la retrospectiva cerrada. La tarea nace como **propuesta** y va a votación (DEC-024; sin integrantes, aceptada); el título es el texto de la nota (recortado a 140 caracteres) y la descripción dice de qué retrospectiva viene. La nota guarda `tarea_id`; una nota se convierte una sola vez.
+- **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · la nota no es de una retrospectiva del equipo. `NX012` · la nota ya se convirtió.
+- **Tablas que toca:** escritura `tareas`, `retro_notas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.propuesta` («Valeria propuso T-12 «…» desde la retrospectiva del Sprint 3»).
+- **Lo llama:** `repositorios/sprints.ts` → `notaATarea()`; `POST /equipos/:equipoId/retro/notas/:notaId/tarea`.
+- **Pruebas:** `pruebas_procesos.sql` P69; `sprints.test.ts`.
+- **Ejemplo de llamada:** `select proc_retro_nota_a_tarea($1, $2, $3)`
+- **Historial:** 2026-11-17 · creación · `0009`.

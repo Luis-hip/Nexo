@@ -782,3 +782,360 @@ DO $$ DECLARE malos text; ok int := 0; BEGIN
   IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P52: % de 5 accesos directos rechazados', ok; END IF;
   RAISE NOTICE 'OK P52: nexo_app solo ejecuta procesos; no lee ni escribe tablas';
 END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Sprints y retrospectiva (0009, Fase 3.3)
+-- ---------------------------------------------------------------------------------------------
+
+-- Sprint planificado nuevo (fechas por defecto si `p_datos` no las trae).
+CREATE FUNCTION pg_temp.planear(p_equipo uuid, p_datos jsonb DEFAULT '{}') RETURNS uuid AS $$
+  SELECT (proc_sprint_planear(pg_temp.lider(p_equipo), p_equipo, NULL, p_datos)->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- La líder lleva la tarea de `aceptada` a `completada`.
+CREATE FUNCTION pg_temp.completar(p_equipo uuid, p_tarea uuid) RETURNS void AS $$
+BEGIN
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(p_equipo), p_equipo, p_tarea, NULL, 'habilitada');
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(p_equipo), p_equipo, p_tarea, NULL, 'en_curso');
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(p_equipo), p_equipo, p_tarea, NULL, 'completada');
+END $$ LANGUAGE plpgsql;
+
+-- Sprint vacío que se planeó, se inició y se cerró: ya tiene retrospectiva.
+CREATE FUNCTION pg_temp.sprint_con_retro(p_equipo uuid) RETURNS uuid AS $$
+DECLARE s uuid := pg_temp.planear(p_equipo);
+BEGIN
+  PERFORM proc_sprint_iniciar(pg_temp.lider(p_equipo), p_equipo, s);
+  PERFORM proc_sprint_cerrar(pg_temp.lider(p_equipo), p_equipo, s, 'liberar');
+  RETURN s;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.nota(
+  p_equipo uuid, p_sprint uuid, p_autor uuid, p_texto text DEFAULT 'Nota',
+  p_anonima boolean DEFAULT false, p_columna text DEFAULT 'bien'
+) RETURNS uuid AS $$
+  SELECT (proc_retro_nota_agregar(p_autor, p_equipo, p_sprint, p_columna, p_texto, p_anonima)->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P53. proc_sprint_planear crea el plan: fechas por defecto, capacidad y tareas (la del backlog
+--      pasa a aceptada). No planean el integrante ni el invitado; no se cruzan las fechas.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 0, 'A'); b uuid := pg_temp.aceptada(e, 0, 'B');
+  d jsonb; s uuid; ok int := 0; BEGIN
+  PERFORM proc_tarea_cambiar_estado(pg_temp.lider(e), e, b, NULL, 'backlog');
+  d := proc_sprint_planear(pg_temp.lider(e), e, NULL, jsonb_build_object(
+         'objetivo', 'Primer sprint', 'tarea_ids', jsonb_build_array(a, b),
+         'capacidad', jsonb_build_array(jsonb_build_object('usuario_id', pg_temp.integrante(e, 1), 'horas', 20))));
+  s := (d->>'id')::uuid;
+  IF d->>'estado' <> 'planificado' OR (d->>'numero')::int <> 1 OR (d->>'total')::int <> 2
+     OR (d->>'fin')::date - (d->>'inicio')::date <> 13 THEN RAISE EXCEPTION 'FALLO P53: %', d; END IF;
+  IF pg_temp.estado(b) <> 'aceptada' OR (SELECT sprint_id FROM tareas WHERE id = b) <> s THEN
+    RAISE EXCEPTION 'FALLO P53: la tarea del backlog no entró al sprint';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(d->'capacidad') c
+                  WHERE (c->>'usuario_id')::uuid = pg_temp.integrante(e, 1) AND (c->>'horas')::int = 20) THEN
+    RAISE EXCEPTION 'FALLO P53: capacidad %', d->'capacidad';
+  END IF;
+  BEGIN PERFORM proc_sprint_planear(pg_temp.integrante(e, 1), e, NULL, '{}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_sprint_planear(pg_temp.invitado(e), e, NULL, '{}');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_sprint_planear(pg_temp.lider(e), e, NULL, jsonb_build_object('inicio', d->>'inicio'));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_sprint_planear(pg_temp.lider(e), e, NULL, jsonb_build_object(
+          'capacidad', jsonb_build_array(jsonb_build_object('usuario_id', pg_temp.invitado(e), 'horas', 5))));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P53: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P53: proc_sprint_planear crea el plan (fechas, capacidad y tareas)';
+END $$;
+
+-- P54. proc_sprint_planear cambia el plan de un sprint planificado; no toma tareas de otro sprint
+--      (NX012) ni cambia un sprint que ya empezó (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 0, 'A'); b uuid := pg_temp.aceptada(e, 0, 'B');
+  s uuid; d jsonb; ok int := 0; BEGIN
+  s := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a, b)));
+  d := proc_sprint_planear(pg_temp.lider(e), e, s, jsonb_build_object('objetivo', 'Nuevo objetivo', 'tarea_ids', jsonb_build_array(a)));
+  IF d->>'objetivo' <> 'Nuevo objetivo' OR (d->>'total')::int <> 1 OR (SELECT sprint_id FROM tareas WHERE id = b) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P54: %', d;
+  END IF;
+  PERFORM pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(b)));
+  BEGIN PERFORM proc_sprint_planear(pg_temp.lider(e), e, s, jsonb_build_object('tarea_ids', jsonb_build_array(a, b)));
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  BEGIN PERFORM proc_sprint_planear(pg_temp.lider(e), e, s, '{"objetivo": "Tarde"}');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P54: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P54: proc_sprint_planear cambia el plan solo mientras está planificado';
+END $$;
+
+-- P55. proc_sprint_iniciar: la líder inicia (con la instantánea del día); no hay dos activos, ni
+--      con el proceso (NX012) ni a mano (ux_un_sprint_activo); el integrante no inicia.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e); s1 uuid; s2 uuid; d jsonb; ok int := 0; BEGIN
+  s1 := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a)));
+  s2 := pg_temp.planear(e);
+  BEGIN PERFORM proc_sprint_iniciar(pg_temp.integrante(e, 1), e, s1);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  d := proc_sprint_iniciar(pg_temp.lider(e), e, s1);
+  IF d->>'estado' <> 'activo' OR NOT EXISTS (SELECT 1 FROM sprint_instantaneas WHERE sprint_id = s1 AND total = 1) THEN
+    RAISE EXCEPTION 'FALLO P55: %', d;
+  END IF;
+  BEGIN PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s2);
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s1);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  BEGIN UPDATE sprints SET estado = 'activo' WHERE id = s2;
+  EXCEPTION WHEN unique_violation THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P55: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P55: proc_sprint_iniciar (un solo sprint activo por equipo)';
+END $$;
+
+-- P56. proc_sprint_obtener: sin id, el sprint activo (o null); con tareas, capacidad y burndown.
+--      El invitado no lo ve (NX005) y otro equipo no lo encuentra (NX006).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); otro uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e);
+  s uuid; d jsonb; ok int := 0; BEGIN
+  IF proc_sprint_obtener(pg_temp.lider(e), e) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P56: sin sprint activo debía ser null'; END IF;
+  s := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a)));
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  d := proc_sprint_obtener(pg_temp.integrante(e, 1), e);
+  IF (d->>'id')::uuid <> s OR jsonb_array_length(d->'tareas') <> 1 OR jsonb_array_length(d->'serie') <> 1
+     OR jsonb_array_length(d->'capacidad') <> 3 THEN RAISE EXCEPTION 'FALLO P56: %', d; END IF;
+  BEGIN PERFORM proc_sprint_obtener(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_sprint_obtener(pg_temp.lider(otro), otro, s);
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P56: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P56: proc_sprint_obtener';
+END $$;
+
+-- P57. proc_sprint_listar: todos los sprints, el más reciente primero; el invitado no (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); l jsonb; ok boolean := false; BEGIN
+  PERFORM pg_temp.planear(e);
+  PERFORM pg_temp.planear(e);
+  l := proc_sprint_listar(pg_temp.integrante(e, 1), e);
+  IF jsonb_array_length(l) <> 2 OR (l->0->>'numero')::int <> 2 THEN RAISE EXCEPTION 'FALLO P57: %', l; END IF;
+  BEGIN PERFORM proc_sprint_listar(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P57: el invitado vio los sprints'; END IF;
+  RAISE NOTICE 'OK P57: proc_sprint_listar';
+END $$;
+
+-- P58. proc_sprint_disponibles: solo las tareas aceptadas sin sprint (ni propuestas ni planeadas).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 0, 'A'); b uuid := pg_temp.aceptada(e, 0, 'B');
+  l jsonb; ok boolean := false; BEGIN
+  PERFORM pg_temp.proponer(e, 'Sigue en votación');
+  PERFORM pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a)));
+  l := proc_sprint_disponibles(pg_temp.lider(e), e);
+  IF jsonb_array_length(l) <> 1 OR (l->0->>'id')::uuid <> b THEN RAISE EXCEPTION 'FALLO P58: %', l; END IF;
+  BEGIN PERFORM proc_sprint_disponibles(pg_temp.invitado(e), e);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P58: el invitado vio las tareas disponibles'; END IF;
+  RAISE NOTICE 'OK P58: proc_sprint_disponibles';
+END $$;
+
+-- P59. proc_sprint_cerrar con `liberar`: instantánea final, retrospectiva creada, las completadas
+--      se quedan y las pendientes quedan sin sprint. No cierra el integrante (NX005), ni un sprint
+--      que no está activo (NX007), ni manda pendientes a un sprint siguiente que no existe (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 0, 'Hecha'); b uuid := pg_temp.aceptada(e, 0, 'Pendiente');
+  s uuid; d jsonb; ok int := 0; BEGIN
+  s := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a, b)));
+  BEGIN PERFORM proc_sprint_cerrar(pg_temp.lider(e), e, s, 'liberar');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  PERFORM pg_temp.completar(e, a);
+  BEGIN PERFORM proc_sprint_cerrar(pg_temp.integrante(e, 1), e, s, 'liberar');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_sprint_cerrar(pg_temp.lider(e), e, s, 'siguiente');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  d := proc_sprint_cerrar(pg_temp.lider(e), e, s, 'liberar');
+  IF d->>'estado' <> 'cerrado' OR (d->>'total')::int <> 2 OR (d->>'completadas')::int <> 1 OR d->'retro'->>'id' IS NULL THEN
+    RAISE EXCEPTION 'FALLO P59: %', d;
+  END IF;
+  IF (SELECT sprint_id FROM tareas WHERE id = b) IS NOT NULL OR (SELECT sprint_id FROM tareas WHERE id = a) <> s THEN
+    RAISE EXCEPTION 'FALLO P59: las tareas no quedaron donde debían';
+  END IF;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P59: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P59: proc_sprint_cerrar (instantánea, retrospectiva y pendientes liberadas)';
+END $$;
+
+-- P60. proc_sprint_cerrar con `siguiente`: las pendientes pasan al sprint planificado; la
+--      instantánea final las contó.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); b uuid := pg_temp.aceptada(e); s1 uuid; s2 uuid; BEGIN
+  s1 := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(b)));
+  s2 := pg_temp.planear(e);
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s1);
+  PERFORM proc_sprint_cerrar(pg_temp.lider(e), e, s1, 'siguiente');
+  IF (SELECT sprint_id FROM tareas WHERE id = b) <> s2 THEN RAISE EXCEPTION 'FALLO P60: la pendiente no pasó al siguiente sprint'; END IF;
+  IF (SELECT total FROM sprint_instantaneas WHERE sprint_id = s1 ORDER BY dia DESC LIMIT 1) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P60: la instantánea final no contó la pendiente';
+  END IF;
+  RAISE NOTICE 'OK P60: proc_sprint_cerrar pasa las pendientes al siguiente sprint';
+END $$;
+
+-- P61. proc_tarea_listar y proc_tarea_conteos (0009): el tablero ya no muestra las tareas de un
+--      sprint cerrado; la vista `todas` sí.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 0, 'Hecha'); s uuid; BEGIN
+  s := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a)));
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  PERFORM pg_temp.completar(e, a);
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(proc_tarea_listar(pg_temp.lider(e), e, 'tablero')) x WHERE (x->>'id')::uuid = a) THEN
+    RAISE EXCEPTION 'FALLO P61: antes de cerrar debía verse en el tablero';
+  END IF;
+  PERFORM proc_sprint_cerrar(pg_temp.lider(e), e, s, 'liberar');
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(proc_tarea_listar(pg_temp.lider(e), e, 'tablero')) x WHERE (x->>'id')::uuid = a)
+     OR (proc_tarea_conteos(pg_temp.lider(e), e)->>'tablero')::int <> 0 THEN
+    RAISE EXCEPTION 'FALLO P61: la tarea del sprint cerrado sigue en el tablero';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(proc_tarea_listar(pg_temp.lider(e), e, 'todas')) x WHERE (x->>'id')::uuid = a) THEN
+    RAISE EXCEPTION 'FALLO P61: la vista «todas» perdió la tarea';
+  END IF;
+  RAISE NOTICE 'OK P61: proc_tarea_listar y proc_tarea_conteos ocultan las tareas de sprints cerrados';
+END $$;
+
+-- P62. proc_sprint_eliminar: la líder borra un sprint planificado (sus tareas quedan libres); no
+--      el integrante (NX005) ni un sprint activo (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e); s uuid; ok int := 0; BEGIN
+  s := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a)));
+  BEGIN PERFORM proc_sprint_eliminar(pg_temp.integrante(e, 1), e, s);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_sprint_eliminar(pg_temp.lider(e), e, s);
+  IF EXISTS (SELECT 1 FROM sprints WHERE id = s) OR (SELECT sprint_id FROM tareas WHERE id = a) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P62: el sprint o su tarea siguen ahí';
+  END IF;
+  s := pg_temp.planear(e);
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  BEGIN PERFORM proc_sprint_eliminar(pg_temp.lider(e), e, s);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P62: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P62: proc_sprint_eliminar';
+END $$;
+
+-- P63. proc_retro_iniciar: la líder abre la retrospectiva de un sprint cerrado (una sola); no el
+--      integrante (NX005) ni con el sprint sin cerrar (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); viejo uuid; s uuid; d jsonb; ok int := 0; BEGIN
+  INSERT INTO sprints (equipo_id, numero, inicio, fin, estado, cerrado_en)
+  VALUES (e, 1, current_date - 20, current_date - 7, 'cerrado', now()) RETURNING id INTO viejo;
+  BEGIN PERFORM proc_retro_iniciar(pg_temp.integrante(e, 1), e, viejo);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  d := proc_retro_iniciar(pg_temp.lider(e), e, viejo);
+  IF d->>'id' IS NULL OR (d->>'cerrada')::boolean OR jsonb_array_length(d->'notas') <> 0 THEN RAISE EXCEPTION 'FALLO P63: %', d; END IF;
+  IF proc_retro_iniciar(pg_temp.lider(e), e, viejo)->>'id' <> d->>'id' THEN RAISE EXCEPTION 'FALLO P63: creó otra retrospectiva'; END IF;
+  s := pg_temp.planear(e);
+  BEGIN PERFORM proc_retro_iniciar(pg_temp.lider(e), e, s);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P63: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P63: proc_retro_iniciar';
+END $$;
+
+-- P64. proc_retro_obtener: null mientras no hay retrospectiva; el invitado no la ve (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.planear(e); d jsonb; ok boolean := false; BEGIN
+  IF proc_retro_obtener(pg_temp.lider(e), e, s) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P64: debía ser null'; END IF;
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  PERFORM proc_sprint_cerrar(pg_temp.lider(e), e, s, 'liberar');
+  d := proc_retro_obtener(pg_temp.integrante(e, 1), e, s);
+  IF d IS NULL OR (d->>'votos_por_persona')::int <> 3 OR (d->>'sprint_numero')::int <> 1 THEN RAISE EXCEPTION 'FALLO P64: %', d; END IF;
+  BEGIN PERFORM proc_retro_obtener(pg_temp.invitado(e), e, s);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'FALLO P64: el invitado vio la retrospectiva'; END IF;
+  RAISE NOTICE 'OK P64: proc_retro_obtener';
+END $$;
+
+-- P65. proc_retro_nota_agregar: la nota anónima no guarda a su autora (ni en la actividad); el
+--      invitado no escribe (NX005), la nota vacía no entra (NX010) ni tras cerrar la votación (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.sprint_con_retro(e); n uuid; an uuid; ok int := 0; BEGIN
+  n := pg_temp.nota(e, s, pg_temp.integrante(e, 1), 'Buen ritmo');
+  an := pg_temp.nota(e, s, pg_temp.integrante(e, 2), 'Nota sin firma', true, 'mejorar');
+  IF (SELECT autor_id FROM retro_notas WHERE id = n) <> pg_temp.integrante(e, 1)
+     OR (SELECT autor_id FROM retro_notas WHERE id = an) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P65: autoría'; END IF;
+  IF EXISTS (SELECT 1 FROM actividad WHERE equipo_id = e AND autor_id = pg_temp.integrante(e, 2))
+     OR EXISTS (SELECT 1 FROM eventos_dominio WHERE equipo_id = e AND actor_id = pg_temp.integrante(e, 2)) THEN
+    RAISE EXCEPTION 'FALLO P65: la nota anónima dejó rastro de su autora';
+  END IF;
+  BEGIN PERFORM pg_temp.nota(e, s, pg_temp.invitado(e));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.nota(e, s, pg_temp.lider(e), '   ');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_retro_avanzar(pg_temp.lider(e), e, s, 'votacion');
+  BEGIN PERFORM pg_temp.nota(e, s, pg_temp.lider(e), 'Tarde');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P65: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P65: proc_retro_nota_agregar (con notas anónimas)';
+END $$;
+
+-- P66. proc_retro_votar: 3 puntos por persona; el cuarto lo impide la BD con NX003, por el proceso
+--      y también insertando a mano (trg_retro_limite_votos). Votar dos veces la misma nota (NX012),
+--      el invitado (NX005) y votar con la votación cerrada (NX007) tampoco. Quitar un voto lo libera.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.sprint_con_retro(e); yo uuid := pg_temp.integrante(e, 1);
+  n uuid[]; r jsonb; ok int := 0; i int; BEGIN
+  FOR i IN 1..4 LOOP n := n || pg_temp.nota(e, s, pg_temp.lider(e), 'Nota ' || i); END LOOP;
+  FOR i IN 1..3 LOOP r := proc_retro_votar(yo, e, n[i], true); END LOOP;
+  IF (r->>'mis_votos_usados')::int <> 3 OR NOT (r->>'voto_mio')::boolean OR (r->>'votos')::int <> 1 THEN
+    RAISE EXCEPTION 'FALLO P66: %', r;
+  END IF;
+  BEGIN PERFORM proc_retro_votar(yo, e, n[4], true);
+  EXCEPTION WHEN SQLSTATE 'NX003' THEN ok := ok + 1; END;
+  BEGIN INSERT INTO retro_votos (nota_id, usuario_id) VALUES (n[4], yo);
+  EXCEPTION WHEN SQLSTATE 'NX003' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_retro_votar(yo, e, n[1], true);
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_retro_votar(pg_temp.invitado(e), e, n[1], true);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  r := proc_retro_votar(yo, e, n[1], false);
+  IF (r->>'mis_votos_usados')::int <> 2 OR (r->>'votos')::int <> 0 THEN RAISE EXCEPTION 'FALLO P66: al quitar %', r; END IF;
+  PERFORM proc_retro_votar(yo, e, n[4], true);
+  PERFORM proc_retro_avanzar(pg_temp.lider(e), e, s, 'votacion');
+  BEGIN PERFORM proc_retro_votar(yo, e, n[1], true);
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P66: % de 5 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P66: proc_retro_votar (3 votos por persona; el cuarto da NX003)';
+END $$;
+
+-- P67. proc_retro_nota_eliminar: cada quien borra sus notas y la líder cualquiera; nadie más borra
+--      una nota ajena ni una anónima (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.sprint_con_retro(e); mia uuid; ajena uuid; anon uuid; ok int := 0; BEGIN
+  mia := pg_temp.nota(e, s, pg_temp.integrante(e, 1), 'Mía');
+  ajena := pg_temp.nota(e, s, pg_temp.integrante(e, 2), 'De otra persona');
+  anon := pg_temp.nota(e, s, pg_temp.integrante(e, 1), 'Sin firma', true);
+  BEGIN PERFORM proc_retro_nota_eliminar(pg_temp.integrante(e, 1), e, ajena);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_retro_nota_eliminar(pg_temp.integrante(e, 1), e, anon);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_retro_nota_eliminar(pg_temp.integrante(e, 1), e, mia);
+  PERFORM proc_retro_nota_eliminar(pg_temp.lider(e), e, ajena);
+  IF EXISTS (SELECT 1 FROM retro_notas WHERE id IN (mia, ajena)) OR NOT EXISTS (SELECT 1 FROM retro_notas WHERE id = anon) THEN
+    RAISE EXCEPTION 'FALLO P67: no se borró lo que debía';
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P67: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P67: proc_retro_nota_eliminar';
+END $$;
+
+-- P68. proc_retro_avanzar: la líder cierra la votación y después la retrospectiva; el integrante no
+--      (NX005), una fase inválida (NX010) ni cerrar dos veces (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.sprint_con_retro(e); d jsonb; ok int := 0; BEGIN
+  BEGIN PERFORM proc_retro_avanzar(pg_temp.integrante(e, 1), e, s, 'votacion');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_retro_avanzar(pg_temp.lider(e), e, s, 'otra');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  d := proc_retro_avanzar(pg_temp.lider(e), e, s, 'votacion');
+  IF NOT (d->>'votacion_cerrada')::boolean OR (d->>'cerrada')::boolean THEN RAISE EXCEPTION 'FALLO P68: %', d; END IF;
+  BEGIN PERFORM proc_retro_avanzar(pg_temp.lider(e), e, s, 'votacion');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  d := proc_retro_avanzar(pg_temp.lider(e), e, s, 'cerrada');
+  IF NOT (d->>'cerrada')::boolean THEN RAISE EXCEPTION 'FALLO P68: no cerró %', d; END IF;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P68: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P68: proc_retro_avanzar';
+END $$;
+
+-- P69. proc_retro_nota_a_tarea: la líder convierte una acción en propuesta (va a votación); no el
+--      integrante (NX005) ni dos veces la misma nota (NX012).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); s uuid := pg_temp.sprint_con_retro(e); n uuid; r jsonb; ok int := 0; BEGIN
+  n := pg_temp.nota(e, s, pg_temp.integrante(e, 1), 'Escribir pruebas antes de cerrar', false, 'acciones');
+  BEGIN PERFORM proc_retro_nota_a_tarea(pg_temp.integrante(e, 1), e, n);
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  r := proc_retro_nota_a_tarea(pg_temp.lider(e), e, n);
+  IF r->>'estado' <> 'propuesta' OR (SELECT tarea_id FROM retro_notas WHERE id = n) <> (r->>'id')::uuid
+     OR (SELECT titulo FROM tareas WHERE id = (r->>'id')::uuid) <> 'Escribir pruebas antes de cerrar' THEN
+    RAISE EXCEPTION 'FALLO P69: %', r;
+  END IF;
+  BEGIN PERFORM proc_retro_nota_a_tarea(pg_temp.lider(e), e, n);
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P69: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P69: proc_retro_nota_a_tarea';
+END $$;
