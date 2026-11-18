@@ -16,15 +16,17 @@ import {
   Vacio,
   useColorDe,
 } from '@/components/ui';
-import { useConteosTareas, useTareasEquipo } from '@/lib/consultasEquipo';
+import { useAccionesTarea, useConteosTareas, useTareasEquipo } from '@/lib/consultasEquipo';
 import { formaDeEstado } from '@/lib/tareas';
+import { toast } from '@/lib/toasts';
 import { useEquipoActual } from './contexto';
-import { codigoTarea } from './tareas/comunes';
+import { avisarError, codigoTarea } from './tareas/comunes';
 import { TareasCompartidas } from './tareas';
 
 /**
- * EQ-01: resumen del equipo. En la Fase 2 muestra el Hill Chart en solo lectura, lo que la
- * persona tiene pendiente y los accesos a la votación; arrastrar e historial llegan en la Fase 3.
+ * EQ-01: resumen del equipo: Hill Chart (se arrastra para actualizar el avance, Fase 3.1), lo
+ * que la persona tiene pendiente y los accesos a la votación. Cada cambio de avance queda en el
+ * historial de la tarea («actualizó el avance de T-03 (60 %)»).
  * El invitado ve el resumen reducido (IN-01).
  */
 export function Resumen() {
@@ -58,6 +60,23 @@ function ResumenMiembro() {
   const colorDe = useColorDe();
   const esLider = equipo.mi_rol === 'lider';
   const sprint = equipo.sprints.find((s) => s.estado === 'activo');
+  const { editar } = useAccionesTarea(equipo.id);
+
+  /**
+   * El avance lo mueve el líder o el responsable con la asignación aceptada (la misma regla que
+   * aplica `proc_tarea_editar`). Una tarea completada siempre está al 100 %.
+   */
+  const puedeMover = (t: TareaEquipo) =>
+    t.estado !== 'completada' &&
+    (esLider || (t.responsable?.usuario_id === usuarioId && !t.asignacion_pendiente));
+  const moverAvance = (t: TareaEquipo, progreso: number) =>
+    editar.mutate(
+      { id: t.id, version: t.version, progreso },
+      {
+        onSuccess: () => toast(`${codigoTarea(t.codigo)} quedó en ${progreso} %.`),
+        onError: avisarError,
+      },
+    );
 
   const lista = (tareas: TareaEquipo[], vacio: string) =>
     tareas.length ? (
@@ -165,11 +184,22 @@ function ResumenMiembro() {
                     }))}
                     onAbrir={acc.abrirTarea}
                     etiqueta="Hill Chart del equipo"
+                    puedeMover={(id) => {
+                      const t = tareas.find((x) => x.id === id);
+                      return !!t && puedeMover(t);
+                    }}
+                    onMover={(id, progreso) => {
+                      const t = tareas.find((x) => x.id === id);
+                      if (t) moverAvance(t, progreso);
+                    }}
                   />
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   El color identifica al responsable y la forma, el estado: triángulo atascada,
-                  círculo en marcha, cuadrado completada.
+                  círculo en marcha, cuadrado completada.{' '}
+                  {esLider
+                    ? 'Arrastra una figura (o usa las flechas) para actualizar su avance.'
+                    : 'Puedes arrastrar tus propias tareas (o usar las flechas) para actualizar su avance.'}
                 </p>
               </Tarjeta>
               <div className="grid gap-4 md:grid-cols-3">

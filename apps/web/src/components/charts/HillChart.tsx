@@ -40,16 +40,32 @@ function useAnchoContenedor() {
 export interface HillChartProps {
   puntos: PuntoHill[];
   onAbrir?: (id: string) => void;
+  /**
+   * Fase 3 (3.1): si se indica, las figuras que `puedeMover` permite se arrastran sobre la colina
+   * (o se mueven con las flechas del teclado) y al soltar se guarda el nuevo avance.
+   */
+  onMover?: (id: string, progreso: number) => void;
+  /** Qué figuras se pueden arrastrar (p. ej. solo las propias o, para el líder, todas). */
+  puedeMover?: (id: string) => boolean;
   simplificado?: boolean;
   alto?: number;
   mostrarIniciales?: boolean;
   etiqueta?: string;
 }
 
+/** Paso de las flechas del teclado y espera antes de guardar (agrupa varias pulsaciones). */
+const PASO_TECLADO = 5;
+const ESPERA_TECLADO_MS = 600;
+/** Píxeles que hay que mover el puntero para que cuente como arrastre y no como clic. */
+const UMBRAL_ARRASTRE = 4;
+
+const limitar = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+
 /**
  * Hill Chart (docs/01, 5.5): SVG propio; la subida es «Definiendo» y la bajada «Ejecutando».
  * Cada tarea es una figura con el color de su responsable, la forma de su estado y un anillo
- * de urgencia. En la Fase 1 es de solo lectura; arrastrar para actualizar llega en la Fase 3.
+ * de urgencia. Con `onMover` las figuras se arrastran (ratón, dedo o flechas del teclado) y al
+ * soltar se guarda el avance; sin él es de solo lectura.
  */
 export function HillChart({
   puntos: tareas,
@@ -58,10 +74,25 @@ export function HillChart({
   alto,
   mostrarIniciales,
   etiqueta = 'Hill Chart del sprint',
+  onMover,
+  puedeMover,
 }: HillChartProps) {
   const colorDe = useColorDe();
   const { ref, w } = useAnchoContenedor();
   const [hover, setHover] = useState<string | null>(null);
+  /** Avance provisional mientras se arrastra o se usan las flechas (aún sin guardar). */
+  const [provisional, setProvisional] = useState<{ id: string; progreso: number } | null>(null);
+  const arrastre = useRef<{ id: string; x0: number; movido: boolean } | null>(null);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Copia síncrona del avance provisional: varias flechas seguidas no leen un valor viejo. */
+  const provisionalRef = useRef<{ id: string; progreso: number } | null>(null);
+  const fijarProvisional = (v: { id: string; progreso: number } | null) => {
+    provisionalRef.current = v;
+    setProvisional(v);
+  };
+  /** El clic que sigue a un arrastre no abre la tarea. */
+  const recienArrastrada = useRef<string | null>(null);
+  const movible = (id: string) => !!onMover && (puedeMover?.(id) ?? true);
   const movil = w > 0 && w < 520;
   const simple = simplificado ?? movil;
   const h =
@@ -82,14 +113,37 @@ export function HillChart({
         d += `${p ? 'L' : 'M'}${X(p).toFixed(1)},${Y(p).toFixed(1)}`;
     }
     const res: { t: PuntoHill; x: number; y: number; nivel: number }[] = [];
-    for (const t of [...tareas].sort((a, b) => a.progreso - b.progreso)) {
+    const conProvisional = tareas.map((t) =>
+      provisional?.id === t.id ? { ...t, progreso: provisional.progreso } : t,
+    );
+    for (const t of conProvisional.sort((a, b) => a.progreso - b.progreso)) {
       const x = X(t.progreso);
       let nivel = 0;
       while (res.some((r) => Math.abs(r.x - x) < tam * 0.95 && r.nivel === nivel)) nivel++;
       res.push({ t, x, y: Y(t.progreso) - nivel * (tam + 4), nivel });
     }
     return { path: d, puntos: res, X };
-  }, [tareas, w, padX, base, amp, tam]);
+  }, [tareas, provisional, w, padX, base, amp, tam]);
+
+  /** Avance que corresponde a una posición horizontal del puntero dentro del gráfico. */
+  const progresoEn = (clientX: number) => {
+    const caja = ref.current?.getBoundingClientRect();
+    if (!caja || w <= padX * 2) return 0;
+    return limitar(((clientX - caja.left - padX) / (w - padX * 2)) * 100);
+  };
+
+  const guardar = (id: string, progreso: number) => {
+    const original = tareas.find((t) => t.id === id)?.progreso;
+    if (original !== progreso) onMover?.(id, progreso);
+    fijarProvisional(null);
+  };
+
+  useEffect(
+    () => () => {
+      if (temporizador.current) clearTimeout(temporizador.current);
+    },
+    [],
+  );
 
   const conIniciales = mostrarIniciales || new Set(tareas.map((t) => t.responsable)).size >= 12;
   const activo = puntos.find((p) => p.t.id === hover);
@@ -172,16 +226,70 @@ export function HillChart({
                 tabIndex={0}
                 aria-label={descripcion}
                 transform={`translate(${x - size / 2} ${y - size / 2 - tam * 0.15})`}
-                className="cursor-pointer outline-none [&:focus-visible>rect]:opacity-100"
+                aria-description={
+                  movible(t.id)
+                    ? 'Arrastra o usa las flechas izquierda y derecha para cambiar el avance.'
+                    : undefined
+                }
+                className={`outline-none [&:focus-visible>rect]:opacity-100 ${
+                  movible(t.id) ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-pointer'
+                }`}
                 onMouseEnter={() => setHover(t.id)}
-                onMouseLeave={() => setHover(null)}
+                onMouseLeave={() => !arrastre.current && setHover(null)}
                 onFocus={() => setHover(t.id)}
                 onBlur={() => setHover(null)}
-                onClick={() => (onAbrir ? onAbrir(t.id) : setHover(hover === t.id ? null : t.id))}
+                onPointerDown={(e) => {
+                  if (!movible(t.id) || e.button !== 0) return;
+                  arrastre.current = { id: t.id, x0: e.clientX, movido: false };
+                  (e.currentTarget as Element).setPointerCapture(e.pointerId);
+                }}
+                onPointerMove={(e) => {
+                  const a = arrastre.current;
+                  if (!a || a.id !== t.id) return;
+                  if (!a.movido && Math.abs(e.clientX - a.x0) < UMBRAL_ARRASTRE) return;
+                  a.movido = true;
+                  fijarProvisional({ id: t.id, progreso: progresoEn(e.clientX) });
+                }}
+                onPointerUp={(e) => {
+                  const a = arrastre.current;
+                  arrastre.current = null;
+                  if (a?.movido) {
+                    recienArrastrada.current = t.id;
+                    guardar(t.id, progresoEn(e.clientX));
+                  }
+                }}
+                onPointerCancel={() => {
+                  arrastre.current = null;
+                  fijarProvisional(null);
+                }}
+                onClick={() => {
+                  // Un arrastre no abre la tarea.
+                  if (recienArrastrada.current === t.id) {
+                    recienArrastrada.current = null;
+                    return;
+                  }
+                  if (onAbrir) onAbrir(t.id);
+                  else setHover(hover === t.id ? null : t.id);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     onAbrir?.(t.id);
+                    return;
+                  }
+                  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && movible(t.id)) {
+                    e.preventDefault();
+                    const previo = provisionalRef.current;
+                    const actual = previo?.id === t.id ? previo.progreso : t.progreso;
+                    const nuevo = limitar(
+                      actual + (e.key === 'ArrowRight' ? PASO_TECLADO : -PASO_TECLADO),
+                    );
+                    fijarProvisional({ id: t.id, progreso: nuevo });
+                    if (temporizador.current) clearTimeout(temporizador.current);
+                    temporizador.current = setTimeout(
+                      () => guardar(t.id, nuevo),
+                      ESPERA_TECLADO_MS,
+                    );
                   }
                 }}
               >
