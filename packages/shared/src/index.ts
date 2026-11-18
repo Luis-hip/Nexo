@@ -6,3 +6,4 @@ export * from './estados';
 export * from './equipos';
 export * from './votacion';
 export * from './respuestas';
+export * from './color';

@@ -33,6 +33,7 @@
 | DEC-027 | 2026-11-16 | Alojamiento: Vercel + Render + dominio propio (Fase 3.5) | Vigente; D-03 resuelta |
 | DEC-028 | 2026-11-16 | Documentos 07–10 y fases 2.5 y 3.5 | Vigente |
 | DEC-029 | 2026-11-16 | Nombre «Carlos» (se elimina D-02) y visibilidad de votos | Vigente |
+| DEC-030 | 2026-11-17 | Fase 3: Hill Chart arrastrable y color de miembros en `shared` | Vigente; forma por miembro para revisión |
 
 ---
 
@@ -270,3 +271,11 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 ## DEC-029 · Nombre del integrante y visibilidad de votos
 
 **Fecha:** 2026-11-16. El integrante se llama **Carlos**; se elimina la decisión D-02 y toda nota sobre «Carlo». Visibilidad de votos (V-8): ver DEC-024.
+
+## DEC-030 · Fase 3: Hill Chart arrastrable y color de miembros
+
+**Fecha:** 2026-11-17 · **Fuente:** `03`, Fase 3, tareas 3.1 y 3.2.
+
+- **Hill Chart (3.1).** Las figuras se arrastran con ratón o dedo, o se mueven con las flechas del teclado (de 5 en 5; se guarda una sola vez, 0,6 s después de la última pulsación). El avance se guarda con el proceso que ya existía (`proc_tarea_editar`, o `proc_personal_tarea_actualizar` en el inicio personal), así que no hizo falta una migración. Mueve el **líder** cualquier tarea y el **responsable** las suyas con la asignación aceptada; las **completadas** no se mueven (siempre están al 100 %). El **historial** es el de cada tarea: cada cambio deja «Valeria actualizó el avance de T-01 (75 %)». Mover una figura en el Hill Chart **no cambia el estado** de la tarea (para eso está el tablero).
+- **Color (3.2).** El cálculo pasa de `apps/web/src/lib/color.ts` a `packages/shared/src/color.ts` (la web lo reexporta) sin cambiar los colores del prototipo. La prueba comprueba que ningún tono cae en las bandas del semáforo, que los 8 colores se distinguen entre sí (ΔE OKLab > 0,08) y que cada color se distingue de las señales de **su** tema (ΔE > 0,06, unas 3 veces lo apenas perceptible). El par más cercano es el miembro 1 frente al verde del tema claro (ΔE ≈ 0,067): las bandas del prototipo no están centradas en los tonos reales de las señales (el ámbar real está en ~58°, fuera de la banda 60–100°). Si el equipo quiere más margen, se pueden ajustar las bandas, lo que cambia el color de algunos miembros.
+- **Forma por miembro (para revisión).** `01` 5.4 dice que cada miembro tiene además una **forma**. Pero en el Hill Chart (prototipo y leyenda actual) la forma ya indica el **estado** (triángulo atascada, círculo en marcha, cuadrado completada) y usarla también para la persona confundiría. Se mantiene la forma por estado; la identidad sin depender del color la dan las **iniciales** (avatares y, con muchos responsables, dentro de las figuras) y la **etiqueta accesible** de cada figura.
