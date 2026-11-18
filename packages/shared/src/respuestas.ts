@@ -1,0 +1,286 @@
+import { z } from 'zod';
+import {
+  ROLES_EQUIPO,
+  type ComentarioEquipo,
+  type ConteosTareas,
+  type EquipoDetalle,
+  type Invitacion,
+  type Miembro,
+  type PersonaTarea,
+  type TareaEquipo,
+  type TareaEquipoDetalle,
+  type VistaInvitacion,
+} from './equipos';
+import {
+  DENSIDADES,
+  TAMANOS_TEXTO,
+  TEMAS,
+  type EquipoDeUsuario,
+  type Preferencias,
+  type UsuarioSesion,
+} from './esquemas';
+import {
+  ESTADOS_TAREA,
+  PRIORIDADES_TAREA,
+  SEMAFOROS,
+  type ComentarioTarea,
+  type Subtarea,
+  type TareaPersonal,
+  type TareaPersonalDetalle,
+} from './tareas';
+import { esquemaResumenVotacion } from './votacion';
+
+/**
+ * Esquemas de lo que devuelven los procesos de la BD (docs/08, DEC-025). La API valida cada
+ * respuesta con ellos en `repositorios/`, así un proceso que cambie de forma falla de inmediato
+ * en vez de mandar datos raros a la web. Cada esquema está atado a su interfaz con `satisfies`:
+ * si la interfaz cambia y el esquema no, TypeScript no compila.
+ */
+
+const fechaIso = z.string();
+const estado = z.enum(ESTADOS_TAREA);
+const prioridad = z.enum(PRIORIDADES_TAREA);
+const semaforo = z.enum(SEMAFOROS).nullable();
+const resultado = z.enum(['a_tiempo', 'con_retraso']).nullable();
+const rol = z.enum(ROLES_EQUIPO);
+
+// --- Cuenta ------------------------------------------------------------------------------------
+
+export const esquemaUsuarioSesion = z.object({
+  id: z.string(),
+  correo: z.string(),
+  nombre: z.string(),
+  cargo: z.string(),
+  descripcion: z.string(),
+  zona_horaria: z.string(),
+  avatar_url: z.string().nullable(),
+}) satisfies z.ZodType<UsuarioSesion>;
+
+/** Lo que devuelve `proc_sesion_resolver`: la sesión vigente y su usuario, o `null`. */
+export const esquemaSesionResuelta = z
+  .object({ sesion_id: z.string(), usuario: esquemaUsuarioSesion })
+  .nullable();
+
+export const esquemaPreferenciasCompletas = z.object({
+  tema: z.enum(TEMAS),
+  densidad: z.enum(DENSIDADES),
+  tamano_texto: z.enum(TAMANOS_TEXTO),
+  reducir_movimiento: z.boolean(),
+  formato_hora: z.enum(['24h', '12h']),
+  formato_fecha: z.enum(['dd/mm', 'mm/dd']),
+  tour_visto: z.boolean(),
+  idioma: z.string(),
+  resumen_diario: z.boolean(),
+}) satisfies z.ZodType<Preferencias>;
+
+export const esquemaEquipoDeUsuario = z.object({
+  id: z.string(),
+  nombre: z.string(),
+  rol,
+  color_idx: z.number().nullable(),
+  caduca_en: fechaIso.nullable(),
+}) satisfies z.ZodType<EquipoDeUsuario>;
+
+/** Lo que devuelve `proc_usuario_yo` (el usuario lo pone la sesión). */
+export const esquemaYoBd = z.object({
+  equipos: z.array(esquemaEquipoDeUsuario),
+  preferencias: esquemaPreferenciasCompletas,
+});
+
+export const esquemaUsuarioDev = z.object({
+  id: z.string(),
+  correo: z.string(),
+  nombre: z.string(),
+  cargo: z.string(),
+});
+
+// --- Equipos e invitaciones ---------------------------------------------------------------------
+
+/** Lo que devuelve `proc_equipo_contexto`: la membresía activa del actor en el equipo. */
+export const esquemaContextoEquipo = z.object({
+  membresia_id: z.string(),
+  rol,
+  equipo: z.object({
+    nombre: z.string(),
+    estado: z.enum(['activo', 'archivado']),
+    max_miembros: z.number(),
+  }),
+});
+
+export const esquemaMiembro = z.object({
+  membresia_id: z.string(),
+  usuario_id: z.string(),
+  nombre: z.string(),
+  rol,
+  color_idx: z.number().nullable(),
+  caduca_en: fechaIso.nullable(),
+}) satisfies z.ZodType<Miembro>;
+
+export const esquemaEquipoDetalle = z.object({
+  id: z.string(),
+  nombre: z.string(),
+  descripcion: z.string(),
+  estado: z.enum(['activo', 'archivado']),
+  max_miembros: z.number(),
+  miembros_activos: z.number(),
+  invitados_activos: z.number(),
+  mi_rol: rol,
+  mi_membresia_id: z.string(),
+  lider: z.object({ usuario_id: z.string(), nombre: z.string() }).nullable(),
+  miembros: z.array(esquemaMiembro),
+  sprints: z.array(
+    z.object({
+      id: z.string(),
+      numero: z.number(),
+      estado: z.enum(['planificado', 'activo', 'cerrado']),
+      inicio: z.string(),
+      fin: z.string(),
+    }),
+  ),
+  etiquetas: z.array(z.string()),
+}) satisfies z.ZodType<EquipoDetalle>;
+
+export const esquemaInvitacion = z.object({
+  id: z.string(),
+  codigo: z.string(),
+  rol_destino: z.enum(['integrante', 'invitado']),
+  estado: z.enum(['pendiente', 'aceptada', 'revocada', 'caducada']),
+  caduca_en: fechaIso,
+  duracion_invitado_dias: z.number().nullable(),
+  creada_en: fechaIso,
+  aceptada_por: z.string().nullable(),
+}) satisfies z.ZodType<Invitacion>;
+
+export const esquemaVistaInvitacion = z.object({
+  codigo: z.string(),
+  equipo: z.object({ id: z.string(), nombre: z.string(), descripcion: z.string() }),
+  lider: z.string().nullable(),
+  miembros_activos: z.number(),
+  max_miembros: z.number(),
+  rol_destino: z.enum(['integrante', 'invitado']),
+  duracion_invitado_dias: z.number().nullable(),
+  caduca_en: fechaIso,
+  ya_miembro: z.boolean(),
+}) satisfies z.ZodType<VistaInvitacion>;
+
+export const esquemaInvitacionAceptada = z.object({
+  equipo_id: z.string(),
+  rol: z.enum(['integrante', 'invitado']),
+});
+
+// --- Tareas de equipo ---------------------------------------------------------------------------
+
+export const esquemaPersonaTarea = z.object({
+  usuario_id: z.string(),
+  nombre: z.string(),
+  color_idx: z.number().nullable(),
+}) satisfies z.ZodType<PersonaTarea>;
+
+export const esquemaTareaEquipo = z.object({
+  id: z.string(),
+  equipo_id: z.string(),
+  codigo: z.number(),
+  titulo: z.string(),
+  descripcion: z.string(),
+  estado,
+  prioridad,
+  progreso: z.number(),
+  vence_en: fechaIso.nullable(),
+  motivo: z.string().nullable(),
+  rechazo_por: z.enum(['lider', 'responsable', 'votacion']).nullable(),
+  cambios_pedidos: z.string().nullable(),
+  resultado,
+  semaforo,
+  asignacion_pendiente: z.boolean(),
+  origen: z.enum(['propuesta', 'directa']),
+  orden: z.string(),
+  sprint_id: z.string().nullable(),
+  archivada: z.boolean(),
+  version: z.number(),
+  creado_en: fechaIso,
+  actualizado_en: fechaIso,
+  completada_en: fechaIso.nullable(),
+  responsable: esquemaPersonaTarea.nullable(),
+  proponente: esquemaPersonaTarea.nullable(),
+  etiquetas: z.array(z.string()),
+  subtareas_total: z.number(),
+  subtareas_hechas: z.number(),
+  comentarios_total: z.number(),
+  votacion: esquemaResumenVotacion.nullable().optional(),
+}) satisfies z.ZodType<TareaEquipo>;
+
+export const esquemaSubtarea = z.object({
+  id: z.string(),
+  titulo: z.string(),
+  hecha: z.boolean(),
+}) satisfies z.ZodType<Subtarea>;
+
+export const esquemaComentarioEquipo = z.object({
+  id: z.string(),
+  texto: z.string(),
+  autor: esquemaPersonaTarea.nullable(),
+  creado_en: fechaIso,
+  editado_en: fechaIso.nullable(),
+}) satisfies z.ZodType<ComentarioEquipo>;
+
+/**
+ * Detalle que devuelven los procesos de tareas de equipo. No trae `transiciones`: las calcula
+ * la API con la máquina de estados de `estados.ts`, que es la fuente de verdad.
+ */
+export const esquemaTareaEquipoDetalleBd = esquemaTareaEquipo.extend({
+  subtareas: z.array(esquemaSubtarea),
+  comentarios: z.array(esquemaComentarioEquipo),
+  historial: z.array(
+    z.object({
+      id: z.string(),
+      resumen: z.string(),
+      autor: z.string().nullable(),
+      creado_en: fechaIso,
+    }),
+  ),
+  compartida_con: z.array(z.string()),
+}) satisfies z.ZodType<Omit<TareaEquipoDetalle, 'transiciones'>>;
+export type TareaEquipoDetalleBd = z.infer<typeof esquemaTareaEquipoDetalleBd>;
+
+export const esquemaConteosTareas = z.object({
+  tablero: z.number(),
+  backlog: z.number(),
+  votacion: z.number(),
+}) satisfies z.ZodType<ConteosTareas>;
+
+// --- Tareas personales --------------------------------------------------------------------------
+
+export const esquemaTareaPersonal = z.object({
+  id: z.string(),
+  codigo: z.number(),
+  titulo: z.string(),
+  descripcion: z.string(),
+  estado,
+  prioridad,
+  progreso: z.number(),
+  vence_en: fechaIso.nullable(),
+  motivo: z.string().nullable(),
+  resultado,
+  semaforo,
+  archivada: z.boolean(),
+  version: z.number(),
+  creado_en: fechaIso,
+  actualizado_en: fechaIso,
+  completada_en: fechaIso.nullable(),
+  etiquetas: z.array(z.string()),
+  subtareas_total: z.number(),
+  subtareas_hechas: z.number(),
+}) satisfies z.ZodType<TareaPersonal>;
+
+export const esquemaComentarioTarea = z.object({
+  id: z.string(),
+  texto: z.string(),
+  autor_id: z.string().nullable(),
+  creado_en: fechaIso,
+  editado_en: fechaIso.nullable(),
+}) satisfies z.ZodType<ComentarioTarea>;
+
+export const esquemaTareaPersonalDetalle = esquemaTareaPersonal.extend({
+  subtareas: z.array(esquemaSubtarea),
+  comentarios: z.array(esquemaComentarioTarea),
+}) satisfies z.ZodType<TareaPersonalDetalle>;
