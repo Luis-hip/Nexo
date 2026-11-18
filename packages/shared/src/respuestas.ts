@@ -29,6 +29,15 @@ import {
   type TareaPersonalDetalle,
 } from './tareas';
 import {
+  ESTADOS_TRANSFERENCIA,
+  FASES_ELECCION,
+  type CandidatoEleccion,
+  type ConfiguracionEquipo,
+  type Eleccion,
+  type Liderazgo,
+  type Transferencia,
+} from './liderazgo';
+import {
   COLUMNAS_RETRO,
   ESTADOS_SPRINT,
   type CapacidadMiembro,
@@ -370,3 +379,58 @@ export const esquemaResultadoVotoRetro = z.object({
   voto_mio: z.boolean(),
   mis_votos_usados: z.number().int(),
 }) satisfies z.ZodType<ResultadoVotoRetro>;
+
+// --- Liderazgo y equipo (0010) -----------------------------------------------------------------
+
+const esquemaCandidatoEleccion = esquemaPersonaTarea.extend({
+  finalista: z.boolean(),
+  votos: z.number().int().nullable(),
+}) satisfies z.ZodType<CandidatoEleccion>;
+
+export const esquemaEleccion = z.object({
+  id: z.string(),
+  fase: z.enum(FASES_ELECCION),
+  ronda: z.number().int(),
+  plazo_en: fechaIso,
+  creada_en: fechaIso,
+  cerrada_en: fechaIso.nullable(),
+  saliente: esquemaPersonaTarea,
+  ganador: esquemaPersonaTarea.nullable(),
+  candidatos: z.array(esquemaCandidatoEleccion),
+  votantes_total: z.number().int(),
+  votaron: z.array(z.string()),
+  mi_voto: z.string().nullable(),
+}) satisfies z.ZodType<Eleccion>;
+
+export const esquemaTransferencia = z.object({
+  id: z.string(),
+  estado: z.enum(ESTADOS_TRANSFERENCIA),
+  saldra: z.boolean(),
+  de: esquemaPersonaTarea,
+  a: esquemaPersonaTarea,
+  creada_en: fechaIso,
+  resuelta_en: fechaIso.nullable(),
+}) satisfies z.ZodType<Transferencia>;
+
+export const esquemaLiderazgo = z.object({
+  transferencia: esquemaTransferencia.nullable(),
+  eleccion: esquemaEleccion.nullable(),
+  historial: z.array(
+    z.discriminatedUnion('tipo', [
+      esquemaTransferencia.extend({ tipo: z.literal('transferencia') }),
+      esquemaEleccion.extend({ tipo: z.literal('eleccion') }),
+    ]),
+  ),
+}) satisfies z.ZodType<Liderazgo>;
+
+export const esquemaConfiguracionEquipo = z.object({
+  nombre: z.string(),
+  descripcion: z.string(),
+  estado: z.enum(['activo', 'archivado']),
+  duracion_sprint_semanas: z.number().int(),
+  zona_horaria: z.string(),
+  votacion_plazo_horas: z.number().int(),
+  votacion_desempate_horas: z.number().int(),
+  max_miembros: z.number().int(),
+  archivado_en: fechaIso.nullable(),
+}) satisfies z.ZodType<ConfiguracionEquipo>;
