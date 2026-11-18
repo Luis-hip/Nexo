@@ -28,6 +28,7 @@ import {
   type TareaPersonal,
   type TareaPersonalDetalle,
 } from './tareas';
+import { EVENTOS_NOTIFICACION, type AjustesUsuario, type ReportePersonal } from './ajustes';
 import {
   ESTADOS_TRANSFERENCIA,
   FASES_ELECCION,
@@ -575,3 +576,38 @@ export const esquemaArchivo = z.object({
   tarea: z.object({ id: z.string(), codigo: z.number().int(), titulo: z.string() }).nullable(),
   puedo_eliminar: z.boolean(),
 }) satisfies z.ZodType<Archivo>;
+
+// --- Ajustes y reporte personal (0013) ---------------------------------------------------------
+
+export const esquemaAjustesUsuario = z.object({
+  silencio_desde: z.string().nullable(),
+  silencio_hasta: z.string().nullable(),
+  resumen_diario: z.boolean(),
+  estado_visible: z.boolean(),
+  primer_dia: z.enum(['lunes', 'domingo']),
+  notificaciones: z.array(
+    z.object({
+      evento: z.enum(EVENTOS_NOTIFICACION),
+      por_app: z.boolean(),
+      por_whatsapp: z.boolean(),
+      por_correo: z.boolean(),
+    }),
+  ),
+}) satisfies z.ZodType<AjustesUsuario>;
+
+export const esquemaReportePersonal = z.object({
+  generado_en: fechaIso,
+  por_estado: z.record(z.string(), z.number().int()),
+  completadas: z.number().int(),
+  a_tiempo: z.number().int(),
+  con_retraso: z.number().int(),
+  vencidas: z.number().int(),
+  por_espacio: z.array(
+    z.object({
+      equipo_id: z.string().nullable(),
+      nombre: z.string(),
+      abiertas: z.number().int(),
+      completadas: z.number().int(),
+    }),
+  ),
+}) satisfies z.ZodType<ReportePersonal>;
