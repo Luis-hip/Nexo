@@ -5,5 +5,6 @@ export * from './tareas';
 export * from './estados';
 export * from './equipos';
 export * from './votacion';
+export * from './sprints';
 export * from './respuestas';
 export * from './color';

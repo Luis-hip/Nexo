@@ -28,6 +28,7 @@ const esJson = (a: Argumento): a is Json =>
 /** SQLSTATE de negocio de los procesos → estado HTTP (catálogo de docs/08, sección 3). */
 const ESTADO_HTTP: Record<string, number> = {
   NX001: 409, // equipo lleno
+  NX003: 409, // ya usó sus 3 votos de la retrospectiva
   NX004: 403, // voto no permitido
   NX005: 403, // sin permiso
   NX006: 404, // no encontrado

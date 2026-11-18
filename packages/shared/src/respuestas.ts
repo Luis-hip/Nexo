@@ -28,6 +28,18 @@ import {
   type TareaPersonal,
   type TareaPersonalDetalle,
 } from './tareas';
+import {
+  COLUMNAS_RETRO,
+  ESTADOS_SPRINT,
+  type CapacidadMiembro,
+  type NotaRetro,
+  type PuntoBurndown,
+  type ResultadoVotoRetro,
+  type Retrospectiva,
+  type RetroResumen,
+  type Sprint,
+  type SprintDetalle,
+} from './sprints';
 import { esquemaResumenVotacion } from './votacion';
 
 /**
@@ -284,3 +296,77 @@ export const esquemaTareaPersonalDetalle = esquemaTareaPersonal.extend({
   subtareas: z.array(esquemaSubtarea),
   comentarios: z.array(esquemaComentarioTarea),
 }) satisfies z.ZodType<TareaPersonalDetalle>;
+
+// --- Sprints y retrospectiva (0009) ------------------------------------------------------------
+
+const esquemaRetroResumen = z.object({
+  id: z.string(),
+  votacion_cerrada: z.boolean(),
+  cerrada: z.boolean(),
+}) satisfies z.ZodType<RetroResumen>;
+
+export const esquemaSprint = z.object({
+  id: z.string(),
+  equipo_id: z.string(),
+  numero: z.number().int(),
+  objetivo: z.string(),
+  inicio: z.string(),
+  fin: z.string(),
+  estado: z.enum(ESTADOS_SPRINT),
+  cerrado_en: fechaIso.nullable(),
+  total: z.number().int(),
+  completadas: z.number().int(),
+  retro: esquemaRetroResumen.nullable(),
+}) satisfies z.ZodType<Sprint>;
+
+const esquemaCapacidadMiembro = z.object({
+  usuario_id: z.string(),
+  nombre: z.string(),
+  color_idx: z.number().nullable(),
+  horas: z.number().int(),
+  tareas: z.number().int(),
+}) satisfies z.ZodType<CapacidadMiembro>;
+
+const esquemaPuntoBurndown = z.object({
+  dia: z.string(),
+  total: z.number().int(),
+  completadas: z.number().int(),
+}) satisfies z.ZodType<PuntoBurndown>;
+
+export const esquemaSprintDetalle = esquemaSprint.extend({
+  capacidad: z.array(esquemaCapacidadMiembro),
+  serie: z.array(esquemaPuntoBurndown),
+  tareas: z.array(esquemaTareaEquipo),
+}) satisfies z.ZodType<SprintDetalle>;
+
+const esquemaNotaRetroBd = z.object({
+  id: z.string(),
+  columna: z.enum(COLUMNAS_RETRO),
+  texto: z.string(),
+  anonima: z.boolean(),
+  mia: z.boolean(),
+  autor: esquemaPersonaTarea.nullable(),
+  grupo: z.string().nullable(),
+  tarea_id: z.string().nullable(),
+  votos: z.number().int(),
+  voto_mio: z.boolean(),
+  creada_en: fechaIso,
+}) satisfies z.ZodType<NotaRetro>;
+
+export const esquemaRetrospectiva = z.object({
+  id: z.string(),
+  sprint_id: z.string(),
+  sprint_numero: z.number().int(),
+  votacion_cerrada: z.boolean(),
+  cerrada: z.boolean(),
+  votos_por_persona: z.number().int(),
+  mis_votos_usados: z.number().int(),
+  notas: z.array(esquemaNotaRetroBd),
+}) satisfies z.ZodType<Retrospectiva>;
+
+export const esquemaResultadoVotoRetro = z.object({
+  nota_id: z.string(),
+  votos: z.number().int(),
+  voto_mio: z.boolean(),
+  mis_votos_usados: z.number().int(),
+}) satisfies z.ZodType<ResultadoVotoRetro>;

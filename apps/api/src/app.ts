@@ -11,6 +11,7 @@ import { rutasContacto } from './rutas/contacto';
 import { rutasDev } from './rutas/dev';
 import { rutasEquipos } from './rutas/equipos';
 import { rutasPersonal } from './rutas/personal';
+import { rutasSprints } from './rutas/sprints';
 import { rutasTareasEquipo } from './rutas/tareasEquipo';
 import { rutasYo } from './rutas/yo';
 
@@ -60,6 +61,7 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   await app.register(rutasContacto, { db });
   await app.register(rutasEquipos, { db });
   await app.register(rutasTareasEquipo, { db });
+  await app.register(rutasSprints, { db });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });
