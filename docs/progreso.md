@@ -116,7 +116,7 @@
 
 ## Fase 3 · Hill Chart, sprints y vistas secundarias
 
-**Estado:** terminada el 2026-11-18 en la rama `feat/fase-3` (PR #11 hacia `Dev_Luis`, CI en verde). Falta fusionar el PR y poner el tag `fase-3` (ver «Cierre»).
+**Estado:** terminada el 2026-11-18 (rama `feat/fase-3` fusionada en `Dev_Luis` con el PR #11, tag `fase-3`).
 
 ### Hecho
 
@@ -144,7 +144,7 @@
   - Un sprint se planea, se inicia, se cierra con instantánea y tiene retrospectiva ✔ (3.3).
   - Una elección de liderazgo completa funciona de punta a punta, con plazos acortados en la prueba ✔ (P76 y `liderazgo.test.ts`; en el navegador, una elección real con la semilla).
   - Las pantallas de 3.1 a 3.6 existen o están anotadas como fase posterior ✔ (ver «Fase posterior» abajo).
-  - CI en verde ✔. **Tag `fase-3`: pendiente** hasta fusionar el PR #11 en `Dev_Luis` (como se hizo con `fase-2-5`).
+  - CI en verde ✔ y tag `fase-3` ✔: el PR #11 se fusionó en `Dev_Luis` por avance directo (sin commit de fusión, como la 2.5) y el tag apunta a `583ee77`.
 - **Fase posterior (anotado a propósito):**
   - PF-05 WhatsApp personal y consentimiento → Fase 4.
   - Exportar o borrar todos los datos (FALT-09) y contraseña, correo y 2FA (PF-02) → Fase 5.
@@ -157,7 +157,7 @@
 
 La Fase 3 está completa en `feat/fase-3`. Reglas que siguen en marcha (DEC-025): **todo acceso a datos es un proceso `proc_*`** en una migración nueva (la siguiente es `0014_…`), que termina con `SELECT fn_conceder_procesos();`, se documenta en `docs/08` (la CI falla si no: `pnpm procesos:verificar`), tiene casos en `apps/api/db/tests/pruebas_procesos.sql` (hoy P1–P103; al agregar, subir el número en `apps/api/scripts/pruebas-procesos.ts` y en el texto del paso de `.github/workflows/ci.yml`) y se llama desde `apps/api/src/repositorios/` con `llamarProceso()` y un esquema Zod de `packages/shared/src/respuestas.ts`. Si una migración cambia tablas, correr `pnpm db:tipos` y subir `apps/api/src/db/tipos.ts`.
 
-1. Fusionar el PR #11 (`feat/fase-3` → `Dev_Luis`) y poner el tag `fase-3`; después, el PR `Dev_Luis` → `dev`.
+1. Abrir el PR `Dev_Luis` → `dev` (ya incluye las Fases 2.5 y 3).
 2. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`): Vercel + Render + dominio propio. El temporizador de plazos ya corre en el proceso de la API.
 3. **Fase 4 · Chat y WhatsApp**, que trae `pg-boss`, el despachador de eventos (notificaciones de asignaciones y menciones) y PF-05.
 
@@ -165,6 +165,5 @@ La Fase 3 está completa en `feat/fase-3`. Reglas que siguen en marcha (DEC-025)
 
 ### Pendiente
 
-- [ ] Fusionar el PR #11 y poner el tag `fase-3`.
 - [ ] Revisar DEC-031 a DEC-034, en especial: qué entra al planear (más que «aceptadas»), capacidad sin estimaciones, todos los integrantes como candidatos y desempate por antigüedad (DEC-032), archivos guardados en PostgreSQL (DEC-033).
 - [ ] Revisar DEC-030 (forma por miembro) y los pendientes de la Fase 2.5 (PR `Dev_Luis` → `dev`, secret scanning, V-10 y V-11).
