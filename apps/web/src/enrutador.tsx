@@ -17,6 +17,7 @@ const equipos = () => import('./pages/equipos');
 const equipo = () => import('./pages/equipo');
 const sprints = () => import('./pages/equipo/sprints');
 const vistas = () => import('./pages/equipo/vistas');
+const ajustes = () => import('./pages/ajustes');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -120,7 +121,13 @@ const rutas: RouteObject[] = [
               (m) => m.EquiposPersonal,
             ),
           },
-          { path: 'app/personal/reportes', element: proximamente('Reportes personales', 3) },
+          {
+            path: 'app/personal/reportes',
+            lazy: diferida(
+              () => import('./pages/personal/Reportes'),
+              (m) => m.ReportesPersonales,
+            ),
+          },
           { path: 'app/equipos/nuevo', lazy: diferida(equipos, (m) => m.CrearEquipo) },
           { path: 'app/equipos/unirse', lazy: diferida(equipos, (m) => m.Unirse) },
           {
@@ -257,7 +264,27 @@ const rutas: RouteObject[] = [
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],
           },
-          { path: 'ajustes/*', element: proximamente('Ajustes', 3) },
+          {
+            // Fase 3.6: ajustes de la persona (PF-01 a PF-09).
+            path: 'ajustes',
+            lazy: diferida(ajustes, (m) => m.AjustesLayout),
+            children: [
+              { index: true, element: <Navigate to="perfil" replace /> },
+              ...(
+                [
+                  ['perfil', 'Perfil'],
+                  ['cuenta', 'Cuenta'],
+                  ['apariencia', 'Apariencia'],
+                  ['notificaciones', 'Notificaciones'],
+                  ['whatsapp', 'WhatsAppPersonal'],
+                  ['privacidad', 'Privacidad'],
+                  ['equipos', 'MisEquipos'],
+                  ['atajos', 'Atajos'],
+                  ['ayuda', 'Ayuda'],
+                ] as const
+              ).map(([path, nombre]) => ({ path, lazy: diferida(ajustes, (m) => m[nombre]) })),
+            ],
+          },
         ],
       },
     ],
