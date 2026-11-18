@@ -7,5 +7,6 @@ export * from './equipos';
 export * from './votacion';
 export * from './sprints';
 export * from './liderazgo';
+export * from './vistas';
 export * from './respuestas';
 export * from './color';

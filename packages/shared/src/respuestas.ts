@@ -49,6 +49,23 @@ import {
   type Sprint,
   type SprintDetalle,
 } from './sprints';
+import {
+  REPETICIONES,
+  RESPUESTAS_ASISTENCIA,
+  TIPOS_ACTIVIDAD,
+  TIPOS_ARCHIVO,
+  TIPOS_PLANTILLA,
+  type Archivo,
+  type CalendarioEquipo,
+  type EntradaActividad,
+  type FilaExportacion,
+  type Notificacion,
+  type Notificaciones,
+  type PaginaActividad,
+  type Plantilla,
+  type ReporteEquipo,
+  type Reunion,
+} from './vistas';
 import { esquemaResumenVotacion } from './votacion';
 
 /**
@@ -434,3 +451,127 @@ export const esquemaConfiguracionEquipo = z.object({
   max_miembros: z.number().int(),
   archivado_en: fechaIso.nullable(),
 }) satisfies z.ZodType<ConfiguracionEquipo>;
+
+// --- Vistas secundarias y archivos (0011, 0012) ------------------------------------------------
+
+export const esquemaReunion = z.object({
+  id: z.string(),
+  titulo: z.string(),
+  inicio: fechaIso,
+  inicio_serie: fechaIso,
+  duracion_min: z.number().int(),
+  repeticion: z.enum(REPETICIONES),
+  lugar: z.string(),
+  descripcion: z.string(),
+  recordatorio_min: z.number().int(),
+  avisar_wa: z.boolean(),
+  creada_por: esquemaPersonaTarea.nullable(),
+  puedo_editar: z.boolean(),
+  asistencia: z.object({
+    si: z.number().int(),
+    no: z.number().int(),
+    quiza: z.number().int(),
+    pendiente: z.number().int(),
+  }),
+  mi_respuesta: z.enum(RESPUESTAS_ASISTENCIA).nullable(),
+}) satisfies z.ZodType<Reunion>;
+
+export const esquemaCalendarioEquipo = z.object({
+  reuniones: z.array(esquemaReunion),
+  entregas: z.array(esquemaTareaEquipo),
+}) satisfies z.ZodType<CalendarioEquipo>;
+
+const esquemaEntradaActividad = z.object({
+  id: z.string(),
+  tipo: z.enum(TIPOS_ACTIVIDAD),
+  accion: z.string(),
+  resumen: z.string(),
+  objeto_tipo: z.string(),
+  objeto_id: z.string().nullable(),
+  creado_en: fechaIso,
+  autor: esquemaPersonaTarea.nullable(),
+}) satisfies z.ZodType<EntradaActividad>;
+
+export const esquemaPaginaActividad = z.object({
+  items: z.array(esquemaEntradaActividad),
+  hay_mas: z.boolean(),
+}) satisfies z.ZodType<PaginaActividad>;
+
+const esquemaNotificacion = z.object({
+  id: z.string(),
+  equipo_id: z.string().nullable(),
+  equipo: z.string().nullable(),
+  categoria: z.enum(['menciones', 'tareas', 'equipo']),
+  icono: z.string(),
+  titulo: z.string(),
+  texto: z.string(),
+  enlace: z.string().nullable(),
+  accion_tipo: z.string().nullable(),
+  accion_ref: z.string().nullable(),
+  creada_en: fechaIso,
+  leida_en: fechaIso.nullable(),
+}) satisfies z.ZodType<Notificacion>;
+
+export const esquemaNotificaciones = z.object({
+  no_leidas: z.number().int(),
+  items: z.array(esquemaNotificacion),
+}) satisfies z.ZodType<Notificaciones>;
+
+export const esquemaReporteEquipo = z.object({
+  generado_en: fechaIso,
+  por_estado: z.record(z.string(), z.number().int()),
+  completadas: z.number().int(),
+  a_tiempo: z.number().int(),
+  con_retraso: z.number().int(),
+  vencidas: z.number().int(),
+  por_persona: z.array(
+    esquemaPersonaTarea.extend({
+      abiertas: z.number().int(),
+      completadas: z.number().int(),
+      a_tiempo: z.number().int(),
+    }),
+  ),
+  sprints: z.array(
+    z.object({
+      numero: z.number().int(),
+      estado: z.string(),
+      total: z.number().int(),
+      completadas: z.number().int(),
+    }),
+  ),
+}) satisfies z.ZodType<ReporteEquipo>;
+
+export const esquemaFilaExportacion = z.object({
+  codigo: z.string(),
+  titulo: z.string(),
+  estado: z.string(),
+  prioridad: z.string(),
+  responsable: z.string().nullable(),
+  sprint: z.number().int().nullable(),
+  progreso: z.number().int(),
+  vence_en: fechaIso.nullable(),
+  completada_en: fechaIso.nullable(),
+  resultado: z.string().nullable(),
+  creado_en: fechaIso,
+}) satisfies z.ZodType<FilaExportacion>;
+
+export const esquemaPlantilla = z.object({
+  id: z.string(),
+  nombre: z.string(),
+  tipo: z.enum(TIPOS_PLANTILLA),
+  descripcion: z.string(),
+  creada_en: fechaIso,
+  elementos: z.array(z.string()),
+}) satisfies z.ZodType<Plantilla>;
+
+export const esquemaArchivo = z.object({
+  id: z.string(),
+  nombre: z.string(),
+  mime: z.string(),
+  tipo: z.enum(TIPOS_ARCHIVO),
+  tamano_bytes: z.number().int(),
+  creado_en: fechaIso,
+  subido_por: esquemaPersonaTarea.nullable(),
+  tarea: z.object({ id: z.string(), codigo: z.number().int(), titulo: z.string() }).nullable(),
+  puedo_eliminar: z.boolean(),
+}) satisfies z.ZodType<Archivo>;

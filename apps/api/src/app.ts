@@ -14,6 +14,7 @@ import { rutasLiderazgo } from './rutas/liderazgo';
 import { rutasPersonal } from './rutas/personal';
 import { rutasSprints } from './rutas/sprints';
 import { rutasTareasEquipo } from './rutas/tareasEquipo';
+import { rutasVistas } from './rutas/vistas';
 import { rutasYo } from './rutas/yo';
 
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
@@ -64,6 +65,7 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   await app.register(rutasTareasEquipo, { db });
   await app.register(rutasSprints, { db });
   await app.register(rutasLiderazgo, { db });
+  await app.register(rutasVistas, { db });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });
