@@ -50,6 +50,7 @@ import { AccionesCtx, perfilEn, SesionCtx, type AccionesGlobales } from './conte
 import { Logo } from './Logo';
 import { navegacion, pie, type ItemNav } from './navegacion';
 import { Tour } from './Tour';
+import { useNotificaciones } from '@/lib/consultasVistas';
 
 function useEnLinea() {
   return useSyncExternalStore(
@@ -107,6 +108,7 @@ function ShellCargando() {
 
 function Shell({ yo }: { yo: Yo }) {
   const nav = useNavigate();
+  const noLeidas = useNotificaciones().data?.no_leidas ?? 0;
   const { equipo } = useParams();
   const [sp, setSp] = useSearchParams();
   const enLinea = useEnLinea();
@@ -297,7 +299,8 @@ function Shell({ yo }: { yo: Yo }) {
                 </Boton>
               )}
               <BotonIcono
-                etiqueta="Notificaciones"
+                etiqueta={noLeidas ? `Notificaciones (${noLeidas} sin leer)` : 'Notificaciones'}
+                contador={noLeidas}
                 onClick={() => nav('/app/notificaciones')}
                 data-tour="notificaciones"
               >

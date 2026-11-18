@@ -16,6 +16,7 @@ const auth = () => import('./pages/auth');
 const equipos = () => import('./pages/equipos');
 const equipo = () => import('./pages/equipo');
 const sprints = () => import('./pages/equipo/sprints');
+const vistas = () => import('./pages/equipo/vistas');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -122,7 +123,13 @@ const rutas: RouteObject[] = [
           { path: 'app/personal/reportes', element: proximamente('Reportes personales', 3) },
           { path: 'app/equipos/nuevo', lazy: diferida(equipos, (m) => m.CrearEquipo) },
           { path: 'app/equipos/unirse', lazy: diferida(equipos, (m) => m.Unirse) },
-          { path: 'app/notificaciones', element: proximamente('Notificaciones', 3) },
+          {
+            path: 'app/notificaciones',
+            lazy: diferida(
+              () => import('./pages/Notificaciones'),
+              (m) => m.Notificaciones,
+            ),
+          },
           {
             path: 'app/e/:equipo',
             Component: EquipoGuard,
@@ -217,6 +224,28 @@ const rutas: RouteObject[] = [
                   return {
                     element: (
                       <Requiere permiso="ver_miembros">
+                        <Pantalla />
+                      </Requiere>
+                    ),
+                  };
+                },
+              })),
+              // Fase 3.4: vistas secundarias del equipo (EQ-14 a EQ-20).
+              ...(
+                [
+                  ['calendario', 'CalendarioEquipo', 'ver_calendario'],
+                  ['reportes', 'Reportes', 'ver_reportes'],
+                  ['actividad', 'Actividad', 'ver_actividad'],
+                  ['archivos', 'Archivos', 'ver_archivos'],
+                  ['plantillas', 'Plantillas', 'usar_plantilla'],
+                ] as const
+              ).map(([path, nombre, permiso]) => ({
+                path,
+                lazy: async () => {
+                  const Pantalla = (await vistas())[nombre];
+                  return {
+                    element: (
+                      <Requiere permiso={permiso}>
                         <Pantalla />
                       </Requiere>
                     ),
