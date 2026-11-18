@@ -138,6 +138,9 @@
 | `proc_archivo_subir` | Archivos | `0012_archivos.sql` | Vigente |
 | `proc_archivo_descargar` | Archivos (lectura) | `0012_archivos.sql` | Vigente |
 | `proc_archivo_eliminar` | Archivos | `0012_archivos.sql` | Vigente |
+| `proc_usuario_ajustes` | Cuenta · ajustes (lectura) | `0013_procesos_ajustes.sql` | Vigente |
+| `proc_usuario_ajustes_guardar` | Cuenta · ajustes | `0013_procesos_ajustes.sql` | Vigente |
+| `proc_reporte_personal` | Espacio personal (lectura) | `0013_procesos_ajustes.sql` | Vigente |
 
 **Auxiliares (`fn_*`, no las llama la aplicación)** creadas en `0003`: índice fraccionario (`fn_orden_entre`, `fn_orden_al_final` y sus partes), `fn_votacion_resultado`, `fn_votacion_resumen`, `fn_integrantes_activos`, `fn_registrar_evento`, `fn_membresia_actor`, `fn_exigir_lider`, `fn_exigir_equipo_activo`, `fn_exigir_responsable`, `fn_exigir_version`, `fn_bloquear_tarea`, `fn_fijar_etiquetas`, `fn_tarea_insertar_propuesta`, y los disparadores `fn_voto_propuesta_valido` y `fn_membresia_descarta_votos`.
 
@@ -148,6 +151,8 @@
 **Auxiliares de `0010` (liderazgo y equipo):** avisos (`fn_notificar`, `fn_notificar_equipo`, `fn_enlace_liderazgo`), membresías (`fn_membresia_bloquear`, `fn_miembro_retirado`, `fn_votaciones_reevaluar`: recuenta las propuestas abiertas cuando cambian los integrantes, misma regla que `proc_tarea_votar`), cambio de líder (`fn_cambiar_lider`) y elección (`fn_eleccion_finalistas`, `fn_eleccion_votantes`, `fn_eleccion_resolver`, `fn_eleccion_json`, `fn_transferencia_json`, `fn_liderazgo_json`).
 
 **Auxiliares de `0011` y `0012` (vistas y archivos):** `fn_exigir_no_invitado`, reuniones (`fn_reunion_ocurrencias`, que expande las repeticiones; `fn_reunion_json`, `fn_reunion_editable`), `fn_plantilla_json`, archivos (`fn_archivo_tipo`, la lista de tipos permitidos; `fn_archivo_json`) y la tabla `archivo_contenidos` (0012). La `0011` cambia otra vez `fn_registrar_evento`: los eventos `reunion.*` quedan en `actividad` con tipo `reunion`.
+
+**Auxiliares de `0013` (ajustes):** `fn_eventos_notificacion` (los avisos configurables) y `fn_ajustes_json`.
 
 ## 4b. Roles de la BD
 
@@ -1499,3 +1504,45 @@
 - **Pruebas:** `pruebas_procesos.sql` P100; `vistas.test.ts`.
 - **Ejemplo de llamada:** `select proc_archivo_eliminar($1, $2, $3)`
 - **Historial:** 2026-11-18 · creación · `0012`.
+
+### proc_usuario_ajustes
+- **Migración:** `0013_procesos_ajustes.sql`
+- **Propósito:** Ajustes de avisos y privacidad de la persona (PF-04, PF-06).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta.
+- **Retorno:** `jsonb` `AjustesUsuario`: `silencio_desde`, `silencio_hasta` («HH:MM» o null), `resumen_diario`, `estado_visible`, `primer_dia` y `notificaciones[]` con `evento`, `por_app`, `por_whatsapp` y `por_correo` para cada aviso configurable (`fn_eventos_notificacion`).
+- **Reglas y validaciones:** solo los del actor. Si nunca los cambió, devuelve los valores por defecto (avisos en la app, sin WhatsApp ni correo, sin silencio, estado visible).
+- **Errores:** ninguno propio.
+- **Tablas que toca:** lectura `preferencias_usuario` (la crea si falta), `preferencias_notificacion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/ajustes.ts` → `obtener()`; `GET /yo/ajustes`.
+- **Pruebas:** `pruebas_procesos.sql` P101; `ajustes.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_ajustes($1)`
+- **Historial:** 2026-11-18 · creación · `0013`.
+
+### proc_usuario_ajustes_guardar
+- **Migración:** `0013_procesos_ajustes.sql`
+- **Propósito:** Guardar los ajustes de avisos y privacidad (PF-04, PF-06).
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_cambios jsonb` · solo lo que cambia: `silencio_desde` y `silencio_hasta` (juntos), `resumen_diario`, `estado_visible`, `primer_dia` (`lunes` | `domingo`) y `notificaciones[]`.
+- **Retorno:** `jsonb` `AjustesUsuario`.
+- **Reglas y validaciones:** solo los del actor. Las horas de silencio van completas (inicio y fin) y en formato válido; los avisos deben ser de la lista; `primer_dia` lo valida el `CHECK` de la tabla. Los canales WhatsApp y correo se guardan, pero los envíos llegan en las Fases 4 y 5 (DEC-034).
+- **Errores:** `NX010` · silencio incompleto, hora inválida, aviso desconocido o día inválido.
+- **Tablas que toca:** escritura `preferencias_usuario`, `preferencias_notificacion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/ajustes.ts` → `guardar()`; `PATCH /yo/ajustes`.
+- **Pruebas:** `pruebas_procesos.sql` P102; `ajustes.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_ajustes_guardar($1, '{"estado_visible": false}')`
+- **Historial:** 2026-11-18 · creación · `0013`.
+
+### proc_reporte_personal
+- **Migración:** `0013_procesos_ajustes.sql`
+- **Propósito:** Reporte personal (FALT-01): tareas personales y las de equipo a tu cargo.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta.
+- **Retorno:** `jsonb` `ReportePersonal`: `por_estado{}`, `completadas`, `a_tiempo`, `con_retraso`, `vencidas` y `por_espacio[]` (el espacio personal y cada equipo con sus abiertas y completadas).
+- **Reglas y validaciones:** cuenta las tareas personales del actor y las de equipo de las que es responsable **solo en los equipos donde sigue activo**; no cuenta archivadas.
+- **Errores:** ninguno propio.
+- **Tablas que toca:** lectura `tareas`, `membresias`, `equipos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/ajustes.ts` → `reportePersonal()`; `GET /personal/reporte`.
+- **Pruebas:** `pruebas_procesos.sql` P103; `ajustes.test.ts`.
+- **Ejemplo de llamada:** `select proc_reporte_personal($1)`
+- **Historial:** 2026-11-18 · creación · `0013`.

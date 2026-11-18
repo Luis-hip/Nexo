@@ -5,6 +5,6 @@ import { ejecutarPruebasSql } from './comun';
  * Exige exactamente las líneas «OK Pn» esperadas, en una transacción que se revierte.
  * Al agregar un caso al archivo, agrégalo también aquí.
  */
-const ESPERADAS = Array.from({ length: 100 }, (_, i) => `P${i + 1}`);
+const ESPERADAS = Array.from({ length: 103 }, (_, i) => `P${i + 1}`);
 
 await ejecutarPruebasSql('tests/pruebas_procesos.sql', ESPERADAS);

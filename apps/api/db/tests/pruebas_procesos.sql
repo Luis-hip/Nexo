@@ -1679,3 +1679,55 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid; ok int := 0; BEGIN
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P100: % de 2 rechazos', ok; END IF;
   RAISE NOTICE 'OK P100: proc_archivo_eliminar';
 END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- Ajustes de la persona (0013, Fase 3.6)
+-- ---------------------------------------------------------------------------------------------
+
+-- P101. proc_usuario_ajustes: valores por defecto (avisos en la app, sin silencio) para cada persona.
+DO $$ DECLARE u uuid := pg_temp.usuario(); d jsonb; BEGIN
+  d := proc_usuario_ajustes(u);
+  IF jsonb_array_length(d->'notificaciones') <> 7 OR NOT (d->'notificaciones'->0->>'por_app')::boolean
+     OR (d->'notificaciones'->0->>'por_whatsapp')::boolean OR d->'silencio_desde' <> 'null'::jsonb
+     OR NOT (d->>'estado_visible')::boolean OR d->>'primer_dia' <> 'lunes' THEN
+    RAISE EXCEPTION 'FALLO P101: %', d;
+  END IF;
+  RAISE NOTICE 'OK P101: proc_usuario_ajustes';
+END $$;
+
+-- P102. proc_usuario_ajustes_guardar: horas de silencio, privacidad y canales por aviso; el silencio
+--       va completo (NX010), con horas válidas (NX010) y solo con avisos conocidos (NX010). Cada
+--       quien cambia solo los suyos.
+DO $$ DECLARE u uuid := pg_temp.usuario(); otro uuid := pg_temp.usuario(); d jsonb; ok int := 0; BEGIN
+  d := proc_usuario_ajustes_guardar(u, '{"silencio_desde": "22:00", "silencio_hasta": "07:30", "estado_visible": false,
+    "notificaciones": [{"evento": "reunion", "por_app": false, "por_whatsapp": true, "por_correo": false}]}');
+  IF d->>'silencio_desde' <> '22:00' OR d->>'silencio_hasta' <> '07:30' OR (d->>'estado_visible')::boolean
+     OR (SELECT (x->>'por_app')::boolean FROM jsonb_array_elements(d->'notificaciones') x WHERE x->>'evento' = 'reunion') THEN
+    RAISE EXCEPTION 'FALLO P102: %', d;
+  END IF;
+  IF (SELECT count(*) FROM preferencias_notificacion WHERE usuario_id = otro) <> 0 THEN RAISE EXCEPTION 'FALLO P102: tocó a otra persona'; END IF;
+  BEGIN PERFORM proc_usuario_ajustes_guardar(u, '{"silencio_desde": "22:00"}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_usuario_ajustes_guardar(u, '{"silencio_desde": "25:00", "silencio_hasta": "07:00"}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_usuario_ajustes_guardar(u, '{"notificaciones": [{"evento": "otro"}]}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_usuario_ajustes_guardar(u, '{"primer_dia": "martes"}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P102: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P102: proc_usuario_ajustes_guardar';
+END $$;
+
+-- P103. proc_reporte_personal (FALT-01): tareas personales y las de equipo a tu cargo, por espacio;
+--       las de un equipo del que ya saliste no cuentan.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); yo uuid := pg_temp.integrante(e, 1); d jsonb; BEGIN
+  PERFORM proc_personal_tarea_crear(yo, '{"titulo": "Personal"}');
+  PERFORM pg_temp.aceptada(e, 1, 'Del equipo');
+  d := proc_reporte_personal(yo);
+  IF jsonb_array_length(d->'por_espacio') <> 2 OR d->'por_espacio'->0->>'nombre' <> 'Espacio personal' THEN
+    RAISE EXCEPTION 'FALLO P103: %', d;
+  END IF;
+  PERFORM proc_equipo_salir(yo, e);
+  IF jsonb_array_length(proc_reporte_personal(yo)->'por_espacio') <> 1 THEN RAISE EXCEPTION 'FALLO P103: contó un equipo ajeno'; END IF;
+  RAISE NOTICE 'OK P103: proc_reporte_personal';
+END $$;
