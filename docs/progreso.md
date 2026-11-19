@@ -161,7 +161,7 @@ La Fase 3 está completa en `feat/fase-3`. Reglas que siguen en marcha (DEC-025)
 2. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`): Vercel + Render + dominio propio. El temporizador de plazos ya corre en el proceso de la API.
 3. **Fase 4 · Chat y WhatsApp**, que trae `pg-boss`, el despachador de eventos (notificaciones de asignaciones y menciones) y PF-05.
 
-**BD local sin Docker:** `node node_modules/@electric-sql/pglite-socket/dist/scripts/server.js --db=memory:// --port=5432 --extensions=citext --max-connections=10` desde una carpeta con `@electric-sql/pglite@0.5.16` y `@electric-sql/pglite-socket@0.2.19` instalados; después `pnpm db:reset`, `pnpm db:test`, `pnpm db:test:procesos` y `DATABASE_URL=postgres://nexo:nexo@localhost:5432/nexo pnpm test`.
+**BD local sin Docker:** `pnpm db:local` en una terminal aparte que quede abierta (PGlite en el puerto 5432, datos en `.pglite/`, ignorada por git; sobreviven al cerrarla); después `pnpm db:reset` la primera vez, `pnpm db:test`, `pnpm db:test:procesos` y `DATABASE_URL=postgres://nexo:nexo@localhost:5432/nexo pnpm test`. Si la terminal se cierra, la API da `ECONNREFUSED` en el 5432 y el acceso de desarrollo no carga usuarios.
 
 ### Pendiente
 

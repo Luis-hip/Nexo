@@ -24,7 +24,7 @@ Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (has
 
 - Node.js 22 o superior
 - pnpm 10 (`npm i -g pnpm@10`)
-- Docker (para PostgreSQL 16 en local)
+- Docker (para PostgreSQL 16 en local) **o**, sin Docker, nada más: `pnpm db:local` levanta PGlite (PostgreSQL embebido) en el mismo puerto
 
 ## Instalación
 
@@ -38,6 +38,8 @@ pnpm db:reset
 pnpm db:test
 pnpm dev
 ```
+
+**Sin Docker.** En lugar de `docker compose up -d`, abre otra terminal, corre `pnpm db:local` y déjala abierta: levanta PGlite en `localhost:5432` (lo que espera `.env.example`) y guarda los datos en `.pglite/` (ignorada por git), así que sobreviven al cerrarla. Si esa terminal se cierra, la API responde con error y el acceso de desarrollo no carga usuarios (`ECONNREFUSED ... 5432`). La CI sigue probando con PostgreSQL 16 real.
 
 `pnpm db:reset` borra el esquema local, aplica las migraciones y carga la semilla. `pnpm db:test` debe terminar con **11 pruebas SQL OK**. La web queda en http://localhost:5173 y la API en http://localhost:3000.
 
@@ -54,6 +56,7 @@ pnpm dev
 | `pnpm db:migrate` · `pnpm db:seed`                   | Aplicar migraciones · cargar la semilla                            |
 | `pnpm db:test`                                       | Pruebas de integridad SQL (11 `OK`)                                |
 | `pnpm db:reset`                                      | Base local desde cero (nunca en producción)                        |
+| `pnpm db:local`                                      | PostgreSQL local sin Docker (PGlite en el puerto 5432)             |
 | `pnpm db:tipos`                                      | Regenerar `apps/api/src/db/tipos.ts` desde la BD (se versiona)     |
 
 ## Secretos
