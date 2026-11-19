@@ -21,6 +21,9 @@ import { rutasYo } from './rutas/yo';
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: RUTAS_OCULTAS_EN_REGISTROS },
+    // Detrás del proxy de Render la IP real llega en X-Forwarded-For; sin esto el límite de
+    // peticiones vería a todo el mundo como una sola IP (docs/10, sección 6).
+    trustProxy: config.NODE_ENV === 'production',
   });
 
   await app.register(cors, {

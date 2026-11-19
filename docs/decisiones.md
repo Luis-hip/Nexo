@@ -329,3 +329,15 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Privacidad (PF-06).** Mostrar o no el estado y el primer día de la semana. Exportar todos los datos o borrar la cuenta es FALT-09 (Fase 5).
 - **Mis equipos (PF-07).** Lista con el rol en cada equipo y «Salir» (`proc_equipo_salir`; el líder primero transfiere). **Atajos (PF-08)** y **Ayuda (PF-09)** son pantallas de lectura.
 - **Reporte personal (FALT-01).** Tareas personales y las de equipo a cargo de la persona, **solo de los equipos donde sigue activa** (lo de un equipo que dejó ya no es suyo), con un resumen por espacio. **FALT-07** (historial de transferencias y elecciones) está en `equipo/eleccion` (DEC-032).
+
+## DEC-035 · Fase 3.5: preparación del despliegue (archivos, sin desplegar)
+
+**Fecha:** 2026-11-18 · **Fuente:** `10_Plan_de_Despliegue.md`, sección 6 · **Estado:** archivos preparados; **nada desplegado todavía**.
+
+- **Empaquetado de la API (DEC-006).** Se mantiene `tsx` en producción (`tsx` está en `dependencies`); `build` sigue siendo solo la comprobación de tipos. Es lo más simple y evita un empaquetador nuevo; se revisa si el arranque o la memoria (512 MB) dan problemas.
+- **Migraciones.** `db:migrate` usa `DATABASE_URL_MIGRACIONES` si existe y, si no, `DATABASE_URL` (local y CI no cambian). En Render corre como `preDeployCommand`, con las dependencias de desarrollo instaladas (`--prod=false`) porque `node-pg-migrate` es de desarrollo. La semilla no se carga.
+- **`render.yaml`.** Servicio web `nexo-api` (plan `0.5c-512mb`) y BD `nexo-bd` (PostgreSQL 16, plan `0.1c-256mb`), región `virginia` (se eligió por cercanía; no se puede cambiar después), rama `produccion`, `autoDeployTrigger: checksPass`, `healthCheckPath: /salud`, dominio `api.nexo.lol`. Secretos con `sync: false` (`DATABASE_URL`, `ENCRYPTION_KEY`) o generados por Render (`SESSION_SECRET`). Sintaxis comprobada en la documentación de Render el 2026-11-18; **sin comprobar**: `corepack` en el entorno de Render y la URL del repositorio en el primer despliegue.
+- **`apps/web/vercel.json`.** Vite, `pnpm build`, salida `dist`, reescritura a `index.html` y despliegue automático **solo** de `produccion` (`git.deploymentEnabled`, con comodín `*` comprobado en la documentación de Vercel el 2026-11-18). En el proyecto hay que fijar *Root Directory* = `apps/web` y `VITE_API_URL=https://api.nexo.lol`.
+- **`trustProxy` en producción.** Detrás del proxy de Render, el límite de peticiones (contacto) vería a todo el mundo como una sola IP; con `trustProxy` usa `X-Forwarded-For`.
+- **`.node-version` = 22** (Render lo lee; coincide con `engines` y la CI).
+- **Dominio.** `nexo.lol` en Porkbun; subdominios `app.` (Vercel) y `api.` (Render). El dominio raíz debería redirigir a `app.` para que Meta tenga un sitio público que revisar (tarea 0.7).
