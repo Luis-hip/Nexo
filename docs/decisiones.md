@@ -1,6 +1,6 @@
 # Nexo · Registro de decisiones
 
-> Regla (docs/03, sección 1.2): si algo no está en `01`/`02`, se elige lo más simple, se anota aquí y se sigue; si es irreversible, se pregunta. Cada entrada: fecha, contexto, decisión y consecuencia. Las decisiones pendientes del producto (D-01, D-02, D-03) siguen en `01_Contexto_y_Especificaciones.md`.
+> Regla (docs/03, sección 1.2): si algo no está en `01`/`02`, se elige lo más simple, se anota aquí y se sigue; si es irreversible, se pregunta. Cada entrada: fecha, contexto, decisión y consecuencia. La decisión pendiente del producto D-01 sigue en `01_Contexto_y_Especificaciones.md` (D-02 se eliminó y D-03 quedó resuelta: DEC-027 y DEC-029).
 
 | ID | Fecha | Tema | Estado |
 |---|---|---|---|
@@ -23,10 +23,17 @@
 | DEC-017 | 2026-11-12 | Preferencias de apariencia: servidor y copia local | Vigente |
 | DEC-018 | 2026-11-15 | Equipos: acceso por membresía y 404 a quien no pertenece | Vigente |
 | DEC-019 | 2026-11-15 | Invitaciones: código, enlace y reglas | Vigente |
-| DEC-020 | 2026-11-15 | Tareas de equipo: destino, triaje y asignación | Vigente |
+| DEC-020 | 2026-11-15 | Tareas de equipo: destino, triaje y asignación | **Reemplazada en parte por DEC-024** |
 | DEC-021 | 2026-11-15 | Orden con índice fraccionario y concurrencia | Vigente |
 | DEC-022 | 2026-11-15 | Los eventos de dominio se registran; aún nadie los consume | Vigente |
 | DEC-023 | 2026-11-15 | Lo que la Fase 2 deja para la Fase 3 | Vigente |
+| DEC-024 | 2026-11-16 | El triaje pasa a ser votación de los integrantes sobre propuestas del líder | Vigente; V-10 y V-11 por confirmar |
+| DEC-025 | 2026-11-16 | Procesos almacenados en la BD; la API sin SQL de negocio | Vigente |
+| DEC-026 | 2026-11-16 | Política de secretos y claves | Vigente |
+| DEC-027 | 2026-11-16 | Alojamiento: Vercel + Render + dominio propio (Fase 3.5) | Vigente; D-03 resuelta |
+| DEC-028 | 2026-11-16 | Documentos 07–10 y fases 2.5 y 3.5 | Vigente |
+| DEC-029 | 2026-11-16 | Nombre «Carlos» (se elimina D-02) y visibilidad de votos | Vigente |
+| DEC-030 | 2026-11-17 | Fase 3: Hill Chart arrastrable y color de miembros en `shared` | Vigente; forma por miembro para revisión |
 
 ---
 
@@ -96,7 +103,7 @@ Ramas personales, creadas desde `dev`, **una por integrante** (sin separar back 
 
 **Contexto.** `packages/shared` se consume como código TypeScript fuente y los imports no llevan extensión; compilar la API con `tsc` no produce ESM ejecutable por Node sin más configuración.
 
-**Decisión.** `build` de la API solo verifica tipos; `dev` y `start` usan `tsx`. La forma de empaquetar para producción (por ejemplo `tsup`/`esbuild`) se decide en la Fase 6 junto con el alojamiento (D-03).
+**Decisión.** `build` de la API solo verifica tipos; `dev` y `start` usan `tsx`. La forma de empaquetar para producción (por ejemplo `tsup`/`esbuild`) se decide al preparar el despliegue (Fase 3.5, `10_Plan_de_Despliegue.md`).
 
 ## DEC-007 · Formateador: Prettier
 
@@ -205,3 +212,120 @@ Cada cambio de equipo inserta su fila en `eventos_dominio` y en `actividad` **en
 ## DEC-023 · Lo que la Fase 2 deja para la Fase 3
 
 Queda sin construir, con «Próximamente» en la web: sprints (planear, cerrar, retro), calendario, reportes, actividad, archivos, plantillas, ajustes del equipo, elección y transferencia de liderazgo, salir y expulsar, y todo el chat y WhatsApp (Fase 4). El tablero muestra todas las tareas que están en sus columnas, haya o no sprint activo. `react-hook-form` sigue sin instalarse: los formularios validan con los esquemas Zod compartidos (ver DEC-015).
+
+## DEC-024 · El triaje pasa a ser una votación de los integrantes sobre propuestas del líder
+
+**Fecha:** 2026-11-16 · **Fuente:** `07_Cambios_de_Alcance_Fase2.md`, sección 1. **Reemplaza en parte a DEC-020.**
+
+El **líder propone** las tareas junto con sus subtareas (una sola operación; estado `propuesta`) y los **integrantes activos votan** aceptar o rechazar (con comentario opcional; pueden cambiar su voto mientras siga abierta). Valores confirmados el 2026-11-16: **V-1** acepta la mayoría simple de **todos** los integrantes activos; **V-2** el líder no vota y los invitados tampoco; **V-3** sin plazo (el líder puede retirarla); **V-4** empate o sin mayoría → sigue en `propuesta`, el líder puede retirarla (`cancelada`) o reformularla; **V-5** sin integrantes el líder acepta directamente; **V-8** se muestra el conteo y quién ya votó, **no** el voto de los demás (la API no lo devuelve mientras está abierta, ni al líder); cada integrante ve el suyo. Un integrante ya no crea ni propone tareas. Quien sale o es expulsado pierde sus votos de propuestas **abiertas**.
+
+**Por confirmar (marcados para revisión de Luis):** **V-10** toda tarea nueva del líder entra en votación (desaparece el destino «backlog directo» de DEC-020); **V-11** la asignación y su aceptación se mantienen (DEC-020), y si el responsable la rechaza el líder **reasigna directamente**, sin nueva votación.
+
+**Sigue vigente de DEC-020:** la asignación, que el responsable acepte o rechace con motivo, la máquina de estados compartida y el orden por índice fraccionario.
+
+**Cómo quedó construido (2026-11-16) y en qué se aparta del `07` (para revisión):**
+
+- **Dos migraciones, no una.** `0002_enums_votacion.sql` solo agrega valores a enums y `0003_votacion.sql` trae la tabla `tarea_votos`, el disparador y los procesos. PostgreSQL no deja usar un valor nuevo de enum en la transacción que lo crea, así que no cabían en una sola `0002`.
+- **Estado `cancelada`.** El `07` pide que una propuesta retirada quede `cancelada`, pero ese valor no existía en `estado_tarea`: lo agrega la `0002`. En la interfaz se llama «Retirada».
+- **Empate (regla 4 frente a V-4).** La regla 4 del `07` dice que se rechaza cuando «ya no es posible alcanzar la mayoría», y V-4 (confirmado) dice que el empate sigue en votación. Como el voto se puede cambiar mientras esté abierta, se aplicó **V-4**: se acepta con más de la mitad a favor, se rechaza con más de la mitad en contra y **cualquier otro caso (2 y 2 con 4 integrantes) sigue abierto**. Si el equipo prefiere que el empate total rechace, es un cambio de una línea en `resultadoVotacion` y en `fn_votacion_resultado`.
+- **«8 integrantes» no existe.** El `07` pide probar la mayoría con 3, 4 y 8 integrantes, pero un equipo admite 8 miembros **contando a la líder**: el máximo son 7 integrantes (mayoría de 4). La prueba SQL usa 7 y comprueba además la función con 8 (mayoría de 5).
+- **Backlog.** Al desaparecer el triaje desaparecía también la única forma de pasar tareas entre el backlog y el tablero. Se agregaron a la máquina de estados las transiciones **del líder** `aceptada → backlog` y `backlog → aceptada` (el «backlog para las que el líder aparta» de V-10).
+- **V-11 en la práctica.** Si el responsable rechaza la asignación, la tarea **conserva su estado** y queda sin responsable; la líder la reasigna con «Asignar». Ya no pasa a `rechazada` ni se usa `rechazo_por = 'responsable'`.
+- **Visibilidad (V-8).** Ni el evento de dominio ni la actividad dicen si el voto fue a favor o en contra, y el comentario del voto solo lo ve quien votó. Con un solo voto emitido, el conteo sí permite deducirlo: es inherente a mostrar conteo y votantes.
+- **Quien sale del equipo** pierde sus votos de propuestas abiertas (disparador). La mayoría se vuelve a calcular en el siguiente voto, no en ese momento; al construir «salir y expulsar» (Fase 3) ese proceso debe volver a evaluar las propuestas abiertas.
+- **Editar una propuesta en votación** sigue permitido a la líder (edita cualquier tarea); los votos no se reinician. Para un cambio de fondo está «Reformular».
+- **`whatsapp_reglas.tipo_evento = 'triaje'`** se conserva y se interpreta como votación de propuestas; no hizo falta agregar valores. **`politica_propuestas`**: valor por defecto `votacion`; `triaje` queda obsoleto y `libre` sin uso en el MVP.
+- **Semilla:** T-07, T-08 y T-09 ahora las propone la líder, y T-08 trae tres votos de ejemplo.
+
+## DEC-025 · Procesos almacenados en la BD; la API no lleva SQL de negocio
+
+**Fecha:** 2026-11-16 · **Fuente:** `07`, sección 2 · **Alcance (V-6) confirmado:** todo lo nuevo nace como proceso; lo de las Fases 1 y 2 se migra en una tarea dedicada de la Fase 2.5.
+
+Toda operación sobre datos es un proceso `proc_<dominio>_<accion>` (documentado en `08_Procesos_BD.md`); la API solo lo llama desde `repositorios/`. Roles `nexo_migraciones` (dueño) y `nexo_app` (solo `EXECUTE`). Riesgo de **reglas duplicadas** (estados, mayoría): la fuente de verdad sigue en `packages/shared`, la BD guarda una copia y una prueba compara ambas. Refactor en rama propia por dominios; si el tiempo aprieta, primero escrituras y operaciones críticas y las lecturas simples pasan a la Fase 3 (anotado en `progreso.md`). Los tipos de `kysely-codegen` quedan para pruebas (decisión final al terminar el refactor).
+
+**Cómo quedó construido (2026-11-17):**
+
+- **Migraciones por dominio:** `0004_procesos_cuenta.sql` (sesiones, preferencias, perfil, contacto y acceso de desarrollo), `0005_procesos_equipos.sql` (contexto de equipo, equipos e invitaciones), `0006_procesos_tareas_equipo.sql` (tablero, estados, asignación, subtareas y comentarios), `0007_procesos_tareas_personales.sql` (espacio personal) y `0008_roles.sql`. En total **49 procesos** (6 de la votación + 43 que sustituyen al SQL que había en 11 archivos), todos en `docs/08`. No quedó nada para la Fase 3: se migraron también las lecturas.
+- **La API ya no escribe SQL.** Los servicios y las rutas no importan `kysely` ni abren transacciones; el único archivo que llama a la BD es `repositorios/procesos.ts` (`select proc_x($1, …)`), que además valida cada respuesta con un esquema Zod de `packages/shared/src/respuestas.ts` y traduce los errores `NX0xx`. **Una regla de ESLint** falla si aparece `selectFrom`, `insertInto`, `updateTable`, `deleteFrom`, `transaction`, una plantilla `sql` o una importación de `kysely`/`pg` fuera de `repositorios/procesos.ts`, `db/` y las pruebas.
+- **Kysely y `kysely-codegen` se conservan**, pero con otro papel: Kysely es solo el cliente que ejecuta la llamada al proceso (y el que usan las pruebas para preparar y comprobar datos) y los tipos generados (`src/db/tipos.ts`) los usan solo las pruebas; la CI sigue comprobando que estén al día. `fractional-indexing` queda solo para la prueba que compara el índice fraccionario de la BD con la librería.
+- **Reglas duplicadas:** la máquina de estados vive en `packages/shared/src/estados.ts` y la BD tiene una copia en la tabla `transiciones_estado`; el índice fraccionario y la mayoría de la votación tienen su copia en PL/pgSQL. **Tres pruebas** (`tareasEquipo.test.ts`) comparan cada copia con su original y fallan si difieren. La API comprueba la transición con `estados.ts` antes de llamar al proceso para responder con el motivo exacto en español; el proceso lo vuelve a comprobar dentro de su transacción.
+- **Orden del tablero:** los procesos ordenan las claves con `COLLATE "C"` (como JavaScript). Antes se ordenaban con la intercalación de la BD, que en PostgreSQL con `en_US.utf8` puede desordenar claves con mayúsculas y minúsculas mezcladas; era un error latente que no se había manifestado.
+- **Roles:** `0008_roles.sql` crea `nexo_app` **sin inicio de sesión y sin contraseña** (el secreto se pone en el despliegue, `09`) y `fn_conceder_procesos()` le deja solo `EXECUTE` sobre `proc_*`, sin tablas, vistas, secuencias ni auxiliares. Los procesos del acceso de desarrollo (`proc_dev_*`) no se le conceden. `nexo_migraciones` no lo crea ninguna migración: es el rol con el que se ejecutan (en local y en la CI lo hace el usuario de `DATABASE_URL`). Toda migración nueva que toque procesos debe terminar con `SELECT fn_conceder_procesos();`.
+- **Pruebas:** `pruebas_procesos.sql` pasó de 15 a **52** casos (al menos un permitido y un prohibido por proceso, más `P51`: todo proceso es `SECURITY DEFINER` con `search_path` fijo, y `P52`: con el rol `nexo_app` no se lee ni escribe ninguna tabla). Las pruebas de integración de la Fase 2 siguen en verde **sin cambiar sus expectativas** (las de triaje se habían cambiado a propósito en el paso 3).
+- **Eventos en orden:** `fn_registrar_evento` sella cada evento con `clock_timestamp()`, para que los de una misma transacción (votar y aceptar por mayoría) salgan en orden en el historial.
+
+## DEC-026 · Política de secretos y claves
+
+**Fecha:** 2026-11-16 · **Fuente:** `07`, sección 3 · **Detalle:** `09_Seguridad_y_Secretos.md`.
+
+Ningún secreto en el repositorio; el navegador no recibe secretos; producción solo en variables del alojamiento y de la CI; un secreto distinto por entorno; tokens de terceros cifrados y nunca devueltos; registros con redacción; arranque seguro con validación Zod; gitleaks y secret scanning; rotación y registro de incidentes.
+
+## DEC-027 · Alojamiento: Vercel + Render + dominio propio
+
+**Fecha:** 2026-11-16 · **Detalle:** `10_Plan_de_Despliegue.md` (Fase 3.5). Front en **Vercel**; API, worker y PostgreSQL en **Render**; dominio propio con `app.` y `api.`; despliegue automático solo desde `produccion`. **Resuelve D-03.** No se despliega ni se crean cuentas hasta después de la Fase 3.
+
+## DEC-028 · Documentos nuevos y fases 2.5 y 3.5
+
+**Fecha:** 2026-11-16. Se agregan `07` (cambios de alcance), `08` (procesos de la BD), `09` (seguridad y secretos), `10` (plan de despliegue) y `seguridad-incidentes.md`; se actualizan `01`–`06` y el README. El mapa de fases de `03` suma la **Fase 2.5** y la **Fase 3.5**; la Fase 6 queda como cierre.
+
+## DEC-029 · Nombre del integrante y visibilidad de votos
+
+**Fecha:** 2026-11-16. El integrante se llama **Carlos**; se elimina la decisión D-02 y toda nota sobre «Carlo». Visibilidad de votos (V-8): ver DEC-024.
+
+## DEC-030 · Fase 3: Hill Chart arrastrable y color de miembros
+
+**Fecha:** 2026-11-17 · **Fuente:** `03`, Fase 3, tareas 3.1 y 3.2.
+
+- **Hill Chart (3.1).** Las figuras se arrastran con ratón o dedo, o se mueven con las flechas del teclado (de 5 en 5; se guarda una sola vez, 0,6 s después de la última pulsación). El avance se guarda con el proceso que ya existía (`proc_tarea_editar`, o `proc_personal_tarea_actualizar` en el inicio personal), así que no hizo falta una migración. Mueve el **líder** cualquier tarea y el **responsable** las suyas con la asignación aceptada; las **completadas** no se mueven (siempre están al 100 %). El **historial** es el de cada tarea: cada cambio deja «Valeria actualizó el avance de T-01 (75 %)». Mover una figura en el Hill Chart **no cambia el estado** de la tarea (para eso está el tablero).
+- **Color (3.2).** El cálculo pasa de `apps/web/src/lib/color.ts` a `packages/shared/src/color.ts` (la web lo reexporta) sin cambiar los colores del prototipo. La prueba comprueba que ningún tono cae en las bandas del semáforo, que los 8 colores se distinguen entre sí (ΔE OKLab > 0,08) y que cada color se distingue de las señales de **su** tema (ΔE > 0,06, unas 3 veces lo apenas perceptible). El par más cercano es el miembro 1 frente al verde del tema claro (ΔE ≈ 0,067): las bandas del prototipo no están centradas en los tonos reales de las señales (el ámbar real está en ~58°, fuera de la banda 60–100°). Si el equipo quiere más margen, se pueden ajustar las bandas, lo que cambia el color de algunos miembros.
+- **Forma por miembro (para revisión).** `01` 5.4 dice que cada miembro tiene además una **forma**. Pero en el Hill Chart (prototipo y leyenda actual) la forma ya indica el **estado** (triángulo atascada, círculo en marcha, cuadrado completada) y usarla también para la persona confundiría. Se mantiene la forma por estado; la identidad sin depender del color la dan las **iniciales** (avatares y, con muchos responsables, dentro de las figuras) y la **etiqueta accesible** de cada figura.
+
+## DEC-031 · Fase 3.3: sprints, cierre con instantánea y retrospectiva
+
+**Fecha:** 2026-11-17 · **Fuente:** `03`, Fase 3, tarea 3.3 (EQ-09 a EQ-13) · **Detalle:** `08_Procesos_BD.md` (14 procesos de la `0009`).
+
+- **Ciclo.** `planificado → activo → cerrado`; uno activo por equipo (proceso + índice `ux_un_sprint_activo`). Puede haber varios planificados, sin fechas cruzadas. Solo el líder planea, inicia, cierra y borra (un planificado). Al **iniciar antes** de la fecha planeada el sprint se recorre a hoy con la misma duración (si no, el burndown empezaría días después); con el plazo vencido hay que cambiar las fechas.
+- **Qué entra al planear (EQ-10).** Las tareas del equipo **sin sprint** que ya pasaron la votación y no se terminaron: `backlog`, `aceptada`, `habilitada`, `en_curso` y `atascada`. Es más que «las aceptadas»: así entran también las que quedaron libres al cerrar el sprint anterior (pueden ir en curso). Las del backlog pasan a `aceptada` al entrar. Las propuestas, rechazadas, retiradas y completadas no entran.
+- **Capacidad.** Horas por persona y sprint (`sprint_capacidad`, 0–300). Las tareas **no tienen estimación** en el modelo, así que el plan compara horas con el **número de tareas** de cada responsable y avisa «sin horas» a quien tiene tareas y 0 h. Si el equipo quiere estimar, es una columna nueva en `tareas` (fase posterior).
+- **Cierre (EQ-11).** La instantánea final se guarda **antes** de mover las pendientes, así el historial dice cuánto tuvo el sprint («5 de 7»). Las completadas se quedan en el sprint y **salen del tablero** (`proc_tarea_listar` y `proc_tarea_conteos` ya no muestran tareas de sprints cerrados; siguen en `todas` y en el historial). Las pendientes conservan estado y responsable y van a donde elija el líder: `siguiente` (el planificado más próximo) o `liberar` (sin sprint, por defecto). Un sprint cerrado no se reabre.
+- **Instantáneas y burndown.** `sprint_instantaneas` tiene una foto por día: la guardan el inicio y el cierre; mientras el sprint está activo, el punto de **hoy** se calcula en vivo. La foto de cada noche (para los días sin cambios) la hará la tarea programada de `pg-boss` (Fase 3.5); mientras tanto, el burndown lleva el último valor conocido. «Hoy» es la fecha en la zona horaria del equipo. Las fechas de sprint viajan como `AAAA-MM-DD` y la web las lee como día local (`fechaDia`).
+- **Retrospectiva (EQ-12).** Se crea sola al cerrar (o la abre el líder en sprints viejos). Notas en *Salió bien*, *Por mejorar* y *Acciones*; una nota **anónima no guarda autor** y por eso las notas y los votos **no generan eventos ni actividad** (un evento con actor la delataría). 3 puntos de voto por persona, uno por nota: el proceso responde `NX003` (409 «Ya usaste tus 3 votos en esta retrospectiva.») y el disparador de la `0001` lo impide aunque se salte el proceso. Los totales por nota son visibles para todo el equipo; quién votó, no. El líder cierra la votación (ya no hay notas ni votos), cierra la retrospectiva y puede convertir una nota en **propuesta** de tarea, que va a votación (DEC-024).
+- **Actividad.** `fn_registrar_evento` ahora deja los eventos `sprint.*` con tipo `sprint` (antes caían en `equipo`); servirá para la vista de actividad (3.4).
+- **Rutas web.** `sprints/{activo, planear, cerrar, historial, historial/:id, retro, retro/:id}`. El árbol de `01` no tenía `historial` (EQ-13): se agregó como pestaña.
+
+## DEC-032 · Fase 3.5: liderazgo, elección y administración del equipo
+
+**Fecha:** 2026-11-18 · **Fuente:** `03`, Fase 3, tarea 3.5 (AD-04 a AD-12) y regla 2 de `01` 2.3 · **Detalle:** `08_Procesos_BD.md` (13 procesos de la `0010`).
+
+- **Transferencia (AD-07, AD-08).** El líder propone a un **integrante** (no a un invitado) y, si quiere, sale del equipo al aceptarse (`saldra`). Cambia cuando la persona acepta; el líder la puede cancelar. Una sola pendiente por equipo y ninguna con una elección abierta.
+- **Elección (AD-09).** La convoca el líder. **Todos los integrantes son candidatos**: la fase `postulacion` del esquema no se usa, porque la regla de `01` habla de votación de 72 h y no de postulaciones; si el equipo las quiere, se agrega una fase antes de votar. El voto es **secreto** (mientras está abierta se ve cuántos y quiénes votaron, como V-8) y **no se cambia** dentro de la ronda (PK de `eleccion_votos`). Gana la **mayoría simple de los votos emitidos** (el candidato con más votos). Si votaron todos, se resuelve en el acto. **Empate** → ronda 2 de `votacion_desempate_horas` (24 h) solo entre los empatados; **empate otra vez** → gana quien lleva más tiempo en el equipo (`membresias.desde`), para que siempre haya resultado. **Sin votos** → el saliente sigue como líder. El saliente no vota (`NX002`, proceso y disparador) y es **interino** con todos sus permisos hasta el resultado. Los plazos los toma el equipo (`votacion_plazo_horas`, `votacion_desempate_horas`), que el líder cambia en Ajustes.
+- **Plazos.** `proc_eleccion_vencidas` (sin actor; la excepción a `p_actor_id`) resuelve las vencidas. Lo llama un **temporizador cada minuto en el proceso de la API** (`trabajos/plazos.ts`) y también la ruta `GET /liderazgo` antes de leer. `pg-boss` llega en la Fase 4 (`10`, sección 3); entonces el temporizador pasa a ser un trabajo de la cola. Con varias instancias es seguro (`FOR UPDATE SKIP LOCKED`).
+- **Salir y expulsar (AD-10, AD-11).** El líder no sale sin transferir antes. Quien sale o es expulsado: membresía `salio`/`expulsada` (se conserva el historial), sus tareas sin terminar quedan **sin responsable**, se cancela una transferencia hacia esa persona y **las votaciones abiertas se recuentan** (DEC-024: con menos integrantes una propuesta puede alcanzar la mayoría). Lo mismo al cambiar de líder: el nuevo líder pierde sus votos abiertos.
+- **Invitados (AD-05).** El líder amplía su acceso 7, 14 o 30 días o los hace integrantes (color, sin caducidad; cuentan para el tope, `NX001`). La matriz no tenía una acción para «ampliar»: se usa `convertir_invitado`.
+- **Configurar y archivar (AD-06, AD-12).** Nombre, descripción, duración del sprint, zona horaria (validada contra `pg_timezone_names`), plazos de la elección y tope de miembros (no baja de los miembros activos). Archivado, el equipo es de solo lectura (`NX009`) y se puede reactivar; no se archiva con una elección abierta.
+- **Avisos.** Estas acciones crean notificaciones dentro de la app (`notificaciones`, para NT-01): a quien se propone como líder, a los integrantes al convocar, empatar o resolver una elección, y a quien es expulsado o convertido.
+- **Rutas web.** `equipo/eleccion` (liderazgo, como en el árbol de `01`), `equipo/ajustes` y `equipo/:miembroId` (AD-04).
+
+## DEC-033 · Fase 3.4: vistas secundarias y archivos
+
+**Fecha:** 2026-11-18 · **Fuente:** `03`, Fase 3, tarea 3.4 (EQ-14 a EQ-20, NT-01) · **Detalle:** `08_Procesos_BD.md` (14 procesos de la `0011` y 4 de la `0012`).
+
+- **Calendario y reuniones (EQ-14, EQ-15).** Una reunión invita a todo el equipo (sin invitados); quien la crea queda con «sí» y los demás reciben un aviso. Las repeticiones (`semanal`, `diaria_lv`) se expanden en el proceso dentro del rango pedido (máximo 62 días), mirando el día de la semana en la zona horaria del equipo; editar o cancelar afecta a toda la serie (no hay excepciones por fecha). La edita o cancela quien la creó o el líder. El calendario personal (PER-04) sigue mostrando solo las tareas personales: las reuniones personales (`reuniones.dueno_id`) quedan para una fase posterior.
+- **Reportes (EQ-16, EQ-17).** El reporte lo ven líder e integrantes. La exportación es CSV armado en la API desde `proc_reporte_exportar`: el líder exporta todo o lo suyo; el integrante solo lo suyo (`exportar_reportes` «propio»), y la BD lo vuelve a exigir. El CSV lleva BOM (Excel lo abre en UTF-8) y las celdas que empiezan como fórmula (`= + - @`) llevan un apóstrofo para que una hoja de cálculo no las ejecute.
+- **Actividad (EQ-18).** `fn_registrar_evento` ahora también separa `reunion`; la vista filtra por `tarea`, `sprint`, `reunion` y `equipo` y pagina por fecha.
+- **Archivos (EQ-19).** El contenido se guarda **en PostgreSQL** (`archivo_contenidos`, `bytea`) con tope de **5 MB** y una lista cerrada de tipos (PDF, imágenes PNG/JPEG/GIF/WebP, texto, Markdown, CSV, Office y OpenDocument, ZIP; ni ejecutables ni SVG). Así el MVP no necesita otro servicio de almacenamiento y el respaldo de Render incluye los archivos; `storage_key` (`bd:<id>`) permite moverlos después a un almacén de objetos. La API recibe el archivo en base64 (cuerpo de hasta 8 MB solo en esa ruta) y lo entrega como adjunto con `X-Content-Type-Options: nosniff`. Lo borra quien lo subió o el líder (se borra el contenido y queda el registro). **Pendiente:** adjuntar desde el detalle de la tarea (la API ya acepta `tarea_id`), el adjunto del formulario de contacto y la foto de perfil del onboarding.
+- **Plantillas (EQ-20).** Las crea y elimina el líder. Solo las de **proyecto** se «usan»: proponen cada elemento como tarea (van a votación, DEC-024). Las de sprint y retrospectiva son guías de lectura.
+- **Notificaciones (NT-01).** Son de la persona, no del equipo. Por ahora las crean los procesos de liderazgo, elección y reuniones (DEC-032); las de asignaciones, menciones y vencimientos llegan con el despachador de eventos (`eventos_dominio`) de la Fase 4. La campana muestra cuántas hay sin leer (se consulta cada minuto).
+
+## DEC-034 · Fase 3.6 y 3.7: ajustes de la persona y reporte personal
+
+**Fecha:** 2026-11-18 · **Fuente:** `03`, Fase 3, tareas 3.6 (PF-01 a PF-09) y 3.7 (FALT-01, FALT-07) · **Detalle:** `08_Procesos_BD.md` (3 procesos de la `0013`).
+
+- **Rutas.** Los ajustes viven en `/ajustes/{perfil, cuenta, apariencia, notificaciones, whatsapp, privacidad, equipos, atajos, ayuda}`, como ya los enlazaba la navegación (el árbol de `01` dice `/app/ajustes/…`; se mantuvo la ruta de la navegación).
+- **Perfil y apariencia (PF-01, PF-03)** usan los procesos que ya existían (`proc_usuario_perfil_guardar`, `proc_usuario_preferencias_guardar`). La foto de perfil queda para cuando haya archivos personales.
+- **Cuenta (PF-02).** Muestra el correo y cierra la sesión; contraseña, cambio de correo y verificación en dos pasos llegan con la autenticación real (Fase 5).
+- **Avisos (PF-04).** Por cada aviso configurable (`fn_eventos_notificacion`) se guarda si llega en Nexo y por WhatsApp (y por correo, sin pantalla todavía). Se guardan desde ahora; los envíos por WhatsApp son de la Fase 4 y por correo de la 5. También horas de silencio (completas: inicio y fin) y resumen diario.
+- **WhatsApp personal (PF-05)** queda como «Próximamente» hasta la Fase 4 (número, verificación y consentimiento).
+- **Privacidad (PF-06).** Mostrar o no el estado y el primer día de la semana. Exportar todos los datos o borrar la cuenta es FALT-09 (Fase 5).
+- **Mis equipos (PF-07).** Lista con el rol en cada equipo y «Salir» (`proc_equipo_salir`; el líder primero transfiere). **Atajos (PF-08)** y **Ayuda (PF-09)** son pantallas de lectura.
+- **Reporte personal (FALT-01).** Tareas personales y las de equipo a cargo de la persona, **solo de los equipos donde sigue activa** (lo de un equipo que dejó ya no es suyo), con un resumen por espacio. **FALT-07** (historial de transferencias y elecciones) está en `equipo/eleccion` (DEC-032).

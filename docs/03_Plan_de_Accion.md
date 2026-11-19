@@ -10,19 +10,23 @@
 |---|---|---|
 | **0** | Arranque del repositorio y de la BD | Repositorio en GitHub, CI en verde, BD creada con las 11 pruebas `OK`, trámites de WhatsApp iniciados |
 | **1** | Base, roles y espacio personal | Diseño base, páginas públicas, estructura de la app, espacio personal con datos reales |
-| **2** | Equipos, tablero y estados | Crear/unirse a un equipo, tablero, triaje, estados de tarea, permisos por rol |
+| **2** | Equipos, tablero y estados | Crear/unirse a un equipo, tablero, votación de propuestas, estados de tarea, permisos por rol |
+| **2.5** | Cambios de alcance (`07_Cambios_de_Alcance_Fase2.md`) | Votación de propuestas por los integrantes, toda operación de datos como proceso de la BD (`08`), política de secretos (`09`); documentos y decisiones DEC-024 a DEC-029 |
 | **3** | Hill Chart, sprints y vistas secundarias | Resumen con Hill Chart, sprints, calendario, reportes, miembros, ajustes |
 | **4** | Chat y WhatsApp | Chat en tiempo real; WhatsApp simulado de extremo a extremo y envío real mínimo |
 | **5** | Autenticación real, QA y permisos | Login/registro/logout, validaciones, matriz de permisos probada, revisión de índices |
-| **6** | Despliegue y cierre | Aplicación en línea, documentación y entrega |
+| **3.5** | Despliegue (`10_Plan_de_Despliegue.md`) | Front en Vercel; API, worker y BD en Render; dominio propio; prueba de humo en producción. Va **después de la Fase 3** |
+| **6** | Cierre | Documentación, entrega y retoques finales (el despliegue ya lo hizo la Fase 3.5; ver `10`) |
 
-Correspondencia con el cronograma del equipo (`05_Cronograma.md`): la Fase 0 es nueva y corta; las Fases 1–6 de este plan son las Fases 1–6 del cronograma.
+Correspondencia con el cronograma del equipo (`05_Cronograma.md`): la Fase 0 es nueva y corta; las Fases 1–6 de este plan son las Fases 1–6 del cronograma; las Fases 2.5 y 3.5 se agregaron después (DEC-028) con los mismos responsables de desarrollo.
 
 ## 1. Reglas de ejecución (para personas y para IAs)
 
 1. **Un cambio, un *pull request*.** Cada persona trabaja en su rama `Dev_<Nombre>` (o en una rama corta que sale de ella) y el cambio avanza por PR: `Dev_<Nombre>` → `dev` → `main` → `produccion`. Nadie sube directo a `dev`, `main` ni `produccion`: solo reciben PR con CI en verde (ver `docs/decisiones.md`, DEC-001).
 2. **No inventar.** Si algo no está en `01`/`02`, se elige lo más simple, se anota en `docs/decisiones.md` y se sigue; si es irreversible, se pregunta.
 3. **No tocar el esquema aplicado.** Todo cambio de BD es una migración nueva.
+3b. **Todo acceso a datos es un proceso** `proc_*` de la BD, documentado en `docs/08_Procesos_BD.md`; el código solo lo llama desde `repositorios/` (DEC-025).
+3c. **Ningún secreto en el repositorio** (`docs/09_Seguridad_y_Secretos.md`, DEC-026).
 4. **Probar antes de marcar terminado.** Cada criterio de terminado se verifica ejecutando algo (pruebas, la app en el navegador), no leyendo el código.
 5. **Pantallas desde el prototipo:** se abre la pantalla equivalente del zip (ver la columna «Prototipo» de la sección 9), se copia su estructura y textos, y se **reconecta a la API real**. No se copia el estado simulado (`useReducer`, `localStorage`, Simulador).
 6. **Cada pantalla de datos** implementa los cinco estados (cargando, vacío, error, sin permiso, sin conexión) y funciona en móvil de 360 px.
@@ -143,8 +147,8 @@ Carlos, Isac y Jova redactan introducción y marco teórico en `04_Articulo.md`.
 1. **Tablero (EQ-02)** con columnas por estado, columnas vacías plegadas, tarjetas con responsable, plazo y semáforo.
 2. **Arrastrar y soltar** con `dnd-kit`; el orden usa `fractional-indexing`; la API recibe «mover tarea X entre A y B» y calcula el nuevo `orden` en una transacción con comprobación de `version` (responde `409` si hay conflicto).
 3. **Lista (EQ-03), Backlog (EQ-04), Detalle (EQ-06).**
-4. **Crear/editar y proponer (EQ-07).** Integrante → crea una **propuesta**; líder → crea directamente.
-5. **Triaje (EQ-05):** el líder acepta, rechaza (con motivo) o reasigna.
+4. **Crear tarea con subtareas (EQ-07, solo líder).** El líder crea la tarea **junto con sus subtareas** en una operación; queda en estado `propuesta`. El integrante ya no propone (cambio de la Fase 2.5, DEC-024).
+5. **Votación de propuestas (EQ-05):** los integrantes votan aceptar o rechazar; al alcanzar la mayoría la propuesta pasa a aceptada o rechazada; el líder puede retirarla o reformularla.
 6. **Asignar y responder (EQ-08):** el líder asigna; el integrante acepta o rechaza con motivo.
 7. **Máquina de estados** en `packages/shared/estados.ts`: tabla de transiciones válidas por rol. Se aplica en el servidor; la interfaz solo ofrece las válidas.
 8. **Eventos de dominio:** cada cambio inserta su evento y una fila en `actividad` en la misma transacción.
@@ -158,7 +162,22 @@ Cada ruta de esta fase usa la guarda `requierePermiso`. Pruebas de integración:
 - [ ] Un equipo con 8 miembros activos rechaza al noveno (y la prueba con dos conexiones simultáneas confirma que no se cuela).
 - [ ] Mover una tarjeta en dos navegadores a la vez produce un `409` en uno y la interfaz lo explica.
 - [ ] Toda transición de estado inválida devuelve error; la tabla de casos pasa.
+- [ ] Una propuesta con 3 integrantes se acepta con 2 votos a favor; con 4, con 3; el líder y un invitado no pueden votar (pruebas automáticas; se construye en la Fase 2.5).
 - [ ] CI en verde; tag `fase-2`.
+
+---
+
+## FASE 2.5 · Cambios de alcance
+
+**Fuente y detalle:** `07_Cambios_de_Alcance_Fase2.md` (decisiones DEC-024 a DEC-029). Orden: (1) documentos y decisiones, (2) secretos, (3) votación de propuestas con migración `0002`, (4) migración de lo existente a procesos de la BD, (5) cierre.
+
+### Criterio de terminado de la Fase 2.5
+- [ ] Documentos `07`, `08`, `09` y `10` creados; `01`–`06`, `decisiones.md` y el README actualizados; ninguna pregunta sobre «Carlos/Carlo» ni la regla antigua del triaje.
+- [ ] Informe de secretos entregado; `pino` con redacción; arranque con validaciones; gitleaks en la CI.
+- [ ] Votación probada: 3 integrantes → 2 votos; 4 → 3; el líder y un invitado no votan; la API no devuelve votos ajenos mientras la propuesta está abierta.
+- [ ] Toda operación sobre datos pasa por un proceso `proc_*` documentado en `08`; no hay SQL de negocio fuera de `repositorios/`; `nexo_app` no puede leer tablas directamente.
+- [ ] Pruebas de la Fase 2 en verde sin cambiar sus expectativas (salvo las de triaje, que cambian a propósito); 11 pruebas SQL y las de procesos pasan; CI en verde.
+- [ ] `progreso.md` y `decisiones.md` al día; etiqueta `fase-2-5`.
 
 ---
 
@@ -265,21 +284,25 @@ Tomar capturas de la app real (o del prototipo donde aún no exista) de cada pan
 
 ---
 
-## FASE 6 · Despliegue y cierre
+## FASE 3.5 · Despliegue
+
+**Documento propio:** `10_Plan_de_Despliegue.md` (DEC-027: front en Vercel; API, worker y BD en Render; dominio propio con `app.` y `api.`). Se ejecuta **después de la Fase 3**; hasta entonces no se despliega nada ni se crean cuentas. El criterio de terminado está en la sección 10 de ese documento.
+
+---
+
+## FASE 6 · Cierre
 
 **Dueño:** Luis y Jova · Carlos, Isac: conclusiones, abstract y referencias.
 
-1. **Elegir alojamiento (D-03)** y crear los servicios: PostgreSQL gestionado y la API; el front como estático.
-2. **Variables de entorno de producción** (`01`, sección 8); ningún secreto en el repositorio.
-3. **Migraciones en producción:** `db:migrate` en el despliegue; **la semilla no se carga** en producción (o solo un equipo de demostración, decidido por el equipo).
-4. **HTTPS, cookies `Secure`, CORS** al dominio real; límites de peticiones activos.
-5. **Webhook de WhatsApp** apuntando a la URL pública (si hay cuenta real).
-6. **Copias de seguridad:** activar las del proveedor y anotar cómo restaurar.
-7. **Prueba de humo en producción:** registrar, crear equipo, crear tarea, chatear, ver un aviso de WhatsApp.
-8. **Cierre:** `README.md` con instrucciones de instalación y uso; actualizar la tabla de verificación del artículo (`04`); resumen de lo que quedó fuera en `docs/progreso.md`.
+> El despliegue se movió a la Fase 3.5 (`10_Plan_de_Despliegue.md`). Esta fase repite la prueba de humo con chat y WhatsApp (que existen desde la Fase 4) y cierra la documentación.
+
+1. **Secretos de producción** revisados con la lista de verificación de `09_Seguridad_y_Secretos.md`; ninguno en el repositorio.
+2. **Prueba de humo en producción completa:** registrar, crear equipo, proponer y votar una tarea, chatear, ver un aviso de WhatsApp.
+3. **Webhook de WhatsApp** apuntando a la URL pública (si hay cuenta real).
+4. **Cierre:** `README.md` con instrucciones de instalación y uso; actualizar la tabla de verificación del artículo (`04`); resumen de lo que quedó fuera en `docs/progreso.md`.
 
 ### Criterio de terminado de la Fase 6
-- [ ] La aplicación está accesible por una URL pública y pasa la prueba de humo.
+- [ ] La aplicación (desplegada en la Fase 3.5) pasa la prueba de humo completa, con chat y WhatsApp.
 - [ ] El `README.md` permite a alguien nuevo levantar el proyecto en local.
 - [ ] La tabla de verificación del artículo no tiene marcas `[VERIFICAR]` sin resolver.
 - [ ] Tag `v1.0`.
@@ -317,7 +340,7 @@ Resultado de cruzar el inventario, el router y los flujos reales. **Son propuest
 | FALT-05 | Todos | Sin permiso (403) y sin conexión como pantallas completas | GL-05 es un catálogo, no pantallas de ruta | 1 |
 | FALT-06 | Líder | Aviso y pantalla de «equipo lleno» (límite alcanzado) | Hace visible el tope de miembros y D-01 | 2 |
 | FALT-07 | Líder | Historial de transferencias y elecciones de liderazgo | La BD guarda `transferencias_liderazgo` y `elecciones` sin vista de consulta | 3 |
-| FALT-08 | Integrante | Mis solicitudes pendientes (propuestas y cambios) | El integrante propone tareas y no ve su estado en un solo lugar | 2 |
+| FALT-08 | Integrante | Propuestas por votar y mis votos | El integrante vota las propuestas del líder y necesita ver cuáles faltan y cómo votó (DEC-024) | 2.5 |
 | FALT-09 | Personal | Exportar y eliminar mis datos | La BD tiene `exportaciones_datos`; PF-06 no cubre el flujo completo | 5 |
 
 Reglas para estas pantallas: mismo sistema de diseño, cinco estados, permisos de la matriz, y se agregan al inventario de `docs/progreso.md` al construirlas.

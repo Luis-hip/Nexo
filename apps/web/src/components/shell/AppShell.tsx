@@ -50,6 +50,7 @@ import { AccionesCtx, perfilEn, SesionCtx, type AccionesGlobales } from './conte
 import { Logo } from './Logo';
 import { navegacion, pie, type ItemNav } from './navegacion';
 import { Tour } from './Tour';
+import { useNotificaciones } from '@/lib/consultasVistas';
 
 function useEnLinea() {
   return useSyncExternalStore(
@@ -107,6 +108,7 @@ function ShellCargando() {
 
 function Shell({ yo }: { yo: Yo }) {
   const nav = useNavigate();
+  const noLeidas = useNotificaciones().data?.no_leidas ?? 0;
   const { equipo } = useParams();
   const [sp, setSp] = useSearchParams();
   const enLinea = useEnLinea();
@@ -151,12 +153,13 @@ function Shell({ yo }: { yo: Yo }) {
     setSp(p, { replace: true });
   };
 
-  // Acción de crear según el perfil: el líder crea, el integrante propone, el invitado no.
+  // Acción de crear según el perfil: en un equipo solo el líder propone tareas (DEC-024);
+  // el integrante vota y el invitado no participa. En el espacio personal cada quien crea las suyas.
   const crear =
-    perfil === 'invitado'
+    perfil === 'invitado' || perfil === 'integrante'
       ? null
       : {
-          etiqueta: perfil === 'integrante' ? 'Proponer tarea' : 'Nueva tarea',
+          etiqueta: perfil === 'lider' ? 'Nueva propuesta' : 'Nueva tarea',
           accion: acciones.nuevaTarea,
         };
   const membresia = yo.equipos.find((e) => e.id === equipoId);
@@ -296,7 +299,8 @@ function Shell({ yo }: { yo: Yo }) {
                 </Boton>
               )}
               <BotonIcono
-                etiqueta="Notificaciones"
+                etiqueta={noLeidas ? `Notificaciones (${noLeidas} sin leer)` : 'Notificaciones'}
+                contador={noLeidas}
                 onClick={() => nav('/app/notificaciones')}
                 data-tour="notificaciones"
               >

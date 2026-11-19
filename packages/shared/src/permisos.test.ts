@@ -9,8 +9,8 @@ import { ACCIONES, MATRIZ_PERMISOS, PERFILES, puede, type Accion } from './permi
 const TABLA: [Accion, string, string, string, string][] = [
   ['ver_resumen', '✔', '✔', '✔', '(c)'],
   ['crear_tarea', '✔', '✔', '✖', '✖'],
-  ['proponer_tarea', '—', '—', '✔', '✖'],
-  ['triaje', '—', '✔', '✖', '✖'],
+  ['votar_propuesta', '—', '✖', '✔', '✖'],
+  ['retirar_propuesta', '—', '✔', '✖', '✖'],
   ['asignar_responsable', '✔', '✔', '✖', '✖'],
   ['responder_asignacion', '—', '✔', '✔', '✖'],
   ['habilitar_tarea', '✔', '✔', '✖', '✖'],
@@ -90,6 +90,7 @@ describe('matriz de permisos (docs/01, 2.2)', () => {
       oculto: false,
     });
     expect(puede('crear_tarea', { perfil: 'invitado' })).toMatchObject({ oculto: true });
-    expect(puede('triaje', { perfil: 'personal' })).toMatchObject({ oculto: true });
+    expect(puede('votar_propuesta', { perfil: 'personal' })).toMatchObject({ oculto: true });
+    expect(puede('votar_propuesta', { perfil: 'lider' })).toMatchObject({ oculto: false });
   });
 });

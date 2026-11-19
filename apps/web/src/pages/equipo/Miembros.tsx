@@ -1,6 +1,7 @@
-import type { Invitacion } from '@nexo/shared';
-import { Copy, Link2, UserPlus, Users, X } from 'lucide-react';
+import type { Invitacion, Miembro } from '@nexo/shared';
+import { Copy, Crown, Link2, Settings, UserPlus, Users, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import {
   Avatar,
   Banner,
@@ -10,6 +11,7 @@ import {
   EstadosDatos,
   Insignia,
   InsigniaRol,
+  Menu,
   Modal,
   Radios,
   Selector,
@@ -20,6 +22,7 @@ import {
 } from '@/components/ui';
 import { mensajeDeError } from '@/lib/api';
 import { useCrearInvitacion, useInvitaciones, useRevocarInvitacion } from '@/lib/consultasEquipo';
+import { useAccionesLiderazgo } from '@/lib/consultasLiderazgo';
 import { fechaCorta, relativo } from '@/lib/fechas';
 import { toast } from '@/lib/toasts';
 import { useEquipoActual } from './contexto';
@@ -47,7 +50,8 @@ const ESTADO_INVITACION: Record<
 
 /** AD-01: miembros del equipo, cupo e invitaciones (solo el líder invita). */
 export function Miembros() {
-  const { equipo, puede } = useEquipoActual();
+  const { equipo, puede, base } = useEquipoActual();
+  const nav = useNavigate();
   const puedeInvitar = puede('invitar_personas').permitido;
   const [invitar, setInvitar] = useState(false);
   const lleno = equipo.miembros_activos >= equipo.max_miembros;
@@ -60,15 +64,33 @@ export function Miembros() {
         titulo="Equipo"
         descripcion={equipo.descripcion || undefined}
         acciones={
-          <Boton
-            variante="primario"
-            icono={<UserPlus className="size-4" />}
-            disabled={!puedeInvitar}
-            motivo="Solo el líder puede invitar personas."
-            onClick={() => setInvitar(true)}
-          >
-            Invitar
-          </Boton>
+          <>
+            <Boton
+              tamano="sm"
+              variante="fantasma"
+              icono={<Crown className="size-4" />}
+              onClick={() => nav(`${base}/equipo/eleccion`)}
+            >
+              Liderazgo
+            </Boton>
+            <Boton
+              tamano="sm"
+              variante="fantasma"
+              icono={<Settings className="size-4" />}
+              onClick={() => nav(`${base}/equipo/ajustes`)}
+            >
+              Ajustes
+            </Boton>
+            <Boton
+              variante="primario"
+              icono={<UserPlus className="size-4" />}
+              disabled={!puedeInvitar}
+              motivo="Solo el líder puede invitar personas."
+              onClick={() => setInvitar(true)}
+            >
+              Invitar
+            </Boton>
+          </>
         }
       />
 
@@ -110,8 +132,14 @@ export function Miembros() {
           {miembros.map((m) => (
             <li key={m.membresia_id} className="flex items-center gap-3 p-3">
               <Avatar persona={{ nombre: m.nombre, colorIdx: m.color_idx }} />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{m.nombre}</span>
+              <Link
+                to={`${base}/equipo/${m.usuario_id}`}
+                className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
+              >
+                {m.nombre}
+              </Link>
               <InsigniaRol rol={m.rol} />
+              <AccionesMiembro m={m} />
             </li>
           ))}
         </ul>
@@ -141,6 +169,7 @@ export function Miembros() {
                   )}
                 </span>
                 <InsigniaRol rol="invitado" />
+                <AccionesMiembro m={m} />
               </li>
             ))}
           </ul>
@@ -364,5 +393,85 @@ function InvitarModal({
         </div>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Acciones del líder sobre una persona (AD-05, AD-11): expulsar y, si es invitada, ampliar su
+ * acceso o hacerla integrante. No aparece para uno mismo ni para quien no es líder.
+ */
+export function AccionesMiembro({ m }: { m: Miembro }) {
+  const { equipo, usuarioId, puede } = useEquipoActual();
+  const { expulsar, gestionarInvitado } = useAccionesLiderazgo(equipo.id);
+  const confirmar = useConfirmar();
+  if (!puede('expulsar_miembros').permitido || m.usuario_id === usuarioId) return null;
+  const nombre = m.nombre.split(' ')[0] ?? m.nombre;
+  const avisar = (e: unknown) => toast(mensajeDeError(e), 'danger');
+  const archivado = equipo.estado === 'archivado';
+
+  const sacar = async () => {
+    const ok = await confirmar({
+      titulo: `Expulsar a ${m.nombre}`,
+      mensaje:
+        'Dejará de ver el equipo. Sus tareas sin terminar quedan sin responsable y las votaciones abiertas se vuelven a contar.',
+      confirmar: 'Expulsar',
+      destructivo: true,
+    });
+    if (ok)
+      expulsar.mutate(m.membresia_id, {
+        onSuccess: () => toast(`${nombre} ya no está en el equipo.`, 'info'),
+        onError: avisar,
+      });
+  };
+  const ampliar = (dias: 7 | 14 | 30) =>
+    gestionarInvitado.mutate(
+      { membresiaId: m.membresia_id, accion: 'ampliar', dias },
+      { onSuccess: () => toast(`Acceso de ${nombre} ampliado ${dias} días.`), onError: avisar },
+    );
+  const convertir = async () => {
+    const ok = await confirmar({
+      titulo: `Hacer integrante a ${m.nombre}`,
+      mensaje: 'Verá todo el trabajo del equipo, votará propuestas y ocupará un lugar del equipo.',
+      confirmar: 'Hacer integrante',
+    });
+    if (ok)
+      gestionarInvitado.mutate(
+        { membresiaId: m.membresia_id, accion: 'convertir' },
+        { onSuccess: () => toast(`${nombre} ahora es integrante.`), onError: avisar },
+      );
+  };
+  const lleno = equipo.miembros_activos >= equipo.max_miembros;
+  return (
+    <Menu
+      etiqueta={`Acciones para ${m.nombre}`}
+      items={[
+        {
+          etiqueta: 'Ampliar acceso 7 días',
+          onClick: () => ampliar(7),
+          oculto: m.rol !== 'invitado',
+          deshabilitado: archivado,
+        },
+        {
+          etiqueta: 'Ampliar acceso 30 días',
+          onClick: () => ampliar(30),
+          oculto: m.rol !== 'invitado',
+          deshabilitado: archivado,
+        },
+        {
+          etiqueta: 'Hacer integrante',
+          onClick: convertir,
+          oculto: m.rol !== 'invitado',
+          deshabilitado: archivado || lleno,
+          motivo: lleno ? 'El equipo está lleno.' : undefined,
+        },
+        { etiqueta: '', separador: true, oculto: m.rol !== 'invitado' },
+        {
+          etiqueta: 'Expulsar del equipo',
+          onClick: sacar,
+          destructivo: true,
+          deshabilitado: archivado,
+        },
+      ]}
+    />
   );
 }

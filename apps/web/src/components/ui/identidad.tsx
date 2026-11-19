@@ -299,6 +299,7 @@ const ICONO_ESTADO: Record<EstadoTarea, typeof Clock> = {
   atascada: AlertTriangle,
   completada: CheckCircle2,
   rechazada: XCircle,
+  cancelada: XCircle,
 };
 
 /** Insignia de estado con icono + texto (nunca solo color). */

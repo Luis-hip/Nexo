@@ -2,7 +2,7 @@
 
 Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (hasta 8 miembros activos), con una aportación propia: **avisos en el grupo de WhatsApp del equipo**, configurados por el líder y con consentimiento individual.
 
-> Estado: **Fase 1 · Base, roles y espacio personal** (ver [`docs/progreso.md`](docs/progreso.md)).
+> Estado: **Fase 2.5 terminada** (votación de propuestas, procesos de la BD y secretos); sigue la **Fase 3** (ver [`docs/progreso.md`](docs/progreso.md)).
 
 ## Documentación
 
@@ -13,6 +13,10 @@ Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (has
 | [`docs/02_Base_de_Datos.md`](docs/02_Base_de_Datos.md)                                          | Diseño completo de la base de datos                                   |
 | [`docs/03_Plan_de_Accion.md`](docs/03_Plan_de_Accion.md)                                        | Fases 0–6 con criterio de terminado                                   |
 | [`docs/04_Articulo.md`](docs/04_Articulo.md) · [`docs/05_Cronograma.md`](docs/05_Cronograma.md) | Artículo y cronograma                                                 |
+| [`docs/07_Cambios_de_Alcance_Fase2.md`](docs/07_Cambios_de_Alcance_Fase2.md)                    | Fase 2.5: votación de propuestas, procesos en la BD, secretos         |
+| [`docs/08_Procesos_BD.md`](docs/08_Procesos_BD.md)                                              | Procesos `proc_*` de la BD (un apartado por proceso)                  |
+| [`docs/09_Seguridad_y_Secretos.md`](docs/09_Seguridad_y_Secretos.md)                            | Política de secretos, rotación y filtraciones                         |
+| [`docs/10_Plan_de_Despliegue.md`](docs/10_Plan_de_Despliegue.md)                                | Fase 3.5: Vercel + Render + dominio propio (no se ejecuta aún)        |
 | [`docs/decisiones.md`](docs/decisiones.md)                                                      | Decisiones tomadas durante el desarrollo                              |
 | [`docs/progreso.md`](docs/progreso.md)                                                          | Qué está hecho y qué falta por fase                                   |
 
@@ -20,7 +24,7 @@ Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (has
 
 - Node.js 22 o superior
 - pnpm 10 (`npm i -g pnpm@10`)
-- Docker (para PostgreSQL 16 en local)
+- Docker (para PostgreSQL 16 en local) **o**, sin Docker, nada más: `pnpm db:local` levanta PGlite (PostgreSQL embebido) en el mismo puerto
 
 ## Instalación
 
@@ -34,6 +38,8 @@ pnpm db:reset
 pnpm db:test
 pnpm dev
 ```
+
+**Sin Docker.** En lugar de `docker compose up -d`, abre otra terminal, corre `pnpm db:local` y déjala abierta: levanta PGlite en `localhost:5432` (lo que espera `.env.example`) y guarda los datos en `.pglite/` (ignorada por git), así que sobreviven al cerrarla. Si esa terminal se cierra, la API responde con error y el acceso de desarrollo no carga usuarios (`ECONNREFUSED ... 5432`). La CI sigue probando con PostgreSQL 16 real.
 
 `pnpm db:reset` borra el esquema local, aplica las migraciones y carga la semilla. `pnpm db:test` debe terminar con **11 pruebas SQL OK**. La web queda en http://localhost:5173 y la API en http://localhost:3000.
 
@@ -50,12 +56,17 @@ pnpm dev
 | `pnpm db:migrate` · `pnpm db:seed`                   | Aplicar migraciones · cargar la semilla                            |
 | `pnpm db:test`                                       | Pruebas de integridad SQL (11 `OK`)                                |
 | `pnpm db:reset`                                      | Base local desde cero (nunca en producción)                        |
+| `pnpm db:local`                                      | PostgreSQL local sin Docker (PGlite en el puerto 5432)             |
 | `pnpm db:tipos`                                      | Regenerar `apps/api/src/db/tipos.ts` desde la BD (se versiona)     |
+
+## Secretos
+
+Ningún secreto va al repositorio: `.env` está ignorado y solo se sube `.env.example` con valores falsos. El navegador no recibe secretos (todo `VITE_*` es público) y en producción viven solo en el panel del alojamiento. Política completa, rotación y qué hacer ante una filtración: [`docs/09_Seguridad_y_Secretos.md`](docs/09_Seguridad_y_Secretos.md).
 
 ## Estructura
 
 ```
-apps/api/        Fastify + Kysely; db/migrations, db/seed, db/tests, scripts/
+apps/api/        Fastify (llama procesos `proc_*` de la BD); db/migrations, db/seed, db/tests, scripts/
 apps/web/        React + Vite + Tailwind v4
 packages/shared/ Zod, constantes y (desde la Fase 1) permisos y color
 docs/            Especificaciones, decisiones y progreso

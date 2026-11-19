@@ -4,10 +4,13 @@ import type { EstadoTarea } from './tareas';
 /**
  * Máquina de estados de las tareas de equipo (docs/01, 2.4; reglas del prototipo, `lib/tareas.ts`).
  *
- *   propuesta ──triaje──► backlog / aceptada ──habilitar──► habilitada ──► en_curso ⇄ atascada
- *                                                                              └────────► completada
+ *   propuesta ──votación──► aceptada / backlog ──habilitar──► habilitada ──► en_curso ⇄ atascada
+ *       │  └──────────────► rechazada (mayoría en contra)                         └────► completada
+ *       └── retiro del líder ──► cancelada
  *
- * - `propuesta`, `backlog` y `rechazada` no se mueven con «cambiar estado»: salen por triaje.
+ * - `propuesta` no se mueve con «cambiar estado»: la resuelve la votación de los integrantes
+ *   (DEC-024, proceso `proc_tarea_votar`) o el retiro del líder. `rechazada` y `cancelada` se
+ *   reformulan como una propuesta nueva; `backlog` guarda lo aceptado que el líder aparta.
  * - El líder habilita y puede reabrir; el responsable trabaja su tarea.
  * - Se aplica en el servidor; la interfaz solo ofrece las transiciones válidas.
  */
@@ -26,7 +29,9 @@ type Quien = 'lider' | 'responsable';
 export const TRANSICIONES: Readonly<
   Partial<Record<EstadoTarea, Partial<Record<EstadoTarea, readonly Quien[]>>>>
 > = {
-  aceptada: { habilitada: ['lider'] },
+  // El líder aparta una tarea aceptada al backlog y la regresa al tablero (antes lo hacía el triaje).
+  backlog: { aceptada: ['lider'] },
+  aceptada: { habilitada: ['lider'], backlog: ['lider'] },
   habilitada: { en_curso: ['lider', 'responsable'] },
   en_curso: { atascada: ['lider', 'responsable'], completada: ['lider', 'responsable'] },
   atascada: { en_curso: ['lider', 'responsable'], completada: ['lider', 'responsable'] },
@@ -62,6 +67,7 @@ const NOMBRE: Record<EstadoTarea, string> = {
   atascada: 'Atascada',
   completada: 'Completada',
   rechazada: 'Rechazada',
+  cancelada: 'Retirada',
 };
 
 export type ResultadoTransicion = { valida: true } | { valida: false; motivo: string };
@@ -81,10 +87,16 @@ export function comprobarTransicion(
     return no('Solo el responsable o el líder pueden cambiar el estado de esta tarea.');
   }
   if (!esLider && tarea.asignacion_pendiente) return no('Primero acepta la asignación.');
-  if (tarea.estado === 'propuesta') return no('Las propuestas se deciden en triaje.');
+  if (tarea.estado === 'propuesta') {
+    return no('Las propuestas se resuelven por votación de los integrantes.');
+  }
   if (tarea.estado === 'backlog') return no('Primero agrega la tarea al sprint desde el backlog.');
-  if (tarea.estado === 'rechazada')
-    return no('La tarea fue rechazada; el líder la reasigna en triaje.');
+  if (tarea.estado === 'rechazada') {
+    return no('La propuesta fue rechazada; el líder puede reformularla como una nueva.');
+  }
+  if (tarea.estado === 'cancelada') {
+    return no('El líder retiró esta propuesta; puede reformularla como una nueva.');
+  }
   if (!esLider && destino === 'habilitada') return no('Solo el líder puede habilitar tareas.');
   if (!esLider && tarea.estado === 'completada') {
     return no('Solo el líder puede reabrir una tarea completada.');

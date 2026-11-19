@@ -13,7 +13,6 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
 import {
   AreaTexto,
   Avatar,
@@ -45,6 +44,7 @@ import { useEquipoActual } from '../contexto';
 import { AsignacionModal } from './AsignacionModal';
 import { avisarError, codigoTarea, useCambiarEstado, useTransiciones } from './comunes';
 import { TareaFormEquipo } from './TareaFormEquipo';
+import { AccionesVotacion, ResumenVotos } from './Votacion';
 
 /** EQ-06 / IN-03: detalle de una tarea del equipo en un panel lateral. */
 export function DetalleTareaEquipo({ id, onCerrar }: { id: string; onCerrar: () => void }) {
@@ -104,7 +104,6 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
   const { motivo: motivoTransicion } = useTransiciones();
   const confirmar = useConfirmar();
   const colorDe = useColorDe();
-  const nav = useNavigate();
   const [editando, setEditando] = useState(false);
   const [asignacion, setAsignacion] = useState<'ver' | 'rechazar' | null>(null);
   const [pestana, setPestana] = useState<'comentarios' | 'historial'>('comentarios');
@@ -116,10 +115,11 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
   const esLider = rol === 'lider';
   const esInvitado = rol === 'invitado';
   const propia = t.responsable?.usuario_id === usuarioId;
-  const miPropuesta = t.estado === 'propuesta' && t.proponente?.usuario_id === usuarioId;
-  const pEditar = esLider || miPropuesta;
+  const [reformulando, setReformulando] = useState(false);
+  // Desde la Fase 2.5 solo el líder edita: los integrantes ya no proponen (DEC-024).
+  const pEditar = esLider;
   const pTrabajar = esLider || (propia && !t.asignacion_pendiente);
-  const enFlujo = !['propuesta', 'rechazada', 'backlog'].includes(t.estado);
+  const enFlujo = !['propuesta', 'rechazada', 'cancelada', 'backlog'].includes(t.estado);
   const codigo = codigoTarea(t.codigo);
   const { color } = colorDe(t.responsable?.color_idx);
   const invitados = equipo.miembros.filter((m) => m.rol === 'invitado');
@@ -259,34 +259,39 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
           <strong>Atascada:</strong> {t.motivo}
         </Banner>
       )}
-      {t.estado === 'rechazada' && (
+      {(t.estado === 'rechazada' || t.estado === 'cancelada') && (
         <Banner
           tono="warn"
           accion={
-            esLider && t.rechazo_por === 'responsable' ? (
-              <Boton
-                tamano="sm"
-                onClick={() => {
-                  onCerrar();
-                  nav(`${base}/tareas/triaje`);
-                }}
-              >
-                Reasignar en triaje
+            esLider && (t.estado === 'cancelada' || t.rechazo_por === 'votacion') ? (
+              <Boton tamano="sm" onClick={() => setReformulando(true)}>
+                Reformular
               </Boton>
             ) : undefined
           }
         >
-          {t.rechazo_por === 'responsable'
-            ? `Rechazada por el responsable${t.responsable ? ` (${t.responsable.nombre})` : ''}`
-            : 'Rechazada por el líder'}
-          : «{t.motivo}»
+          {t.estado === 'cancelada'
+            ? 'El líder retiró esta propuesta.'
+            : t.rechazo_por === 'votacion'
+              ? 'El equipo rechazó esta propuesta por mayoría.'
+              : `Rechazada: «${t.motivo}»`}
         </Banner>
       )}
       {t.estado === 'propuesta' && (
         <Banner tono="info" icono={<Inbox />}>
-          Propuesta de {t.proponente?.nombre ?? 'un integrante'} en triaje.
-          {t.cambios_pedidos ? ` Cambios solicitados: ${t.cambios_pedidos}` : ''}
+          Propuesta de {t.proponente?.nombre ?? 'el líder'} en votación: los integrantes deciden si
+          se acepta para el sprint.
         </Banner>
+      )}
+      {t.votacion && (
+        <section
+          aria-label="Votación de la propuesta"
+          className="space-y-3 rounded-[12px] border border-line p-3"
+          data-name="NX/EQ-05-Votacion-en-detalle"
+        >
+          <ResumenVotos v={t.votacion} />
+          <AccionesVotacion t={t} />
+        </section>
       )}
 
       {/* Campos */}
@@ -329,7 +334,7 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
         )}
         <dt className="text-muted">Responsable</dt>
         <dd>
-          {esLider && !['propuesta', 'rechazada', 'completada'].includes(t.estado) ? (
+          {esLider && !['propuesta', 'rechazada', 'cancelada', 'completada'].includes(t.estado) ? (
             <Selector
               aria-label="Responsable"
               className="max-w-64"
@@ -647,6 +652,16 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
       </section>
 
       {editando && <TareaFormEquipo abierto editar={t} onCerrar={() => setEditando(false)} />}
+      {reformulando && (
+        <TareaFormEquipo
+          abierto
+          reformular={t}
+          onCerrar={() => {
+            setReformulando(false);
+            onCerrar();
+          }}
+        />
+      )}
       {asignacion && (
         <AsignacionModal
           tarea={t}

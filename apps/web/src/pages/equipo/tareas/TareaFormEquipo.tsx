@@ -3,7 +3,7 @@ import {
   type PrioridadTarea,
   type TareaEquipoDetalle,
 } from '@nexo/shared';
-import { Inbox } from 'lucide-react';
+import { Inbox, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { AreaTexto, Banner, Boton, Campo, Entrada, Modal, Selector } from '@/components/ui';
 import { mensajeDeError } from '@/lib/api';
@@ -21,52 +21,68 @@ interface Valores {
   prioridad: PrioridadTarea;
   etiquetas: string[];
   responsableId: string;
-  destino: 'tablero' | 'backlog';
+  subtareas: string[];
 }
 
+const MAX_SUBTAREAS = 30;
+
 /**
- * EQ-07: crear, proponer o editar una tarea del equipo. El líder crea directamente (elige
- * responsable y si va al tablero o al backlog); el integrante crea una **propuesta** que
- * va a triaje.
+ * EQ-07: el **líder** propone una tarea junto con sus subtareas (DEC-024). La propuesta entra en
+ * votación: los integrantes deciden si se acepta para el sprint. El mismo formulario sirve para
+ * editar una tarea y para **reformular** una propuesta rechazada o retirada (nace una nueva).
  */
 export function TareaFormEquipo({
   abierto,
   onCerrar,
   editar,
+  reformular,
 }: {
   abierto: boolean;
   onCerrar: () => void;
   editar?: TareaEquipoDetalle;
+  /** Propuesta rechazada por votación o retirada que se vuelve a proponer. */
+  reformular?: TareaEquipoDetalle;
 }) {
   const { equipo, usuarioId } = useEquipoActual();
   const acciones = useAccionesTarea(equipo.id);
-  const esLider = equipo.mi_rol === 'lider';
-  const propuesta = !esLider && !editar;
-  const sprintActivo = equipo.sprints.find((s) => s.estado === 'activo');
+  const origen = editar ?? reformular;
+  const proponiendo = !editar;
+  const integrantes = equipo.miembros.filter((m) => m.rol === 'integrante').length;
   const inicial: Valores = {
-    titulo: editar?.titulo ?? '',
-    descripcion: editar?.descripcion ?? '',
-    vence: aInputFecha(editar?.vence_en ?? undefined),
-    prioridad: editar?.prioridad ?? 'media',
-    etiquetas: editar?.etiquetas ?? [],
+    titulo: origen?.titulo ?? '',
+    descripcion: origen?.descripcion ?? '',
+    vence: aInputFecha(origen?.vence_en ?? undefined),
+    prioridad: origen?.prioridad ?? 'media',
+    etiquetas: origen?.etiquetas ?? [],
     responsableId: '',
-    destino: 'tablero',
+    subtareas: reformular?.subtareas.map((s) => s.titulo) ?? [],
   };
   const [v, setV] = useState(inicial);
+  const [nuevaSub, setNuevaSub] = useState('');
   const [errores, setErrores] = useState<Partial<Record<keyof Valores, string>>>({});
   const [otra, setOtra] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState('');
-  const guardando = acciones.crear.isPending || acciones.editar.isPending;
+  const guardando =
+    acciones.crear.isPending || acciones.editar.isPending || acciones.reformular.isPending;
 
   const set = <K extends keyof Valores>(k: K, val: Valores[K]) => {
     setV((x) => ({ ...x, [k]: val }));
     setErrorGuardar('');
   };
 
+  const agregarSubtarea = () => {
+    const titulo = nuevaSub.trim();
+    if (!titulo || v.subtareas.length >= MAX_SUBTAREAS) return;
+    set('subtareas', [...v.subtareas, titulo]);
+    setNuevaSub('');
+  };
+
   /** Misma validación (Zod) que el servidor; devuelve los datos o `null`. */
   const validar = () => {
     const e: Partial<Record<keyof Valores, string>> = {};
     const venceIso = v.vence ? deInputFecha(v.vence) : undefined;
+    // Lo que quedó escrito sin pulsar «Agregar» también cuenta como subtarea.
+    const subtareas = [...v.subtareas, nuevaSub].map((s) => s.trim()).filter(Boolean);
     const r = esquemaCrearTareaEquipo.safeParse({
       titulo: v.titulo,
       descripcion: v.descripcion.trim(),
@@ -74,7 +90,7 @@ export function TareaFormEquipo({
       vence_en: venceIso ?? null,
       etiquetas: v.etiquetas,
       responsable_id: v.responsableId || null,
-      destino: v.destino,
+      subtareas: proponiendo ? subtareas : [],
     });
     if (!r.success) {
       for (const i of r.error.issues) {
@@ -82,7 +98,7 @@ export function TareaFormEquipo({
         e[campo] ??= i.message;
       }
     }
-    if (!editar && venceIso && new Date(venceIso).getTime() < Date.now() - 86_400_000) {
+    if (proponiendo && venceIso && new Date(venceIso).getTime() < Date.now() - 86_400_000) {
       e.vence = 'La fecha de entrega no puede estar en el pasado.';
     }
     setErrores(e);
@@ -119,46 +135,53 @@ export function TareaFormEquipo({
       );
       return;
     }
-    acciones.crear.mutate(datos, {
-      onSuccess: (t) => {
-        toast(
-          propuesta
-            ? `Propuesta ${codigoTarea(t.codigo)} enviada a triaje.`
-            : `Tarea ${codigoTarea(t.codigo)} creada.`,
-        );
-        if (otra) {
-          setV({ ...inicial, destino: v.destino, prioridad: v.prioridad });
-          setTimeout(
-            () => document.querySelector<HTMLElement>('[data-campo="titulo"]')?.focus(),
-            20,
-          );
-        } else onCerrar();
-      },
-      onError: alFallar,
-    });
+    const alCrear = (t: TareaEquipoDetalle) => {
+      toast(
+        t.estado === 'propuesta'
+          ? `Propuesta ${codigoTarea(t.codigo)} enviada a votación.`
+          : `Tarea ${codigoTarea(t.codigo)} aceptada (el equipo aún no tiene integrantes que voten).`,
+      );
+      if (otra && !reformular) {
+        setV({ ...inicial, prioridad: v.prioridad });
+        setNuevaSub('');
+        setTimeout(() => document.querySelector<HTMLElement>('[data-campo="titulo"]')?.focus(), 20);
+      } else onCerrar();
+    };
+    if (reformular) {
+      acciones.reformular.mutate(
+        { id: reformular.id, ...datos },
+        { onSuccess: alCrear, onError: alFallar },
+      );
+    } else {
+      acciones.crear.mutate(datos, { onSuccess: alCrear, onError: alFallar });
+    }
   };
 
   return (
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
-      nombre="NX/EQ-07-Crear-tarea"
+      nombre="NX/EQ-07-Proponer-tarea"
       movil="completa"
       titulo={
         editar
           ? `Editar ${codigoTarea(editar.codigo)}`
-          : propuesta
-            ? 'Proponer tarea'
-            : 'Nueva tarea'
+          : reformular
+            ? `Reformular ${codigoTarea(reformular.codigo)}`
+            : 'Nueva propuesta'
       }
       descripcion={
-        propuesta
-          ? 'Tu propuesta irá a triaje; el líder decide si entra al tablero.'
-          : `Equipo: ${equipo.nombre}`
+        editar
+          ? `Equipo: ${equipo.nombre}`
+          : reformular
+            ? `Se creará una propuesta nueva que vuelve a votarse; ${codigoTarea(reformular.codigo)} se conserva como historial.`
+            : integrantes > 0
+              ? `Entrará en votación: se acepta para el sprint con ${Math.floor(integrantes / 2) + 1} de ${integrantes} ${integrantes === 1 ? 'integrante' : 'integrantes'} a favor.`
+              : 'El equipo aún no tiene integrantes que voten: la tarea quedará aceptada directamente.'
       }
       pie={
         <>
-          {!editar && (
+          {proponiendo && !reformular && (
             <label className="mr-auto flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -166,7 +189,7 @@ export function TareaFormEquipo({
                 onChange={(e) => setOtra(e.target.checked)}
                 className="size-5 accent-[var(--brand-primary)]"
               />
-              Crear y agregar otra
+              Proponer y agregar otra
             </label>
           )}
           <Boton onClick={onCerrar}>Cancelar</Boton>
@@ -174,9 +197,9 @@ export function TareaFormEquipo({
             variante="primario"
             onClick={guardar}
             cargando={guardando}
-            icono={propuesta ? <Inbox className="size-4" /> : undefined}
+            icono={proponiendo ? <Inbox className="size-4" /> : undefined}
           >
-            {editar ? 'Guardar cambios' : propuesta ? 'Enviar propuesta' : 'Crear tarea'}
+            {editar ? 'Guardar cambios' : 'Enviar a votación'}
           </Boton>
         </>
       }
@@ -224,15 +247,75 @@ export function TareaFormEquipo({
             placeholder="Contexto, criterios de aceptación o enlaces"
           />
         </Campo>
+        {proponiendo && (
+          <Campo
+            etiqueta="Subtareas"
+            opcional
+            error={errores.subtareas}
+            ayuda="Los pasos de la tarea. Se crean junto con la propuesta y el equipo los ve al votar."
+          >
+            <div className="space-y-2" data-name="NX/EQ-07-Subtareas">
+              {v.subtareas.length > 0 && (
+                <ol className="space-y-1.5">
+                  {v.subtareas.map((s, i) => (
+                    <li
+                      key={`${i}-${s}`}
+                      className="flex items-center gap-2 rounded-[8px] border border-line bg-surface px-3 py-1.5 text-sm"
+                    >
+                      <span className="w-5 text-xs text-muted tabular">{i + 1}.</span>
+                      <span className="min-w-0 flex-1 truncate">{s}</span>
+                      <button
+                        type="button"
+                        aria-label={`Quitar la subtarea «${s}»`}
+                        className="grid size-8 place-items-center rounded-[8px] text-muted hover:bg-raised"
+                        onClick={() =>
+                          set(
+                            'subtareas',
+                            v.subtareas.filter((_, j) => j !== i),
+                          )
+                        }
+                      >
+                        <X className="size-4" aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <div className="flex gap-2">
+                <Entrada
+                  data-campo="subtareas"
+                  aria-label="Nueva subtarea"
+                  value={nuevaSub}
+                  onChange={(e) => setNuevaSub(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      agregarSubtarea();
+                    }
+                  }}
+                  placeholder="Escribe un paso y pulsa Enter"
+                  maxLength={140}
+                />
+                <Boton
+                  icono={<Plus className="size-4" />}
+                  onClick={agregarSubtarea}
+                  disabled={!nuevaSub.trim() || v.subtareas.length >= MAX_SUBTAREAS}
+                >
+                  Agregar
+                </Boton>
+              </div>
+            </div>
+          </Campo>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          {esLider && !editar && (
+          {proponiendo && (
             <Campo
               etiqueta="Responsable"
               opcional
               ayuda={
                 v.responsableId && v.responsableId !== usuarioId
                   ? 'Deberá aceptar la asignación.'
-                  : undefined
+                  : 'También puedes asignarla cuando se acepte.'
               }
             >
               <Selector
@@ -270,20 +353,6 @@ export function TareaFormEquipo({
               <option value="baja">Baja</option>
             </Selector>
           </Campo>
-          {esLider && !editar && (
-            <Campo etiqueta="Destino">
-              <Selector
-                data-campo="destino"
-                value={v.destino}
-                onChange={(e) => set('destino', e.target.value as Valores['destino'])}
-              >
-                <option value="tablero">
-                  {sprintActivo ? `Tablero (Sprint ${sprintActivo.numero})` : 'Tablero'}
-                </option>
-                <option value="backlog">Backlog</option>
-              </Selector>
-            </Campo>
-          )}
         </div>
         <EditorEtiquetas
           valor={v.etiquetas}

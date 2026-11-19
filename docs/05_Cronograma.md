@@ -8,22 +8,24 @@
 |---|---|---|
 | **Luis** | Desarrollo principal (con Jova) | Artículo |
 | **Jova** | Desarrollo (con Luis) y apoyo al artículo | Ambos |
-| **Carlos** *(¿«Carlo»? ver D-02)* | Artículo | Código |
+| **Carlos** | Artículo | Código |
 | **Isac** | Artículo | Código |
 
 ## 2. Resumen por fase
 
-Las fases 1 a 6 son las del borrador del equipo; la **Fase 0** es nueva y corta.
+Las fases 1 a 6 son las del borrador del equipo; la **Fase 0** es nueva y corta; las **Fases 2.5 y 3.5** se agregaron después (DEC-028).
 
 | Fase | Desarrollo (Luis, Jova) | Artículo | Hito de salida |
 |---|---|---|---|
 | **0 · Arranque** *(nueva)* | Repositorio, CI, BD con 11 pruebas `OK`, *dev login* | Carlos e Isac: trámites de Meta y verificación de WhatsApp (`docs/whatsapp-verificacion.md`) | CI en verde; Meta iniciada; decisión D-01 con datos |
 | **1 · Arquitectura base, roles, espacio personal** | Sistema de diseño, páginas públicas, estructura de la app, permisos, espacio personal | **Introducción y marco teórico** (Carlos, Isac, Jova) | `fase-1` |
-| **2 · Tablero y estados** | Equipos, invitaciones, tablero, triaje, estados | **Estado del arte** | `fase-2` |
+| **2 · Tablero y estados** | Equipos, invitaciones, tablero, votación de propuestas, estados | **Estado del arte** | `fase-2` |
+| **2.5 · Cambios de alcance** *(nueva)* | Votación de propuestas, procesos en la BD, secretos, documentos 07–10 (`07_Cambios_de_Alcance_Fase2.md`) | Ajustes al artículo: redes de Petri de la votación (`04`, B.9.4) | `fase-2-5` |
 | **3 · Hill Chart y diseño** | Hill Chart, color, sprints, vistas secundarias, ajustes | **Metodología y casos de uso** (incluye redes de Petri) | `fase-3` |
 | **4 · Chat y WhatsApp** | Chat en tiempo real, WhatsApp simulado y envío real mínimo | **Arquitectura y bosquejos** (todos) | `fase-4` |
 | **5 · QA y matriz de permisos** | Autenticación real, validaciones, pruebas de permisos, índices | **Resultados y capturas** | `fase-5` |
-| **6 · Despliegue** | Producción, README, prueba de humo | **Conclusiones, abstract y referencias** | `v1.0` |
+| **3.5 · Despliegue** *(nueva)* | Vercel + Render + dominio propio (`10_Plan_de_Despliegue.md`); prueba de humo sin chat ni WhatsApp | — | `fase-3-5` |
+| **6 · Cierre** | Prueba de humo completa, README, documentación | **Conclusiones, abstract y referencias** | `v1.0` |
 
 ## 3. Cambios respecto al borrador (a confirmar por el equipo)
 
@@ -97,6 +99,5 @@ Con **2 semanas** se comprimen las fases 5 y 6 y se pasan a «fase posterior» l
 
 ## 7. Preguntas para el equipo
 
-1. ¿El nombre es **Carlos** o **Carlo**? (D-02)
-2. ¿Confirman los cambios C-1 a C-5?
-3. ¿Hay fecha límite externa (entrega de la materia o del artículo)? Si la hay, se coloca sobre este cronograma.
+1. ¿Confirman los cambios C-1 a C-5?
+2. ¿Hay fecha límite externa (entrega de la materia o del artículo)? Si la hay, se coloca sobre este cronograma.

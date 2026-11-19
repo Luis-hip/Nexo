@@ -25,7 +25,7 @@ export type EstadoSolicitud = "aprobada" | "pendiente" | "rechazada";
 
 export type EstadoSprint = "activo" | "cerrado" | "planificado";
 
-export type EstadoTarea = "aceptada" | "atascada" | "backlog" | "completada" | "en_curso" | "habilitada" | "propuesta" | "rechazada";
+export type EstadoTarea = "aceptada" | "atascada" | "backlog" | "cancelada" | "completada" | "en_curso" | "habilitada" | "propuesta" | "rechazada";
 
 export type EstadoTransferencia = "aceptada" | "cancelada" | "pendiente" | "rechazada";
 
@@ -57,13 +57,13 @@ export type ModoReglaWa = "apagado" | "instantaneo" | "reporte";
 
 export type OrigenTarea = "directa" | "propuesta";
 
-export type PoliticaPropuestas = "libre" | "triaje";
+export type PoliticaPropuestas = "libre" | "triaje" | "votacion";
 
 export type PrioridadTarea = "alta" | "baja" | "media";
 
 export type ProveedorWhatsapp = "cloud_api_directo" | "cloud_api_grupos" | "simulado";
 
-export type RechazoPor = "lider" | "responsable";
+export type RechazoPor = "lider" | "responsable" | "votacion";
 
 export type RepeticionReunion = "diaria_lv" | "ninguna" | "semanal";
 
@@ -93,6 +93,8 @@ export type TipoSolicitudInvitado = "ampliacion" | "conversion";
 
 export type TipoToken = "restablecer_contrasena" | "verificar_correo";
 
+export type VotoPropuesta = "aceptar" | "rechazar";
+
 export interface Actividad {
   accion: string;
   autor_id: string | null;
@@ -105,6 +107,11 @@ export interface Actividad {
   resumen: string;
   tipo: string;
   usuario_id: string | null;
+}
+
+export interface ArchivoContenidos {
+  archivo_id: string;
+  datos: Buffer;
 }
 
 export interface Archivos {
@@ -210,6 +217,9 @@ export interface Equipos {
   id: Generated<string>;
   max_miembros: Generated<number>;
   nombre: string;
+  /**
+   * votacion (DEC-024): el líder propone y los integrantes votan. triaje: obsoleto desde 0003. libre: sin uso en el MVP.
+   */
   politica_propuestas: Generated<PoliticaPropuestas>;
   votacion_desempate_horas: Generated<number>;
   votacion_plazo_horas: Generated<number>;
@@ -482,6 +492,9 @@ export interface Tareas {
   actualizado_en: Generated<Timestamp>;
   archivada: Generated<boolean>;
   asignacion_pendiente: Generated<boolean>;
+  /**
+   * Obsoleta desde 0003 (DEC-024): el triaje se reemplazó por la votación. No se borra.
+   */
   cambios_pedidos: string | null;
   codigo: number;
   completada_en: Timestamp | null;
@@ -508,6 +521,15 @@ export interface Tareas {
   version: Generated<number>;
 }
 
+export interface TareaVotos {
+  actualizado_en: Generated<Timestamp>;
+  comentario: string | null;
+  tarea_id: string;
+  usuario_id: string;
+  votado_en: Generated<Timestamp>;
+  voto: VotoPropuesta;
+}
+
 export interface TokensVerificacion {
   creado_en: Generated<Timestamp>;
   expira_en: Timestamp;
@@ -527,6 +549,12 @@ export interface TransferenciasLiderazgo {
   id: Generated<string>;
   resuelta_en: Timestamp | null;
   saldra: Generated<boolean>;
+}
+
+export interface TransicionesEstado {
+  desde: EstadoTarea;
+  hacia: EstadoTarea;
+  quien: string;
 }
 
 export interface Usuarios {
@@ -660,6 +688,7 @@ export interface WhatsappWebhookEventos {
 
 export interface DB {
   actividad: Actividad;
+  archivo_contenidos: ArchivoContenidos;
   archivos: Archivos;
   codigos_respaldo_2fa: CodigosRespaldo2fa;
   comentarios_tarea: ComentariosTarea;
@@ -697,9 +726,11 @@ export interface DB {
   subtareas: Subtareas;
   tarea_compartida: TareaCompartida;
   tarea_etiquetas: TareaEtiquetas;
+  tarea_votos: TareaVotos;
   tareas: Tareas;
   tokens_verificacion: TokensVerificacion;
   transferencias_liderazgo: TransferenciasLiderazgo;
+  transiciones_estado: TransicionesEstado;
   usuarios: Usuarios;
   v_equipo_cupo: VEquipoCupo;
   v_miembros_activos: VMiembrosActivos;

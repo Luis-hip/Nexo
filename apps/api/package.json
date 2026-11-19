@@ -12,6 +12,8 @@
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrar.ts",
     "db:seed": "tsx --env-file-if-exists=.env scripts/sembrar.ts",
     "db:test": "tsx --env-file-if-exists=.env scripts/pruebas-sql.ts",
+    "db:test:procesos": "tsx --env-file-if-exists=.env scripts/pruebas-procesos.ts",
+    "procesos:verificar": "tsx scripts/verificar-procesos-doc.ts",
     "db:reset": "tsx --env-file-if-exists=.env scripts/reiniciar.ts",
     "db:tipos": "kysely-codegen --dialect postgres --exclude-pattern pgmigrations --out-file src/db/tipos.ts"
   },

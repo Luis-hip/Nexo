@@ -56,7 +56,7 @@ export function AsignacionModal({
       { id: t.id, acepta: false, motivo: texto },
       {
         onSuccess: () => {
-          toast('Rechazaste la asignación. El líder la reasignará desde triaje.', 'info');
+          toast('Rechazaste la asignación. El líder la reasignará.', 'info');
           onCerrar();
         },
         onError: avisarError,
@@ -73,7 +73,7 @@ export function AsignacionModal({
       descripcion={
         modo === 'ver'
           ? `${codigoTarea(t.codigo)} · asignada en ${equipo.nombre}`
-          : 'La tarea volverá a triaje con la etiqueta «Rechazada por el responsable».'
+          : 'La tarea queda sin responsable para que el líder la reasigne; no vuelve a votarse.'
       }
       ancho="sm"
       pie={

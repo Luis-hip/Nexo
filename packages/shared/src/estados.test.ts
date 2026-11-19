@@ -13,14 +13,15 @@ const OTRO = 'otro';
 const TABLA: [EstadoTarea, Perfil, boolean, EstadoTarea[]][] = [
   // El líder mueve cualquier tarea, sea o no su responsable.
   ['propuesta', 'lider', false, []],
-  ['backlog', 'lider', false, []],
-  ['aceptada', 'lider', false, ['habilitada']],
+  ['backlog', 'lider', false, ['aceptada']],
+  ['aceptada', 'lider', false, ['habilitada', 'backlog']],
   ['habilitada', 'lider', false, ['en_curso']],
   ['en_curso', 'lider', false, ['atascada', 'completada']],
   ['atascada', 'lider', false, ['en_curso', 'completada']],
   ['completada', 'lider', false, ['en_curso']],
   ['rechazada', 'lider', false, []],
-  ['aceptada', 'lider', true, ['habilitada']],
+  ['cancelada', 'lider', false, []],
+  ['aceptada', 'lider', true, ['habilitada', 'backlog']],
   // El integrante solo mueve las suyas, no habilita ni reabre.
   ['propuesta', 'integrante', true, []],
   ['backlog', 'integrante', true, []],
@@ -30,6 +31,7 @@ const TABLA: [EstadoTarea, Perfil, boolean, EstadoTarea[]][] = [
   ['atascada', 'integrante', true, ['en_curso', 'completada']],
   ['completada', 'integrante', true, []],
   ['rechazada', 'integrante', true, []],
+  ['cancelada', 'integrante', true, []],
   // Integrante que no es el responsable: nada.
   ['habilitada', 'integrante', false, []],
   ['en_curso', 'integrante', false, []],
@@ -86,7 +88,9 @@ describe('máquina de estados de tareas de equipo', () => {
       'Solo el líder puede habilitar tareas.',
     );
     expect(motivo(t('completada'), 'en_curso', 'integrante', YO)).toMatch(/reabrir/);
-    expect(motivo(t('propuesta'), 'aceptada', 'lider', YO)).toMatch(/triaje/);
+    expect(motivo(t('propuesta'), 'aceptada', 'lider', YO)).toMatch(/votación/);
+    expect(motivo(t('rechazada'), 'aceptada', 'lider', YO)).toMatch(/reformular/);
+    expect(motivo(t('cancelada'), 'aceptada', 'lider', YO)).toMatch(/retiró/);
     expect(motivo(t('habilitada'), 'completada', 'lider', YO)).toBe(
       'No se puede pasar de «Habilitada» a «Completada».',
     );

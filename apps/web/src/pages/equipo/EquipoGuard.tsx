@@ -75,7 +75,7 @@ export function EquipoGuard() {
         <Outlet />
         {/* Capas del equipo: se abren con ?tarea=<id> y ?nueva=tarea desde cualquier pantalla. */}
         {tareaId && <DetalleTareaEquipo id={tareaId} onCerrar={() => quitar('tarea')} />}
-        {sp.get('nueva') === 'tarea' && (
+        {sp.get('nueva') === 'tarea' && contexto.puede('crear_tarea').permitido && (
           <TareaFormEquipo abierto onCerrar={() => quitar('nueva')} />
         )}
       </EquipoCtx.Provider>

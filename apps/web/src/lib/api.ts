@@ -1,5 +1,8 @@
 const BASE: string = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
+/** URL absoluta de la API (descargas que el navegador abre directamente con la cookie de sesión). */
+export const urlApi = (ruta: string) => new URL(ruta, BASE).toString();
+
 /** Error de la API con el formato único { codigo, mensaje, detalles? }. */
 export class ErrorApi extends Error {
   constructor(
