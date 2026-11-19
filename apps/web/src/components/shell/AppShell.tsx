@@ -50,6 +50,7 @@ import { AccionesCtx, perfilEn, SesionCtx, type AccionesGlobales } from './conte
 import { Logo } from './Logo';
 import { navegacion, pie, type ItemNav } from './navegacion';
 import { Tour } from './Tour';
+import { useNoLeidosChat } from '@/lib/consultasChat';
 import { useNotificaciones } from '@/lib/consultasVistas';
 
 function useEnLinea() {
@@ -427,6 +428,15 @@ function EnlaceNav({
     ? loc.pathname === item.ruta
     : loc.pathname === item.ruta || loc.pathname.startsWith(item.ruta + '/');
   const I = item.icono;
+  // Fase 4 · Chat: mensajes sin leer del equipo junto a «Chat» (ruta /app/e/:id/chat).
+  const sinLeer = useNoLeidosChat(item.clave === 'chat' ? (item.ruta.split('/')[3] ?? null) : null);
+  const insignia =
+    sinLeer > 0 ? (
+      <span className="ml-auto rounded-full bg-brand px-1.5 text-[11px] font-semibold text-on-brand tabular">
+        <span className="sr-only">, sin leer: </span>
+        {sinLeer > 99 ? '99+' : sinLeer}
+      </span>
+    ) : null;
   if (variante === 'lateral')
     return (
       <NavLink
@@ -442,6 +452,7 @@ function EnlaceNav({
       >
         <I className={cx('size-5', activo && 'text-brand')} aria-hidden />
         {item.etiqueta}
+        {insignia}
       </NavLink>
     );
   if (variante === 'rail')

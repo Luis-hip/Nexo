@@ -8,6 +8,7 @@ import type { BaseDatos } from './db/conexion';
 import { ErrorNexo } from './errores';
 import { exigirOrigenPermitido, RUTAS_OCULTAS_EN_REGISTROS } from './seguridad';
 import { rutasAjustes } from './rutas/ajustes';
+import { rutasChat } from './rutas/chat';
 import { rutasContacto } from './rutas/contacto';
 import { rutasDev } from './rutas/dev';
 import { rutasEquipos } from './rutas/equipos';
@@ -17,6 +18,7 @@ import { rutasSprints } from './rutas/sprints';
 import { rutasTareasEquipo } from './rutas/tareasEquipo';
 import { rutasVistas } from './rutas/vistas';
 import { rutasYo } from './rutas/yo';
+import { registrarTiempoReal } from './tiempoReal';
 
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
   const app = Fastify({
@@ -36,6 +38,7 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   // Límite de peticiones: solo en las rutas que lo declaran (contacto; login en la Fase 5).
   await app.register(rateLimit, { global: false });
   registrarAutenticacion(app, db);
+  registrarTiempoReal(app, config, db);
 
   app.setErrorHandler((error, _req, res) => {
     if (error instanceof ErrorNexo) {
@@ -71,6 +74,7 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   await app.register(rutasLiderazgo, { db });
   await app.register(rutasVistas, { db });
   await app.register(rutasAjustes, { db });
+  await app.register(rutasChat, { db });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });

@@ -350,3 +350,25 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Límites aceptados.** La API duerme a los 15 min sin tráfico; los temporizadores no corren dormida; la BD **expira a los 30 días** y no tiene copias ni restauración (`10`, sección 3 ✔). Detalle y fechas en `docs/operacion.md`, sección 7.
 - **Cuándo se revisa.** Antes de ~2026-12-18 (vencimiento de la BD) y antes de la Fase 4 (el chat necesita la API encendida): pasar a `0.5c-512mb` y `0.1c-256mb` o exportar los datos.
 - **Criterio de la Fase 3.5 que queda sin cumplir:** «copias de seguridad y restauración probada».
+
+---
+
+## Fase 4 · Chat
+
+*Decisiones del chat (tarea 4.1). Llevan el prefijo `DEC-CHAT-` para no chocar con la numeración que use la parte de WhatsApp, que se trabaja en paralelo en otra rama; al juntar ambas partes se pueden renumerar.*
+
+## DEC-CHAT-1 · Fase 4.1: chat en tiempo real
+
+**Fecha:** 2026-11-19 · **Fuente:** `03`, Fase 4, tarea 4.1 (CH-01 a CH-10) · **Detalle:** `08_Procesos_BD.md`, sección «Fase 4 · Chat» (16 procesos de `0014` a `0016`).
+
+- **Una sola regla de acceso en la BD (`fn_chat_puede`).** Canal del equipo: líder e integrantes. Canal de Invitados: todos. Chat de tarea: líder e integrantes, y el invitado solo si la tarea está compartida con él. Mensaje directo: solo las dos personas, **ni el líder lo ve**; si una sale del equipo, deja de verse para las dos. Quien no tiene acceso recibe 404, como en el resto de la API (DEC-018).
+- **Tiempo real.** Socket.IO en el mismo servidor de la API, autenticado con la cookie de sesión. El servidor une cada conexión a una sala por conversación visible (`proc_chat_salas`); el cliente no pide salas. **Al emitir se vuelve a calcular la audiencia** (`proc_chat_miembros`) y solo reciben las conexiones de esas personas: así, si a un invitado se le deja de compartir una tarea o alguien sale del equipo, deja de recibir aunque su conexión siga abierta (cuesta una consulta por emisión; con equipos de hasta 8 es poco). No se usa una sala general «por equipo»: no hay eventos que deba recibir todo el equipo sin filtrar, y una sala así le llegaría al invitado.
+- **El socket solo recibe.** Los mensajes se envían por HTTP (validados con Zod y con la misma API de errores) y el socket solo avisa; la web vuelve a pedir lo afectado. Es más simple, las reacciones traen «yo» según quien mira y, al reconectar, lo perdido llega por HTTP.
+- **Mensajes sin eventos de dominio.** Escribir, reaccionar, fijar o borrar no genera `eventos_dominio` ni actividad: llenaría el registro del equipo y la cola de WhatsApp de ruido. Solo convertir un mensaje en tarea registra `tarea.propuesta`, igual que proponer.
+- **Menciones.** Se escriben `@Nombre Apellido` (la web propone nombres al teclear `@`). Solo cuentan las personas con acceso a la conversación; cada una recibe una notificación «X te mencionó» (categoría `menciones`, abre el chat) salvo que haya apagado «Menciones» en la app (PF-04). No se notifica por WhatsApp desde aquí: eso le toca al despachador de la Fase 4.2.
+- **Moderación (matriz `moderar_chat`).** Solo el líder fija mensajes y borra los ajenos; cada quien borra los suyos. El borrado es lógico (el texto deja de salir). No se fijan mensajes en los directos ni respuestas de hilo.
+- **Hilos de un solo nivel.** Responder a una respuesta se cuelga de la raíz.
+- **Convertir en tarea (CH-09) es del líder**, porque desde DEC-024 solo el líder propone: la tarea entra a votación con el título de la primera línea (editable) y deja un aviso en el chat. Los directos no se convierten (son privados).
+- **No leídos.** Puntero por persona y conversación; quien entra a un equipo no ve como pendiente el historial anterior a su ingreso. Silenciar quita la conversación de la insignia de la barra.
+- **Búsqueda (CH-08).** `websearch_to_tsquery('spanish', …)` sobre el índice GIN que ya existía; el fragmento marca lo encontrado con «…» y la web lo resalta sin interpretar HTML. Las palabras vacías del español («nosotros», «de») no se pueden buscar solas.
+- **Fuera de esta tarea (anotado en `progreso.md`):** adjuntar archivos en el chat (la tabla lo permite; `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes, indicador de «escribiendo…», `pg-boss` y el despachador de eventos (comparten diseño con WhatsApp; se decidirán al juntar ambas partes).

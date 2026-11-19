@@ -191,3 +191,31 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [x] PR `Dev_Luis` → `dev` → `main` de las Fases 2.5 y 3 (pendiente de la Fase 2.5): hecho el 2026-11-18.
 - [ ] Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
 - [ ] Revisión **visual** por una persona del tablero, sprints y ajustes en claro/oscuro y móvil (Fases 1 a 3). La verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
+
+## Fase 4 · Chat
+
+**Estado:** la parte del chat (tarea 4.1) está construida en la rama `feat/fase-4-chat` (sale de `Dev_Luis`). La parte de WhatsApp (4.2, 4.3, PF-05, FALT-03/04 y consentimiento) la hace otro integrante en paralelo en su rama. El tag `fase-4` se crea al juntar ambas partes. Reservas para no chocar: migraciones `0014`–`0019` y pruebas de procesos `P104`–`P149` para el chat; WhatsApp usa desde `0020` y `P150`.
+
+### Hecho
+
+- **Base de datos.** Migraciones `0014_procesos_chat_lectura.sql`, `0015_procesos_chat_envio.sql` y `0016_procesos_chat_conversaciones.sql` con **16 procesos `proc_chat_*`** (todos en `docs/08`, sección «Fase 4 · Chat») y una sola regla de acceso, `fn_chat_puede`. No hubo cambios de tablas (solo el índice `ix_menciones_usuario`), así que `apps/api/src/db/tipos.ts` no cambia. Quedan libres `0017`–`0019`.
+- **API.** `rutas/chat.ts` y `repositorios/chat.ts`: conversaciones, mensajes paginados por cursor, enviar (con `id_cliente` para no duplicar), hilos, reacciones, menciones con notificación, lecturas, fijar y silenciar conversaciones, fijar y eliminar mensajes (moderación del líder), mensajes directos, chat por tarea, búsqueda y convertir un mensaje en tarea.
+- **Tiempo real.** `src/tiempoReal.ts`: Socket.IO en el mismo servidor, autenticado con la cookie de sesión; salas por conversación que decide el servidor; la audiencia se recalcula en cada emisión. Ver DEC-CHAT-1.
+- **Web.** `/app/e/:equipo/chat` y `/chat/:conversacion` con CH-01 (lista con no leídos y menciones), CH-02 (canal del equipo), CH-03 (chat de tarea: botón «Abrir el chat de la tarea» en el detalle y ruta `chat/tarea/:tareaId`), CH-04 y CH-07 (mensajes directos y «Nueva»), CH-05 (hilo en panel), CH-06 (fijados), CH-08 (búsqueda con resaltado), CH-09 (convertir en tarea, solo líder) y CH-10 (canal de Invitados). Insignia de no leídos junto a «Chat» en la barra lateral. Menciones con sugerencias al escribir `@`.
+- **Pruebas.** 26 pruebas SQL de procesos (**P104–P129**; `pnpm db:test:procesos` da 129 OK), 9 de la API en `chat.test.ts` (incluida la de tiempo real con tres sockets: **Carlos y Daniela reciben el mensaje del equipo y Mariana, la invitada, no**; ella sí recibe el del canal de Invitados) y 4 de la web (`menciones.test.ts`). Totales locales: 194 `shared`, 160 API, 97 web; `procesos:verificar` cuenta 113 procesos. Contadores actualizados en `apps/api/scripts/pruebas-procesos.ts` (ahora por rangos, uno por línea, para que la rama de WhatsApp agregue el suyo sin conflicto) y en el nombre del paso de `.github/workflows/ci.yml`.
+- **Verificado en el navegador** con la semilla (como Carlos): canal del equipo, mención a Valeria con sugerencia y resaltado, un mensaje de Valeria enviado por la API desde fuera **apareció sin recargar** y «Leído por» se actualizó solo; respuesta en un hilo con el panel lateral a 1280 px; vista de una columna a 800 px. Sin errores en la consola. **Local con PGlite**; la CI lo comprueba con PostgreSQL 16 (aún no corre: no se ha hecho push).
+
+### Criterio de la Fase 4 que cubre esta parte
+
+- [x] «Dos navegadores con distintos usuarios intercambian mensajes en tiempo real; un invitado **no** recibe mensajes del chat del equipo (prueba)»: probado de forma automática en `chat.test.ts` con tres conexiones reales. En la interfaz se probó con un navegador y un segundo usuario por la API, **no con dos navegadores reales**.
+- [ ] Los demás puntos del criterio son de WhatsApp (otra rama).
+- [ ] CI en verde: pendiente del push.
+
+### Pendiente o movido
+
+- [ ] **`pg-boss` y el despachador de eventos** (notificaciones de asignaciones, menciones y vencimientos; sustituir `trabajos/plazos.ts`; foto nocturna del burndown). No se hicieron aquí porque comparten diseño con la cola y el modo reporte de WhatsApp (4.2): decidir quién los hace antes de juntar las ramas. Mientras tanto, las menciones del chat ya notifican desde su proceso.
+- [ ] Adjuntar archivos en el chat (la tabla `archivos` tiene `mensaje_id`, pero `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes e indicador de «escribiendo…».
+- [ ] La insignia de no leídos de la barra se refresca cada 2 minutos fuera del chat; dentro del chat es en tiempo real.
+- [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
+- [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
+- [ ] Las decisiones del chat usan el prefijo `DEC-CHAT-` para no chocar con las de WhatsApp; renumerar al juntar si se prefiere.

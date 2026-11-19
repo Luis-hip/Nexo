@@ -611,3 +611,125 @@ export const esquemaReportePersonal = z.object({
     }),
   ),
 }) satisfies z.ZodType<ReportePersonal>;
+
+// =============================================================================================
+// Fase 4 · Chat (4.1): respuestas de los procesos `proc_chat_*`
+// =============================================================================================
+import {
+  REACCIONES,
+  TIPOS_CONVERSACION,
+  type ConversacionChat,
+  type HiloChat,
+  type MensajeChat,
+  type MiembroChat,
+  type PaginaMensajes,
+  type ResultadoBusquedaChat,
+  type ResultadoLectura,
+  type ResultadoMensajeATarea,
+  type ResultadoReaccion,
+} from './chat';
+
+const esquemaTareaVinculada = z.object({
+  id: z.string(),
+  codigo: z.number().int(),
+  titulo: z.string(),
+});
+
+const esquemaReaccionResumen = z.object({
+  tipo: z.enum(REACCIONES),
+  total: z.number().int(),
+  yo: z.boolean(),
+});
+
+export const esquemaMensajeChat = z.object({
+  id: z.string(),
+  seq: z.number().int(),
+  conversacion_id: z.string(),
+  autor: esquemaPersonaTarea.nullable(),
+  es_sistema: z.boolean(),
+  texto: z.string(),
+  eliminado: z.boolean(),
+  hilo_de_id: z.string().nullable(),
+  respuestas: z.number().int(),
+  fijado: z.boolean(),
+  tarea: esquemaTareaVinculada.nullable(),
+  reacciones: z.array(esquemaReaccionResumen),
+  menciones: z.array(z.string()),
+  leido_por: z.number().int(),
+  creado_en: fechaIso,
+  editado_en: fechaIso.nullable(),
+}) satisfies z.ZodType<MensajeChat>;
+
+export const esquemaConversacionChat = z.object({
+  id: z.string(),
+  equipo_id: z.string(),
+  tipo: z.enum(TIPOS_CONVERSACION),
+  nombre: z.string(),
+  tarea: esquemaTareaVinculada.nullable(),
+  con: esquemaPersonaTarea.nullable(),
+  ultimo: z
+    .object({
+      texto: z.string(),
+      autor_nombre: z.string().nullable(),
+      es_sistema: z.boolean(),
+      creado_en: fechaIso,
+    })
+    .nullable(),
+  no_leidos: z.number().int(),
+  menciones_sin_leer: z.number().int(),
+  fijada: z.boolean(),
+  silenciada: z.boolean(),
+}) satisfies z.ZodType<ConversacionChat>;
+
+export const esquemaListaConversaciones = z.array(esquemaConversacionChat);
+export const esquemaListaMensajes = z.array(esquemaMensajeChat);
+
+export const esquemaPaginaMensajes = z.object({
+  conversacion: esquemaConversacionChat,
+  items: z.array(esquemaMensajeChat),
+  hay_mas: z.boolean(),
+}) satisfies z.ZodType<PaginaMensajes>;
+
+export const esquemaHiloChat = z.object({
+  raiz: esquemaMensajeChat,
+  respuestas: z.array(esquemaMensajeChat),
+}) satisfies z.ZodType<HiloChat>;
+
+export const esquemaMiembrosChat = z.array(esquemaPersonaTarea.extend({ rol })) satisfies z.ZodType<
+  MiembroChat[]
+>;
+
+export const esquemaSalasChat = z.array(
+  z.object({ conversacion_id: z.string(), equipo_id: z.string() }),
+);
+
+export const esquemaResultadoReaccion = z.object({
+  mensaje_id: z.string(),
+  conversacion_id: z.string(),
+  reacciones: z.array(esquemaReaccionResumen),
+}) satisfies z.ZodType<ResultadoReaccion>;
+
+export const esquemaResultadoLectura = z.object({
+  conversacion_id: z.string(),
+  ultimo_leido_seq: z.number().int(),
+  no_leidos: z.number().int(),
+}) satisfies z.ZodType<ResultadoLectura>;
+
+export const esquemaResultadosBusquedaChat = z.array(
+  z.object({
+    mensaje_id: z.string(),
+    seq: z.number().int(),
+    conversacion_id: z.string(),
+    tipo: z.enum(TIPOS_CONVERSACION),
+    conversacion: z.string(),
+    autor: esquemaPersonaTarea.nullable(),
+    fragmento: z.string(),
+    creado_en: fechaIso,
+  }),
+) satisfies z.ZodType<ResultadoBusquedaChat[]>;
+
+export const esquemaResultadoMensajeATarea = z.object({
+  tarea: z.object({ id: z.string(), codigo: z.number().int(), estado: z.string() }),
+  mensaje: esquemaMensajeChat,
+  sistema: esquemaMensajeChat,
+}) satisfies z.ZodType<ResultadoMensajeATarea>;

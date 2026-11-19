@@ -1546,3 +1546,258 @@
 - **Pruebas:** `pruebas_procesos.sql` P103; `ajustes.test.ts`.
 - **Ejemplo de llamada:** `select proc_reporte_personal($1)`
 - **Historial:** 2026-11-18 · creación · `0013`.
+
+---
+
+## Fase 4 · Chat
+
+Procesos del chat en tiempo real (`03`, tarea 4.1; DEC-CHAT-1 en `decisiones.md`). Migraciones `0014` a `0016` (el rango `0014`–`0019` es del chat; WhatsApp usa desde `0020`). Pruebas `P104`–`P129` en `pruebas_procesos.sql` (rango reservado `P104`–`P149`) y `apps/api/src/rutas/chat.test.ts`.
+
+**Regla única de acceso (`fn_chat_puede`).** `equipo`: líder e integrantes. `invitados`: todos los miembros activos, invitados incluidos. `tarea`: líder e integrantes; un invitado solo si la tarea está compartida con su membresía. `dm`: solo las dos personas, y las dos deben seguir siendo líder o integrante activos. Un invitado con el acceso caducado no ve nada (`NX005 acceso_caducado`). Quien no tiene acceso recibe `NX006` (404), como si la conversación no existiera. `fn_chat_exigir` aplica la regla y la usan todos los procesos que reciben una conversación o un mensaje.
+
+**Eventos.** Los mensajes **no** generan eventos de dominio ni actividad (no entran al registro del equipo ni al despachador de WhatsApp). Solo `proc_chat_mensaje_a_tarea` registra `tarea.propuesta`/`tarea.creada`, como `proc_tarea_proponer`. Las menciones crean una notificación (`fn_notificar`, categoría `menciones`, acción `abrir_chat`).
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_chat_conversaciones` | Chat (lectura) | `0014_procesos_chat_lectura.sql` | Vigente |
+| `proc_chat_mensajes` | Chat (lectura) | `0014_procesos_chat_lectura.sql` | Vigente |
+| `proc_chat_hilo` | Chat (lectura) | `0014_procesos_chat_lectura.sql` | Vigente |
+| `proc_chat_fijados` | Chat (lectura) | `0014_procesos_chat_lectura.sql` | Vigente |
+| `proc_chat_miembros` | Chat (lectura) | `0014_procesos_chat_lectura.sql` | Vigente |
+| `proc_chat_salas` | Chat (lectura, tiempo real) | `0014_procesos_chat_lectura.sql` | Vigente |
+| `proc_chat_enviar` | Chat | `0015_procesos_chat_envio.sql` | Vigente |
+| `proc_chat_eliminar` | Chat · moderación | `0015_procesos_chat_envio.sql` | Vigente |
+| `proc_chat_fijar` | Chat · moderación | `0015_procesos_chat_envio.sql` | Vigente |
+| `proc_chat_reaccionar` | Chat | `0015_procesos_chat_envio.sql` | Vigente |
+| `proc_chat_leer` | Chat | `0015_procesos_chat_envio.sql` | Vigente |
+| `proc_chat_preferencias` | Chat | `0015_procesos_chat_envio.sql` | Vigente |
+| `proc_chat_conversacion_tarea` | Chat | `0016_procesos_chat_conversaciones.sql` | Vigente |
+| `proc_chat_dm_abrir` | Chat | `0016_procesos_chat_conversaciones.sql` | Vigente |
+| `proc_chat_buscar` | Chat (lectura) | `0016_procesos_chat_conversaciones.sql` | Vigente |
+| `proc_chat_mensaje_a_tarea` | Chat · tareas | `0016_procesos_chat_conversaciones.sql` | Vigente |
+
+Auxiliares nuevos (solo los ejecuta el dueño): `fn_chat_puede`, `fn_chat_exigir`, `fn_chat_reacciones_json`, `fn_chat_mensaje_json`, `fn_chat_conversacion_json`. Índice nuevo: `ix_menciones_usuario` en `mensaje_menciones(usuario_id)`.
+
+### proc_chat_conversaciones
+- **Migración:** `0014_procesos_chat_lectura.sql`
+- **Propósito:** CH-01: conversaciones del equipo que la persona puede ver.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo.
+- **Retorno:** `jsonb` `ConversacionChat[]`: `{ id, equipo_id, tipo, nombre, tarea, con, ultimo, no_leidos, menciones_sin_leer, fijada, silenciada }`, primero las fijadas y luego por actividad reciente.
+- **Reglas y validaciones:** solo las que pasan `fn_chat_puede`; los chats de tarea salen cuando tienen al menos un mensaje que no es de sistema. `nombre` según el tipo (canal, «Invitados», «T-01 · título» o el nombre de la otra persona). `no_leidos` cuenta mensajes ajenos, no eliminados y no de sistema posteriores al puntero de lectura; sin puntero, solo los posteriores a que la persona entró al equipo (`membresias.desde`). `ultimo` ignora los eliminados.
+- **Errores:** `NX006` · no pertenece al equipo. `NX005` · invitado con acceso caducado.
+- **Tablas que toca:** lectura `conversaciones`, `mensajes`, `mensaje_menciones`, `conversacion_lecturas`, `membresias`, `tarea_compartida`, `tareas`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `conversaciones()`; `GET /equipos/:equipoId/chat/conversaciones`.
+- **Pruebas:** P110, P111, P115, P119, P129; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_conversaciones($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0014`.
+
+### proc_chat_mensajes
+- **Migración:** `0014_procesos_chat_lectura.sql`
+- **Propósito:** CH-02, CH-03, CH-04, CH-10: una página de mensajes de la conversación.
+- **Parámetros:** `p_actor_id uuid`. `p_conversacion_id uuid`. `p_antes bigint` (opcional) · `seq` del mensaje más antiguo ya cargado. `p_limite int` (opcional, 40; entre 1 y 100).
+- **Retorno:** `jsonb` `{ conversacion: ConversacionChat, items: MensajeChat[], hay_mas }`; los `items` van del más antiguo al más nuevo. Un `MensajeChat` lleva autor, texto (vacío si se eliminó), `eliminado`, `hilo_de_id`, `respuestas`, `fijado`, `tarea` ligada, `reacciones[] { tipo, total, yo }`, `menciones[]`, `leido_por` y fechas.
+- **Reglas y validaciones:** acceso por `fn_chat_exigir`; no incluye las respuestas de hilo (se cuentan en `respuestas` de la raíz); `leido_por` cuenta los punteros que llegaron al mensaje, sin el autor.
+- **Errores:** `NX006` · conversación inexistente o sin acceso. `NX005` · acceso caducado.
+- **Tablas que toca:** lectura `mensajes`, `conversaciones`, `mensaje_reacciones`, `mensaje_menciones`, `conversacion_lecturas`, `tareas`, `membresias`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `mensajes()`; `GET /chat/conversaciones/:id/mensajes?antes&limite`.
+- **Pruebas:** P104, P109, P127, P128; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_mensajes($1, $2, null, 40)`
+- **Historial:** 2026-11-19 · creación · `0014`.
+
+### proc_chat_hilo
+- **Migración:** `0014_procesos_chat_lectura.sql`
+- **Propósito:** CH-05: un hilo completo.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid` · la raíz o cualquiera de sus respuestas.
+- **Retorno:** `jsonb` `{ raiz: MensajeChat, respuestas: MensajeChat[] }` (respuestas de la más antigua a la más nueva).
+- **Reglas y validaciones:** acceso a la conversación del mensaje.
+- **Errores:** `NX006` · mensaje inexistente o sin acceso.
+- **Tablas que toca:** lectura `mensajes` y las del JSON del mensaje.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `hilo()`; `GET /chat/mensajes/:id/hilo`.
+- **Pruebas:** P107; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_hilo($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0014`.
+
+### proc_chat_fijados
+- **Migración:** `0014_procesos_chat_lectura.sql`
+- **Propósito:** CH-06: mensajes fijados de la conversación.
+- **Parámetros:** `p_actor_id uuid`. `p_conversacion_id uuid`.
+- **Retorno:** `jsonb` `MensajeChat[]`, el más reciente primero.
+- **Reglas y validaciones:** acceso a la conversación; no incluye eliminados.
+- **Errores:** `NX006` · sin acceso.
+- **Tablas que toca:** lectura `mensajes` y las del JSON del mensaje.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `fijados()`; `GET /chat/conversaciones/:id/fijados`.
+- **Pruebas:** P117; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_fijados($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0014`.
+
+### proc_chat_miembros
+- **Migración:** `0014_procesos_chat_lectura.sql`
+- **Propósito:** personas con acceso a la conversación **en este momento** (menciones con @ y audiencia del tiempo real).
+- **Parámetros:** `p_actor_id uuid`. `p_conversacion_id uuid`.
+- **Retorno:** `jsonb` `{ usuario_id, nombre, color_idx, rol }[]` (líder primero, por color).
+- **Reglas y validaciones:** el actor debe tener acceso; cada miembro activo pasa por `fn_chat_puede`. Se calcula en cada llamada: si se deja de compartir una tarea o alguien sale, deja de aparecer.
+- **Errores:** `NX006` · sin acceso.
+- **Tablas que toca:** lectura `membresias`, `usuarios`, `conversaciones`, `tarea_compartida`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `miembros()`; `GET /chat/conversaciones/:id/miembros` y `tiempoReal.ts` (antes de cada emisión).
+- **Pruebas:** P113, P120, P127; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_miembros($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0014`.
+
+### proc_chat_salas
+- **Migración:** `0014_procesos_chat_lectura.sql`
+- **Propósito:** salas de Socket.IO de una persona: todas las conversaciones que puede ver en sus equipos activos.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ conversacion_id, equipo_id }[]`.
+- **Reglas y validaciones:** solo equipos con membresía activa y conversaciones que pasan `fn_chat_puede`; el cliente no elige salas.
+- **Errores:** ninguno propio (sin equipos devuelve `[]`).
+- **Tablas que toca:** lectura `conversaciones`, `membresias`, `tarea_compartida`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `salas()`; `tiempoReal.ts` al conectar y en `chat:sincronizar`.
+- **Pruebas:** P113, P121, P127.
+- **Ejemplo de llamada:** `select proc_chat_salas($1)`
+- **Historial:** 2026-11-19 · creación · `0014`.
+
+### proc_chat_enviar
+- **Migración:** `0015_procesos_chat_envio.sql`
+- **Propósito:** CH-02 y CH-05: escribir un mensaje o una respuesta de hilo.
+- **Parámetros:** `p_actor_id uuid`. `p_conversacion_id uuid`. `p_datos jsonb` · `{ texto, hilo_de_id?, id_cliente?, menciones?: uuid[] }`.
+- **Retorno:** `jsonb` `MensajeChat`.
+- **Reglas y validaciones:** acceso a la conversación; equipo no archivado; texto recortado de 1 a 4000 caracteres. `hilo_de_id` debe ser un mensaje vivo, no de sistema, de la misma conversación; si es una respuesta se usa su raíz (hilos de un nivel). `id_cliente`: reenviar el mismo devuelve el mensaje ya guardado (RN-CHT-02); si lo usó otra persona, `NX012`. Menciones: solo cuentan las personas con acceso a la conversación y no uno mismo; cada una recibe una notificación salvo que haya apagado «mencion» en la app (`preferencias_notificacion`). El puntero de lectura del autor avanza a su mensaje.
+- **Errores:** `NX006` · sin acceso. `NX009` · equipo archivado. `NX010` · texto vacío o largo, identificador inválido o hilo inválido. `NX012` · `id_cliente` de otra persona.
+- **Tablas que toca:** escritura `mensajes`, `mensaje_menciones`, `conversacion_lecturas`, `notificaciones`; lectura `preferencias_notificacion`, `membresias`.
+- **Eventos que genera:** ninguno (solo notificaciones de mención).
+- **Lo llama:** `repositorios/chat.ts` → `enviar()`; `POST /chat/conversaciones/:id/mensajes` (emite `chat:mensaje`).
+- **Pruebas:** P105, P106, P107, P108; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_enviar($1, $2, '{"texto": "Hola"}')`
+- **Historial:** 2026-11-19 · creación · `0015`.
+
+### proc_chat_eliminar
+- **Migración:** `0015_procesos_chat_envio.sql`
+- **Propósito:** eliminar un mensaje (borrado lógico) y moderación del líder.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid`.
+- **Retorno:** `jsonb` `MensajeChat` (`eliminado: true`, texto vacío).
+- **Reglas y validaciones:** cada quien borra lo suyo; el líder borra también lo ajeno y los mensajes de sistema, pero solo donde tiene acceso (no los mensajes directos ajenos). Se guarda `eliminado_por` y el mensaje se desfija. Borrar dos veces no falla.
+- **Errores:** `NX005` · borrar lo ajeno sin ser líder. `NX006` · mensaje inexistente o sin acceso. `NX009` · equipo archivado.
+- **Tablas que toca:** escritura `mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `eliminar()`; `DELETE /chat/mensajes/:id` (emite `chat:mensaje_actualizado`).
+- **Pruebas:** P116; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_eliminar($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0015`.
+
+### proc_chat_fijar
+- **Migración:** `0015_procesos_chat_envio.sql`
+- **Propósito:** CH-06: el líder fija o desfija un mensaje.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid`. `p_fijado boolean`.
+- **Retorno:** `jsonb` `MensajeChat`.
+- **Reglas y validaciones:** solo el líder (matriz: `moderar_chat`); solo en canales y chats de tarea; no se fijan respuestas de hilo ni mensajes eliminados.
+- **Errores:** `NX005` · no es el líder. `NX006` · sin acceso. `NX007` · directo, respuesta o eliminado. `NX009` · equipo archivado.
+- **Tablas que toca:** escritura `mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `fijar()`; `POST /chat/mensajes/:id/fijar` (emite `chat:mensaje_actualizado`).
+- **Pruebas:** P116, P117; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_fijar($1, $2, true)`
+- **Historial:** 2026-11-19 · creación · `0015`.
+
+### proc_chat_reaccionar
+- **Migración:** `0015_procesos_chat_envio.sql`
+- **Propósito:** reaccionar a un mensaje (6 tipos de `tipo_reaccion`); repetir el tipo lo quita.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid`. `p_tipo text`.
+- **Retorno:** `jsonb` `{ mensaje_id, conversacion_id, reacciones[] }`.
+- **Reglas y validaciones:** acceso a la conversación; equipo activo; no a mensajes eliminados ni de sistema; una reacción de cada tipo por persona (clave primaria).
+- **Errores:** `NX006` · sin acceso. `NX007` · mensaje eliminado o de sistema. `NX009` · archivado. `NX010` · tipo inexistente.
+- **Tablas que toca:** escritura `mensaje_reacciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `reaccionar()`; `POST /chat/mensajes/:id/reaccion` (emite `chat:reaccion`).
+- **Pruebas:** P118; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_reaccionar($1, $2, 'hecho')`
+- **Historial:** 2026-11-19 · creación · `0015`.
+
+### proc_chat_leer
+- **Migración:** `0015_procesos_chat_envio.sql`
+- **Propósito:** avanzar el puntero de lectura (`conversacion_lecturas`).
+- **Parámetros:** `p_actor_id uuid`. `p_conversacion_id uuid`. `p_hasta_seq bigint`.
+- **Retorno:** `jsonb` `{ conversacion_id, ultimo_leido_seq, no_leidos }`.
+- **Reglas y validaciones:** acceso a la conversación; nunca retrocede ni pasa del último mensaje. Funciona también en un equipo archivado.
+- **Errores:** `NX006` · sin acceso.
+- **Tablas que toca:** escritura `conversacion_lecturas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `leer()`; `POST /chat/conversaciones/:id/lectura` (emite `chat:lectura`).
+- **Pruebas:** P110, P126, P128; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_leer($1, $2, 120)`
+- **Historial:** 2026-11-19 · creación · `0015`.
+
+### proc_chat_preferencias
+- **Migración:** `0015_procesos_chat_envio.sql`
+- **Propósito:** fijar arriba o silenciar una conversación, solo para quien lo pide.
+- **Parámetros:** `p_actor_id uuid`. `p_conversacion_id uuid`. `p_cambios jsonb` · `{ fijada?, silenciada? }`.
+- **Retorno:** `jsonb` `ConversacionChat`.
+- **Reglas y validaciones:** acceso a la conversación; lo que no viene se conserva.
+- **Errores:** `NX006` · sin acceso.
+- **Tablas que toca:** escritura `conversacion_lecturas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `preferencias()`; `PATCH /chat/conversaciones/:id/preferencias`.
+- **Pruebas:** P119.
+- **Ejemplo de llamada:** `select proc_chat_preferencias($1, $2, '{"silenciada": true}')`
+- **Historial:** 2026-11-19 · creación · `0015`.
+
+### proc_chat_conversacion_tarea
+- **Migración:** `0016_procesos_chat_conversaciones.sql`
+- **Propósito:** CH-03: abrir (y la primera vez crear) el chat de una tarea.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_tarea_id uuid`.
+- **Retorno:** `jsonb` `ConversacionChat`.
+- **Reglas y validaciones:** la tarea debe ser del equipo; un invitado solo abre tareas compartidas con él. Un chat por tarea (`ux_conv_tarea`, con `ON CONFLICT DO NOTHING` ante dos aperturas a la vez). Un equipo archivado no crea chats nuevos, pero abre los existentes.
+- **Errores:** `NX006` · tarea ajena, inexistente o no compartida. `NX009` · crear en equipo archivado.
+- **Tablas que toca:** lectura `tareas`, `tarea_compartida`, `membresias`; escritura `conversaciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `conversacionTarea()`; `POST /equipos/:equipoId/chat/tareas/:tareaId/conversacion` (la web: botón del detalle de la tarea y ruta `chat/tarea/:tareaId`).
+- **Pruebas:** P111, P112, P113, P126; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_conversacion_tarea($1, $2, $3)`
+- **Historial:** 2026-11-19 · creación · `0016`.
+
+### proc_chat_dm_abrir
+- **Migración:** `0016_procesos_chat_conversaciones.sql`
+- **Propósito:** CH-04 y CH-07: abrir (y la primera vez crear) el mensaje directo con otra persona del equipo.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_otro_id uuid`.
+- **Retorno:** `jsonb` `ConversacionChat` (nombre = la otra persona).
+- **Reglas y validaciones:** solo entre líder e integrantes activos (matriz: `mensajes_directos`); no a uno mismo; una conversación por pareja (par ordenado `dm_usuario_a < dm_usuario_b`, `ux_conv_dm`). Nadie más la ve, ni el líder.
+- **Errores:** `NX005` · el actor es invitado. `NX006` · el actor no es del equipo. `NX009` · crear en equipo archivado. `NX010` · destinatario inválido (uno mismo, invitado o ajeno).
+- **Tablas que toca:** lectura `membresias`; escritura `conversaciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/chat.ts` → `abrirDm()`; `POST /equipos/:equipoId/chat/dm`.
+- **Pruebas:** P111, P114, P115, P126; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_dm_abrir($1, $2, $3)`
+- **Historial:** 2026-11-19 · creación · `0016`.
+
+### proc_chat_buscar
+- **Migración:** `0016_procesos_chat_conversaciones.sql`
+- **Propósito:** CH-08: buscar texto en español en el chat del equipo.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_texto text` (2 a 100). `p_conversacion_id uuid` (opcional). `p_limite int` (opcional, 30; hasta 50).
+- **Retorno:** `jsonb` `{ mensaje_id, seq, conversacion_id, tipo, conversacion, autor, fragmento, creado_en }[]` ordenado por relevancia; el fragmento marca lo hallado con «…».
+- **Reglas y validaciones:** `websearch_to_tsquery('spanish', …)` sobre el índice `ix_mensajes_busqueda`; solo conversaciones que pasan `fn_chat_puede`; sin eliminados ni mensajes de sistema. Una búsqueda solo de palabras vacías («nosotros», «de») devuelve `[]`.
+- **Errores:** `NX006` · no pertenece al equipo. `NX010` · texto fuera de largo.
+- **Tablas que toca:** lectura `mensajes`, `conversaciones`, `membresias`, `tarea_compartida`, `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/chat.ts` → `buscar()`; `GET /equipos/:equipoId/chat/buscar?q&conversacion_id`.
+- **Pruebas:** P122, P123; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_buscar($1, $2, 'reunión', null, 30)`
+- **Historial:** 2026-11-19 · creación · `0016`.
+
+### proc_chat_mensaje_a_tarea
+- **Migración:** `0016_procesos_chat_conversaciones.sql`
+- **Propósito:** CH-09: convertir un mensaje en una propuesta de tarea.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid`. `p_datos jsonb` (opcional) · `{ titulo?, descripcion?, prioridad?, responsable_id? }`.
+- **Retorno:** `jsonb` `{ tarea: { id, codigo, estado }, mensaje: MensajeChat, sistema: MensajeChat }`.
+- **Reglas y validaciones:** solo el líder (como `proc_tarea_proponer`, DEC-024); equipo activo; no en mensajes directos (son privados); no mensajes eliminados ni de sistema; un mensaje se convierte una sola vez. Usa `fn_tarea_insertar_propuesta`: entra a votación (o queda aceptada si no hay integrantes). Título: el indicado o la primera línea del mensaje (hasta 140); descripción: la indicada o el mensaje completo si es más largo que el título. La tarea guarda `mensaje_origen_id`, el mensaje `tarea_vinculada_id` y la conversación recibe un mensaje de sistema.
+- **Errores:** `NX005` · no es el líder o es un directo. `NX006` · sin acceso. `NX007` · eliminado o de sistema. `NX009` · archivado. `NX010` · responsable inválido. `NX012` · ya convertido.
+- **Tablas que toca:** escritura `tareas`, `subtareas`, `etiquetas`, `mensajes`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.propuesta` («Valeria propuso T-12 «…» desde el chat (en votación)») o `tarea.creada`; una fila de `actividad`.
+- **Lo llama:** `repositorios/chat.ts` → `mensajeATarea()`; `POST /chat/mensajes/:id/tarea`.
+- **Pruebas:** P124, P125; `chat.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_mensaje_a_tarea($1, $2, '{}')`
+- **Historial:** 2026-11-19 · creación · `0016`.

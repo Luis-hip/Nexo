@@ -18,6 +18,7 @@ const equipo = () => import('./pages/equipo');
 const sprints = () => import('./pages/equipo/sprints');
 const vistas = () => import('./pages/equipo/vistas');
 const ajustes = () => import('./pages/ajustes');
+const chat = () => import('./pages/equipo/chat');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -259,7 +260,10 @@ const rutas: RouteObject[] = [
                   };
                 },
               })),
-              { path: 'chat/*', element: proximamente('Chat del equipo', 4) },
+              // Fase 4 · Chat (CH-01 a CH-10). Los invitados entran: ven el canal de Invitados.
+              { path: 'chat', lazy: diferida(chat, (m) => m.Chat) },
+              { path: 'chat/tarea/:tareaId', lazy: diferida(chat, (m) => m.ChatDeTarea) },
+              { path: 'chat/:conversacionId', lazy: diferida(chat, (m) => m.Chat) },
               { path: 'whatsapp/*', element: proximamente('WhatsApp', 4) },
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],
