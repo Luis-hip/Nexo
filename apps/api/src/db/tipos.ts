@@ -300,6 +300,7 @@ export interface MensajeReacciones {
 
 export interface Mensajes {
   autor_id: string | null;
+  busqueda_tsv: Generated<string | null>;
   conversacion_id: string;
   creado_en: Generated<Timestamp>;
   editado_en: Timestamp | null;
