@@ -15,6 +15,7 @@
     "db:test:procesos": "tsx --env-file-if-exists=.env scripts/pruebas-procesos.ts",
     "procesos:verificar": "tsx scripts/verificar-procesos-doc.ts",
     "db:reset": "tsx --env-file-if-exists=.env scripts/reiniciar.ts",
+    "db:rol-app": "tsx scripts/habilitar-rol-app.ts",
     "db:tipos": "kysely-codegen --dialect postgres --exclude-pattern pgmigrations --out-file src/db/tipos.ts"
   },
   "dependencies": {

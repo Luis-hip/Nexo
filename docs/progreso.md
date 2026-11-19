@@ -13,10 +13,10 @@
 | 2 · Equipos, tablero y estados | Terminada | `fase-2` | `main` y `produccion` |
 | 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
 | 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
-| 3.5 · Despliegue | Sin empezar | — | — |
+| 3.5 · Despliegue | En curso (front y API en línea; faltan prueba de humo, copias y raíz) | — | — |
 | 4 · Chat y WhatsApp | **Siguiente** | — | — |
 
-**`produccion` sigue en la Fase 2.** El despliegue automático sale solo de esa rama y todavía no está configurado (Fase 3.5), así que lo de las Fases 2.5 y 3 **no está en producción**. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
+**`produccion` ya tiene las Fases 2.5 y 3** (PR #16, 2026-11-18) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
 Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas.
 
@@ -40,7 +40,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 - [x] **Proteger `main`, `dev` y `produccion`** en GitHub (DEC-001). Comprobado el 2026-11-18: las tres ramas figuran como protegidas (`protected: true`); el detalle de las reglas (PR obligatorio y el check **Verificar (BD, tipos, lint, pruebas, build)**) no se pudo leer sin sesión de administrador.
 - [ ] Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
 - [ ] Tablero de proyecto en GitHub (Por hacer / En curso / En revisión / Hecho) e *issues* por fase y módulo grande.
-- [ ] **0.7 WhatsApp** (Carlos e Isac, con Jova): cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**.
+- [ ] **0.7 WhatsApp** (Carlos e Isac, con Jova): cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**. **Avance (2026-11-18):** cuenta, app «Nexo conexión de equipos», WABA de prueba y número de pruebas **hechos**; `docs/whatsapp-verificacion.md` llenado con datos oficiales (preguntas 2 y 6 y la tarifa en MXN, «no se pudo verificar»). **Pendiente:** verificación de la empresa (faltan documentos reales; el sitio `nexo.lol` ya existe pero el dominio raíz sigue en el parking de Porkbun), solicitud de OBA (exige verificación, 30 días y un número real) y decidir D-01. Capturas de evidencia sin adjuntar.
 - [ ] Probar `docker compose up -d` + `pnpm db:reset` en una máquina con Docker (la de Luis aún no lo tiene). Mientras tanto la BD se cubre con `pnpm db:local` (PGlite) y con la CI en PostgreSQL 16.
 
 ## Fase 1 · Base, roles y espacio personal
@@ -178,7 +178,7 @@ Las Fases 0 a 3 están completas y en `main`; la Fase 4 se empieza desde `Dev_Lu
 
 1. **Fase 4 · Chat y WhatsApp** (`03`, Fase 4): Socket.IO con la cookie de sesión, salas por equipo y conversación, WhatsApp simulado de punta a punta y envío real solo si la cuenta de Meta está lista. Trae `pg-boss` (sustituye al temporizador de plazos de `trabajos/plazos.ts` y escribe la foto nocturna del burndown), el despachador de eventos (notificaciones de asignaciones, menciones y vencimientos) y PF-05.
 2. **Antes de la 4.3 (envío real):** la tarea **0.7 WhatsApp** (cuenta de Meta, WABA, número de pruebas, verificación de la empresa y `docs/whatsapp-verificacion.md`; Carlos e Isac, con Jova) y la decisión D-01. Sin eso, la 4.2 sigue en modo simulado.
-3. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`): Vercel + Render + dominio propio; hay que promover `main` → `produccion` por PR. No se ha hecho: producción sigue en la Fase 2.
+3. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`, `operacion.md`, DEC-035 y DEC-036): **hecho el 2026-11-18** el front en Vercel (`app.nexo.lol`), la API y la BD en Render en plan gratuito (`api.nexo.lol`), el rol `nexo_app` y 13 migraciones aplicadas. **Pendiente:** prueba de humo (sin `DEV_LOGIN` en producción no hay cómo entrar hasta la Fase 5), copias y restauración (no existen en el plan gratuito), redirigir `nexo.lol` a `app.`, limitar el acceso externo a la BD y pasar a plan de pago antes del 2026-12-18 o exportar los datos.
 
 **BD local sin Docker:** `pnpm db:local` en una terminal aparte que quede abierta (PGlite en el puerto 5432, datos en `.pglite/`, ignorada por git; sobreviven al cerrarla); después `pnpm db:reset` la primera vez, `pnpm db:test`, `pnpm db:test:procesos` y `DATABASE_URL=postgres://nexo:nexo@localhost:5432/nexo pnpm test`. Si la terminal se cierra, la API da `ECONNREFUSED` en el 5432 y el acceso de desarrollo no carga usuarios.
 
