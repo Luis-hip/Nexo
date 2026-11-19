@@ -2,9 +2,27 @@
 
 > Se actualiza al terminar cada fase (docs/03, sección 1.7): qué se hizo, qué quedó pendiente.
 
+## Estado general
+
+*Actualizado el 2026-11-18, al cerrar la Fase 3 y llevarla a `main`.*
+
+| Fase | Estado | Etiqueta | Dónde está |
+|---|---|---|---|
+| 0 · Arranque | Construida; quedan 4 pendientes que son de personas (ver Fase 0) | — | `main` |
+| 1 · Base, roles y espacio personal | Terminada | `fase-1` | `main` |
+| 2 · Equipos, tablero y estados | Terminada | `fase-2` | `main` y `produccion` |
+| 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
+| 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
+| 3.5 · Despliegue | Sin empezar | — | — |
+| 4 · Chat y WhatsApp | **Siguiente** | — | — |
+
+**`produccion` sigue en la Fase 2.** El despliegue automático sale solo de esa rama y todavía no está configurado (Fase 3.5), así que lo de las Fases 2.5 y 3 **no está en producción**. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
+
+Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas.
+
 ## Fase 0 · Arranque del repositorio y de la BD
 
-**Estado:** en curso.
+**Estado:** construida; la CI está en verde en `main`. Los cuatro pendientes de abajo son de personas (decisiones o cuentas), no de código.
 
 ### Hecho
 
@@ -19,11 +37,11 @@
 
 ### Pendiente
 
-- [ ] **Proteger `main`, `dev` y `produccion`** en GitHub: exigir PR y el check **Verificar (BD, tipos, lint, pruebas, build)** en verde; prohibir *push* directo (DEC-001).
-- [ ] Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009).
+- [x] **Proteger `main`, `dev` y `produccion`** en GitHub (DEC-001). Comprobado el 2026-11-18: las tres ramas figuran como protegidas (`protected: true`); el detalle de las reglas (PR obligatorio y el check **Verificar (BD, tipos, lint, pruebas, build)**) no se pudo leer sin sesión de administrador.
+- [ ] Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
 - [ ] Tablero de proyecto en GitHub (Por hacer / En curso / En revisión / Hecho) e *issues* por fase y módulo grande.
 - [ ] **0.7 WhatsApp** (Carlos e Isac, con Jova): cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**.
-- [ ] Probar `docker compose up -d` + `pnpm db:reset` en una máquina con Docker (la de Luis aún no lo tiene).
+- [ ] Probar `docker compose up -d` + `pnpm db:reset` en una máquina con Docker (la de Luis aún no lo tiene). Mientras tanto la BD se cubre con `pnpm db:local` (PGlite) y con la CI en PostgreSQL 16.
 
 ## Fase 1 · Base, roles y espacio personal
 
@@ -46,15 +64,15 @@
 ### Pendiente o movido a otra fase
 
 - [ ] Revisión **visual** por una persona (claro/oscuro y móvil): la verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
-- [ ] PR `Dev_Luis` → `dev` con CI en verde y tag `fase-1`.
-- [ ] Rutas que muestran «Próximamente» hasta su fase: crear/unirse a equipo y todo `/app/e/:equipo/*` (Fase 2); reportes personales (FALT-01), notificaciones y `/ajustes/*` (Fase 3); registro, recuperar, verificar, 2FA e invitaciones (Fase 5).
-- [ ] En el calendario personal solo hay entregas de tareas; reuniones y eventos llegan con el calendario del equipo (Fase 3). El Hill Chart aún no se arrastra (Fase 3, tarea 3.1).
-- [ ] El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil: la subida de archivos llega con EQ-19 (Fase 3).
-- [ ] El aviso de cookies guarda la elección en el navegador; no hay analítica instalada.
+- [x] PR `Dev_Luis` → `dev` con CI en verde y tag `fase-1`. Hecho: el tag existe y la Fase 1 llegó a `dev` y `main` junto con la Fase 2.
+- [x] Rutas que mostraban «Próximamente»: crear o unirse a un equipo y `/app/e/:equipo/*` (Fase 2), reportes personales, notificaciones y `/ajustes/*` (Fase 3) y las invitaciones (Fase 2) ya funcionan. **Siguen en «Próximamente»:** registro, recuperar contraseña, verificar correo y 2FA (Fase 5) y WhatsApp personal (Fase 4).
+- [ ] En el calendario personal solo hay entregas de tareas; las reuniones del equipo ya están en el calendario del equipo (Fase 3), pero **no** en el personal (PER-04): queda para una fase posterior. *(El Hill Chart ya se arrastra: Fase 3.1.)*
+- [ ] El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil. La API de archivos (EQ-19, Fase 3) ya existe; falta enlazarla en esas dos pantallas.
+- Nota: el aviso de cookies guarda la elección en el navegador; no hay analítica instalada.
 
 ## Fase 2 · Equipos, tablero y estados
 
-**Estado:** construida y fusionada (PR #7 a `dev`, #8 a `main`, #9 a `produccion`). Existe el tag `fase-2`; la CI en verde no se pudo comprobar desde la herramienta (no hay `gh`).
+**Estado:** terminada. PR #7 a `dev`, #8 a `main` y #9 a `produccion`; tag `fase-2`; la CI quedó en verde en `dev`, `main` y `produccion` (comprobado el 2026-11-18).
 
 ### Hecho
 
@@ -69,22 +87,23 @@
 
 ### Pendiente o movido a otra fase
 
-- [ ] CI en verde, PR `Dev_Luis` → `dev` → `main` → `produccion` y tag `fase-2`.
+- [x] CI en verde, PR `Dev_Luis` → `dev` → `main` → `produccion` y tag `fase-2`.
 - [ ] Revisión **visual** por una persona (claro/oscuro y móvil): solo se tomó una captura del tablero (tema oscuro, escritorio estrecho). El arrastre con el **ratón** no se pudo reproducir con la herramienta de pruebas (suelta de golpe); el arrastre con teclado sí se verificó.
 - [ ] Prueba de «mover en dos navegadores a la vez» a nivel de interfaz: está probada en la API (200 y 409) y la web muestra el aviso, pero no se probó con dos navegadores reales.
-- [ ] Invitar por correo, solicitudes de ampliación del invitado, salir y expulsar (Fase 3). Chat y WhatsApp (Fase 4). Ver DEC-023.
-- [ ] Sin sprint activo no hay planeación: el tablero muestra las tareas del equipo en sus estados; sprints llegan en la Fase 3.
+- [x] Salir y expulsar: hechos en la Fase 3, tarea 3.5 «Liderazgo» (DEC-032).
+- [ ] Invitar por correo (necesita el envío de correos, Fase 5) y **solicitudes del invitado** para ampliar su acceso o ser integrante (la tabla `solicitudes_invitado` existe, pero no hay proceso ni pantalla; no estaba en 3.1–3.7). Chat y WhatsApp: Fase 4. Ver DEC-023.
+- [x] Sin sprint activo no había planeación: los sprints llegaron en la Fase 3.3 (DEC-031).
 
 ## Fase 2.5 · Cambios de alcance
 
-**Estado:** terminada el 2026-11-17 (rama `feat/fase-2-5` fusionada en `Dev_Luis`, tag `fase-2-5`). Fuente: `docs/07_Cambios_de_Alcance_Fase2.md`.
+**Estado:** terminada el 2026-11-17 (rama `feat/fase-2-5` fusionada en `Dev_Luis`, tag `fase-2-5`), y llevada a `dev` y `main` junto con la Fase 3 (PR #12 y el siguiente de `dev` a `main`). Fuente: `docs/07_Cambios_de_Alcance_Fase2.md`.
 
 ### Hecho
 
 - **Paso 1 · Documentos y decisiones.** Copiados `07` y `10`; creados `08_Procesos_BD.md`, `09_Seguridad_y_Secretos.md` y `seguridad-incidentes.md`; actualizados `01`–`06`, el README y `decisiones.md` (DEC-024 a DEC-029; DEC-020 marcada como reemplazada en parte). D-02 eliminada (el nombre es Carlos) y D-03 resuelta (Vercel + Render + dominio propio). Mapa de fases con 2.5 y 3.5.
 
 - **Paso 2 · Secretos.** *Informe:* se revisó todo el historial de Git (todas las ramas) y el árbol con patrones de claves (AWS, GitHub, Slack, Meta, llaves privadas, URL con contraseña, asignaciones `secret/token/password`): **no hay secretos**; solo aparece la cadena de desarrollo `nexo:nexo@localhost` de `.env.example` y de la CI, que es pública y desechable. `.env` nunca estuvo en el historial. *Cambios:* `pino` oculta cookies, `set-cookie`, tokens, contraseñas, secretos, claves y cuerpos; `config.ts` exige en producción `SESSION_SECRET` (≥ 32), `ENCRYPTION_KEY` (64 hex), `APP_URL` y `API_URL` (https, sin valor local) y rechaza los valores de `.env.example`; la API comprueba `Origin` en `POST/PUT/PATCH/DELETE`; gitleaks (v8.24.2, historial completo) en la CI con `.gitleaks.toml`; `.env.example` documentado. Pruebas nuevas: 21 en `config.test.ts` y `seguridad.test.ts`. **Sin verificar:** gitleaks no se ejecutó en local (no está instalado; lo corre la CI).
-- **Pendiente tuyo (no se puede por CLI aquí):** activar *secret scanning* y *push protection* en GitHub (Settings → Code security) y decidir si el repositorio pasa a privado; hoy no hay `gh` en esta máquina.
+- **Pendiente tuyo (no se puede por CLI aquí):** activar *secret scanning* y *push protection* en GitHub (Settings → Code security) y decidir si el repositorio pasa a privado (hoy es público); no hay `gh` en esta máquina.
 
 - **Paso 3 · Votación de propuestas (DEC-024).** Migraciones `0002_enums_votacion.sql` (valores `votacion` y `cancelada`) y `0003_votacion.sql` (tabla `tarea_votos`, disparador `NX004`, índice fraccionario en PL/pgSQL y los procesos `proc_tarea_proponer`, `proc_tarea_votar`, `proc_tarea_retirar`, `proc_tarea_reformular`, `proc_tarea_votacion` y `proc_tarea_votaciones`, documentados en `docs/08`). API: `POST …/tareas` solo para el líder (con `subtareas[]`), `POST …/voto`, `…/retirar`, `…/reformular`; la vista `triaje` pasó a `votacion`; desapareció `POST …/triaje`. Permisos: salen `proponer_tarea` y `triaje`, entran `votar_propuesta` y `retirar_propuesta`. Web: pestaña **Votación** (`tareas/votacion`) con conteo, quién votó y mi voto; FALT-08 es ahora «Por votar» y «Ya votaste»; el formulario del líder gana subtareas y sirve para reformular. La API **no devuelve votos ajenos** (ni al líder). Semilla: las propuestas son de la líder y T-08 trae 3 votos.
 - **Pruebas del paso 3:** 15 pruebas SQL de procesos (`pnpm db:test:procesos`: líder e invitado no votan, voto doble, fuera de `propuesta`, mayoría con 3, 4 y 7 integrantes, empate, rechazo, sin integrantes, retirar, reformular, salida del equipo, visibilidad) además de las 11 de integridad; 170 en `shared`, 102 en la API (40 de tareas de equipo, con una que compara la mayoría y el índice fraccionario de TypeScript contra los de la BD) y 87 en la web. Las pruebas de triaje se reemplazaron a propósito por las de votación. **Verificado en el navegador** con la semilla: Carlos cambia su voto en T-08 y el conteo se actualiza; Valeria crea T-10 con una subtarea y queda en votación. **Local con PGlite** (PostgreSQL 17 embebido); la comprobación contra PostgreSQL 16 la hace la CI.
@@ -104,19 +123,19 @@
 
 ### Pendiente
 
-- [ ] **Abrir el PR `Dev_Luis` → `dev`** (lo tiene que crear una persona con sesión en GitHub: no hay `gh` en esta máquina y el navegador de la herramienta no tiene sesión). Enlace listo: <https://github.com/Luis-hip/Nexo/compare/dev...Dev_Luis?expand=1>.
-- [ ] Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2).
-- [ ] Revisar los valores por confirmar V-10 y V-11 y las desviaciones anotadas arriba.
+- [x] **Abrir el PR `Dev_Luis` → `dev`.** Hecho: PR #12 (incluye las Fases 2.5 y 3).
+- [ ] Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2). Hoy es público.
+- [ ] Revisar los valores por confirmar V-10 y V-11 y las desviaciones anotadas arriba (decisión de Luis).
 
 ### Cierre
 
 - **CI en verde** con PostgreSQL 16 real en el PR #10 (`feat/fase-2-5` → `Dev_Luis`), commit `4b93540`: gitleaks sobre todo el historial, migraciones `0001`–`0008`, 11 pruebas SQL de integridad y 52 de procesos, control de `docs/08`, tipos al día, `typecheck`, lint, formato, 361 pruebas (170 `shared`, 104 API, 87 web) y build.
 - **gitleaks en la CI:** en la primera corrida marcó dos falsos positivos (los valores de ejemplo de las pruebas de seguridad y la frase «secretos: `09_Seguridad_y_Secretos.md`» de `docs/01`); se permitieron con expresiones concretas en `.gitleaks.toml`, sin excluir archivos. Ahora cada hallazgo aparece como anotación del PR (archivo, línea y regla; el valor va redactado).
-- **Criterio de terminado de la `07` (sección 7):** documentos 07–10 ✔; informe de secretos, redacción, arranque seguro y gitleaks ✔; votación probada (3 → 2, 4 → 3, líder e invitado no votan, la API no devuelve votos ajenos) ✔; todo acceso a datos por `proc_*` documentados, regla de lint y `nexo_app` sin tablas ✔; pruebas de la Fase 2 en verde sin cambiar expectativas (salvo las de triaje, a propósito) ✔; `progreso.md` y `decisiones.md` ✔; tag `fase-2-5` ✔. Solo falta abrir el PR a `dev` (ver arriba).
+- **Criterio de terminado de la `07` (sección 7):** documentos 07–10 ✔; informe de secretos, redacción, arranque seguro y gitleaks ✔; votación probada (3 → 2, 4 → 3, líder e invitado no votan, la API no devuelve votos ajenos) ✔; todo acceso a datos por `proc_*` documentados, regla de lint y `nexo_app` sin tablas ✔; pruebas de la Fase 2 en verde sin cambiar expectativas (salvo las de triaje, a propósito) ✔; `progreso.md` y `decisiones.md` ✔; tag `fase-2-5` ✔. El PR a `dev` se abrió junto con la Fase 3 (PR #12).
 
 ## Fase 3 · Hill Chart, sprints y vistas secundarias
 
-**Estado:** terminada el 2026-11-18 (rama `feat/fase-3` fusionada en `Dev_Luis` con el PR #11, tag `fase-3`).
+**Estado:** terminada el 2026-11-18 (rama `feat/fase-3` fusionada en `Dev_Luis` con el PR #11, tag `fase-3`) y llevada a `dev` (PR #12) y a `main`. La CI quedó en verde en cada paso.
 
 ### Hecho
 
@@ -155,15 +174,20 @@
 
 ### Siguiente sesión: por dónde seguir
 
-La Fase 3 está completa en `feat/fase-3`. Reglas que siguen en marcha (DEC-025): **todo acceso a datos es un proceso `proc_*`** en una migración nueva (la siguiente es `0014_…`), que termina con `SELECT fn_conceder_procesos();`, se documenta en `docs/08` (la CI falla si no: `pnpm procesos:verificar`), tiene casos en `apps/api/db/tests/pruebas_procesos.sql` (hoy P1–P103; al agregar, subir el número en `apps/api/scripts/pruebas-procesos.ts` y en el texto del paso de `.github/workflows/ci.yml`) y se llama desde `apps/api/src/repositorios/` con `llamarProceso()` y un esquema Zod de `packages/shared/src/respuestas.ts`. Si una migración cambia tablas, correr `pnpm db:tipos` y subir `apps/api/src/db/tipos.ts`.
+Las Fases 0 a 3 están completas y en `main`; la Fase 4 se empieza desde `Dev_Luis` (que debe estar al día con `dev`: `git pull origin dev`) en una rama nueva, por ejemplo `feat/fase-4`. Reglas que siguen en marcha (DEC-025): **todo acceso a datos es un proceso `proc_*`** en una migración nueva (la siguiente es `0014_…`), que termina con `SELECT fn_conceder_procesos();`, se documenta en `docs/08` (la CI falla si no: `pnpm procesos:verificar`), tiene casos en `apps/api/db/tests/pruebas_procesos.sql` (hoy P1–P103, la siguiente es **P104**; al agregar, subir el número en `apps/api/scripts/pruebas-procesos.ts` y en el texto del paso de `.github/workflows/ci.yml`) y se llama desde `apps/api/src/repositorios/` con `llamarProceso()` y un esquema Zod de `packages/shared/src/respuestas.ts`. Si una migración cambia tablas, correr `pnpm db:tipos` y subir `apps/api/src/db/tipos.ts`.
 
-1. Abrir el PR `Dev_Luis` → `dev` (ya incluye las Fases 2.5 y 3).
-2. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`): Vercel + Render + dominio propio. El temporizador de plazos ya corre en el proceso de la API.
-3. **Fase 4 · Chat y WhatsApp**, que trae `pg-boss`, el despachador de eventos (notificaciones de asignaciones y menciones) y PF-05.
+1. **Fase 4 · Chat y WhatsApp** (`03`, Fase 4): Socket.IO con la cookie de sesión, salas por equipo y conversación, WhatsApp simulado de punta a punta y envío real solo si la cuenta de Meta está lista. Trae `pg-boss` (sustituye al temporizador de plazos de `trabajos/plazos.ts` y escribe la foto nocturna del burndown), el despachador de eventos (notificaciones de asignaciones, menciones y vencimientos) y PF-05.
+2. **Antes de la 4.3 (envío real):** la tarea **0.7 WhatsApp** (cuenta de Meta, WABA, número de pruebas, verificación de la empresa y `docs/whatsapp-verificacion.md`; Carlos e Isac, con Jova) y la decisión D-01. Sin eso, la 4.2 sigue en modo simulado.
+3. **Fase 3.5 · Despliegue** (`10_Plan_de_Despliegue.md`): Vercel + Render + dominio propio; hay que promover `main` → `produccion` por PR. No se ha hecho: producción sigue en la Fase 2.
 
 **BD local sin Docker:** `pnpm db:local` en una terminal aparte que quede abierta (PGlite en el puerto 5432, datos en `.pglite/`, ignorada por git; sobreviven al cerrarla); después `pnpm db:reset` la primera vez, `pnpm db:test`, `pnpm db:test:procesos` y `DATABASE_URL=postgres://nexo:nexo@localhost:5432/nexo pnpm test`. Si la terminal se cierra, la API da `ECONNREFUSED` en el 5432 y el acceso de desarrollo no carga usuarios.
 
 ### Pendiente
 
+Decisiones y revisiones que son de personas (no bloquean la Fase 4):
+
 - [ ] Revisar DEC-031 a DEC-034, en especial: qué entra al planear (más que «aceptadas»), capacidad sin estimaciones, todos los integrantes como candidatos y desempate por antigüedad (DEC-032), archivos guardados en PostgreSQL (DEC-033).
-- [ ] Revisar DEC-030 (forma por miembro) y los pendientes de la Fase 2.5 (PR `Dev_Luis` → `dev`, secret scanning, V-10 y V-11).
+- [ ] Revisar DEC-030 (forma por miembro) y V-10 y V-11 de la Fase 2.5.
+- [x] PR `Dev_Luis` → `dev` → `main` de las Fases 2.5 y 3 (pendiente de la Fase 2.5): hecho el 2026-11-18.
+- [ ] Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
+- [ ] Revisión **visual** por una persona del tablero, sprints y ajustes en claro/oscuro y móvil (Fases 1 a 3). La verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
