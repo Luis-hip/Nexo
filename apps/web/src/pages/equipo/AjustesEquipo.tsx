@@ -1,4 +1,8 @@
-import type { ConfiguracionEquipo, ConfigurarEquipo } from '@nexo/shared';
+import {
+  esquemaConfigurarEquipo,
+  type ConfiguracionEquipo,
+  type ConfigurarEquipo,
+} from '@nexo/shared';
 import { Archive, Lock, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -18,6 +22,7 @@ import {
 import { mensajeDeError } from '@/lib/api';
 import { useAccionesLiderazgo, useConfiguracion } from '@/lib/consultasLiderazgo';
 import { toast } from '@/lib/toasts';
+import { primerError } from '@/lib/validacion';
 import { useEquipoActual } from './contexto';
 
 const avisar = (e: unknown) => toast(mensajeDeError(e), 'danger');
@@ -80,6 +85,9 @@ function Formulario({ config }: { config: ConfiguracionEquipo }) {
 
   const guardar = () => {
     setError(undefined);
+    // Mismo esquema que la API (5.2).
+    const invalido = primerError(esquemaConfigurarEquipo, cambios);
+    if (invalido) return setError(invalido);
     configurar.mutate(cambios, {
       onSuccess: () => toast('Ajustes guardados.'),
       onError: (e) => setError(mensajeDeError(e)),

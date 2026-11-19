@@ -2,7 +2,8 @@
 -- Las tablas ya existen en 0001 (`usuarios.hash_contrasena`, `intentos_fallidos`, `bloqueado_hasta`,
 -- `correo_verificado_en`, `sesiones`, `tokens_verificacion`). La contraseña nunca llega a la BD:
 -- la API calcula el hash Argon2id y lo verifica; los procesos guardan hashes y deciden el bloqueo.
--- Numeración: las migraciones 0014–0019 son del chat y 0020–0029 de WhatsApp (ramas en paralelo).
+-- Numeración: 0014–0019 son del chat. Como el chat y esta fase se despliegan antes que WhatsApp,
+-- las migraciones de WhatsApp deben numerarse desde 0031 (DEC-AUTH-2).
 -- Documentación: docs/08_Procesos_BD.md, sección «Fase 5 · Autenticación».
 
 -- Up Migration

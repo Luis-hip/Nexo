@@ -16,6 +16,10 @@ coverage/
 # Base de datos local sin Docker (`pnpm db:local`)
 .pglite/
 
+# Pruebas extremo a extremo (Playwright)
+test-results/
+playwright-report/
+
 # Registros
 logs/
 *.log

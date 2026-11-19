@@ -11,7 +11,7 @@ const rango = (desde: number, hasta: number) =>
 const ESPERADAS = [
   ...rango(1, 103), // Fases 2.5 a 3
   ...rango(104, 129), // Fase 4 · Chat (reservado P104–P149)
-  ...rango(200, 208), // Fase 5 · Autenticación (desde P200; P150–P199 son de WhatsApp)
+  ...rango(200, 208), // Fase 5 · Autenticación (desde P200; P150–P199 siguen reservadas a WhatsApp)
 ];
 
 await ejecutarPruebasSql('tests/pruebas_procesos.sql', ESPERADAS);

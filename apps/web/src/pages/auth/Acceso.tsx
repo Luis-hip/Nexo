@@ -18,28 +18,8 @@ import {
   useVerificarCorreo,
 } from '@/lib/consultasAuth';
 import { useDevLogin, useUsuariosDev } from '@/lib/consultas';
+import { erroresDe } from '@/lib/validacion';
 import { destinoSeguro, Tarjeta } from './comunes';
-
-/** Lo que hace falta de un esquema Zod de `@nexo/shared` (la web no depende de Zod). */
-interface Esquema<T> {
-  safeParse(
-    d: unknown,
-  ):
-    | { success: true; data: T }
-    | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } };
-}
-
-/** Errores por campo del mismo esquema que valida la API. */
-function erroresDe<T>(esquema: Esquema<T>, datos: unknown) {
-  const r = esquema.safeParse(datos);
-  if (r.success) return { datos: r.data, errores: {} as Record<string, string> };
-  const errores: Record<string, string> = {};
-  for (const i of r.error.issues) {
-    const campo = String(i.path[0] ?? '');
-    errores[campo] ??= i.message;
-  }
-  return { datos: null, errores };
-}
 
 const enlace = 'font-medium text-brand hover:underline';
 

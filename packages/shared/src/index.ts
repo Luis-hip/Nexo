@@ -1,3 +1,6 @@
+// Primero: los mensajes de validación de Zod en español (Fase 5.2).
+import './idioma';
+
 export * from './constantes';
 export * from './esquemas';
 export * from './permisos';

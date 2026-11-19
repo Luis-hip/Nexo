@@ -392,3 +392,22 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Correos.** `src/correo.ts` con tres proveedores: `consola` (local y pruebas; escribe el enlace en el registro de la API), `resend` (API HTTP de Resend, `RESEND_API_KEY`) y `ninguno`. En producción el servidor **no arranca** con `consola` (los enlaces llevan tokens) ni con `resend` sin clave; sin clave usa `ninguno`: se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo. El remitente es `CORREO_REMITENTE` (por defecto `no-responder@nexo.lol`; Resend exige verificar el dominio).
 - **Semilla:** todas las personas entran con «Nexo-2026» (hash en `semilla.sql`; la semilla nunca se carga en producción). El acceso de desarrollo sigue, ahora plegado bajo el formulario de AUTH-02 y solo si la API lo tiene activo.
 - **Fuera de esta tarea:** 2FA (AUTH-07, «solo si hay tiempo» en `03`), cambiar el correo, iniciar sesión con Google (`usuarios.google_sub` existe) y 5.2 a 5.5.
+
+## DEC-AUTH-2 · Desplegar el chat y la Fase 5 antes que WhatsApp
+
+**Fecha:** 2026-11-19 · **Fuente:** decisión de Luis («desplegar ya chat + login») · **Reemplaza:** el orden chat → WhatsApp → Fase 5 acordado antes ese mismo día.
+
+- **Qué cambia.** `produccion` recibe el chat (`0014`–`0016`) y la Fase 5 (`0030`) sin WhatsApp. Como `node-pg-migrate` aplica en orden y rechaza una migración con número menor que otra ya aplicada (`checkOrder`), **las migraciones de WhatsApp deben numerarse desde `0031`**. Sus pruebas de procesos siguen en `P150`–`P199` (no dependen del orden).
+- **Por qué.** Sin autenticación real no se podía entrar a la app desplegada (en producción no hay acceso de desarrollo); esto permite ver las vistas en línea ya.
+- **Costo.** Quien hace WhatsApp renumera sus archivos antes de juntar; el flujo extremo a extremo «chat y aviso de WhatsApp» y las capturas de WhatsApp se completan al juntar.
+
+## DEC-AUTH-3 · Fase 5.2 a 5.5: validación, permisos, rendimiento y accesibilidad
+
+**Fecha:** 2026-11-19 · **Fuente:** `03`, Fase 5.
+
+- **Mensajes de Zod en español** con `z.config(z.locales.es())` en `packages/shared/src/idioma.ts`, que se importa primero en el índice: vale para la API y la web. Los mensajes propios de cada campo se conservan.
+- **Prueba de la matriz:** se considera *permitida* una petición que no responde 401, 403 ni 404; *prohibida*, la que da 403 o 404 (la API usa 404 para no revelar lo ajeno). Para no cambiar datos las sondas mandan cuerpos inválidos (la guardia va antes de validar) o versiones viejas. Toda acción debe tener sonda o un motivo escrito: la prueba falla si se agrega una acción sin cubrir.
+- **`usar_plantilla` es ver las plantillas**; convertir una de proyecto en tareas lo guarda `crear_tarea` (solo el líder propone, DEC-024 y DEC-033). La matriz no cambia.
+- **Rendimiento:** «tabla grande» = 5000 filas o más; la CI corre `db:volumen` y `db:explain` al final, sobre PostgreSQL 16, y falla con un `Seq Scan` en una tabla grande.
+- **Extremo a extremo con Playwright** en `apps/web/e2e/` (Chromium). La configuración levanta la API en modo `test` y la web; en local reutiliza las que estén abiertas. Las cuentas son nuevas en cada corrida (`@e2e.test`); el recorrido de primer uso se marca como visto por la API para que no tape las pantallas.
+- **Accesibilidad:** axe-core falla con problemas *serious* o *critical*. Tokens `--signal-ok-text` y `--signal-warn-text` del tema claro pasan a `#166534` y `#92400e` (las insignias teñidas no llegaban a 4.5:1). Las iniciales del avatar eligen texto oscuro o blanco según el **contraste medido** (WCAG) y no por la luminosidad OKLCH; las iniciales son decorativas (`aria-hidden`) porque el nombre ya va en texto oculto.

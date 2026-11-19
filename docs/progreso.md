@@ -194,7 +194,7 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 
 ## Fase 4 · Chat
 
-**Estado:** la parte del chat (tarea 4.1) está construida en la rama `feat/fase-4-chat` (sale de `Dev_Luis`). La parte de WhatsApp (4.2, 4.3, PF-05, FALT-03/04 y consentimiento) la hace otro integrante en paralelo en su rama. El tag `fase-4` se crea al juntar ambas partes. Reservas para no chocar: migraciones `0014`–`0019` y pruebas de procesos `P104`–`P149` para el chat; WhatsApp usa desde `0020` y `P150`.
+**Estado:** la parte del chat (tarea 4.1) está construida en la rama `feat/fase-4-chat` (sale de `Dev_Luis`). La parte de WhatsApp (4.2, 4.3, PF-05, FALT-03/04 y consentimiento) la hace otro integrante en paralelo en su rama. El tag `fase-4` se crea al juntar ambas partes. Reservas para no chocar: migraciones `0014`–`0019` y pruebas de procesos `P104`–`P149` para el chat; WhatsApp usa pruebas desde `P150` y, como el chat y la Fase 5 se despliegan antes (DEC-AUTH-2), migraciones desde `0031`.
 
 ### Hecho
 
@@ -222,29 +222,33 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 
 ## Fase 5 · Autenticación, QA y permisos
 
-**Estado:** la tarea **5.1 (autenticación real)** está construida en la rama `feat/fase-5-auth`, que sale de `feat/fase-4-chat`. 5.2 a 5.5 siguen pendientes. **No se despliega todavía:** se acordó llevar a producción en orden chat → WhatsApp → Fase 5, porque las migraciones se aplican en orden (`checkOrder`) y la Fase 5 usa `0030` mientras WhatsApp usa `0020`–`0029`. Pruebas de procesos desde `P200`.
+**Estado:** construida en la rama `feat/fase-5-auth` (sale de `feat/fase-4-chat`, así que trae también el chat). **Se despliega junto con el chat antes que WhatsApp** (decisión del 2026-11-19, DEC-AUTH-2): la parte de WhatsApp, que se hace en paralelo en otra rama, debe numerar sus migraciones **desde `0031`** (no `0020`) porque las migraciones se aplican en orden (`checkOrder`) y producción ya tendrá la `0030`. Sus pruebas de procesos siguen en `P150`–`P199`. El tag `fase-5` se crea con la CI en verde en `produccion`; el `fase-4`, al juntar WhatsApp.
 
-### Hecho (5.1)
+### Hecho
 
-- **Base de datos.** Migración `0030_procesos_autenticacion.sql` con **10 procesos `proc_auth_*`** (en `docs/08`, sección «Fase 5 · Autenticación»). Sin cambios de tablas: `usuarios`, `sesiones` y `tokens_verificacion` ya tenían lo necesario, así que `tipos.ts` no cambia.
-- **API.** `rutas/autenticacion.ts`: `POST /auth/registro`, `/auth/entrar`, `/auth/recuperar`, `/auth/restablecer`, `/auth/verificar`, `/auth/verificacion`, `/auth/contrasena` y `GET /auth/cuenta`. Argon2id, bloqueo de 15 minutos tras 5 fallos, límite por IP y respuestas que no revelan si un correo existe (salvo el registro: DEC-AUTH-1). Correos en `src/correo.ts` (consola en local, Resend en producción). `POST /salir` ya existía.
-- **Web.** AUTH-01 `/registro` (lleva a la bienvenida), AUTH-02 `/entrar` (correo y contraseña; el acceso de desarrollo queda plegado debajo y solo si la API lo tiene), AUTH-03 `/recuperar`, AUTH-04 `/recuperar/enviado`, AUTH-05 `/restablecer`, AUTH-06 `/verificar` y Ajustes → Cuenta con el estado del correo, «Enviar enlace» y cambio de contraseña. Los formularios validan con los mismos esquemas Zod que la API (`packages/shared/src/autenticacion.ts`). Cerrar sesión cierra también la conexión de tiempo real del chat. 2FA sigue en «Próximamente».
-- **Pruebas.** 9 pruebas SQL (**P200–P208**; `db:test:procesos` da 138 OK) y 11 de la API (`autenticacion.test.ts`: registro, duplicado, verificar una sola vez, mismo mensaje con correo inexistente o contraseña mala, bloqueo, recuperar sin revelar, restablecer cierra sesiones, cambiar contraseña, salir invalida la sesión, y la configuración del correo en producción). Totales locales: 194 `shared`, 171 API, 97 web.
-- **Verificado en el navegador (local):** registro con validación en el cliente, llegada a la bienvenida, enlace de verificación tomado del registro de la API → «Correo verificado» y Ajustes → Cuenta en «Verificado», cerrar sesión, contraseña equivocada con el mensaje genérico y entrada con la correcta.
-- **Despliegue preparado:** `render.yaml` agrega `RESEND_API_KEY` (`sync: false`) y `CORREO_REMITENTE`; `.env.example` documenta `CORREO_PROVEEDOR`. `DEV_LOGIN_ENABLED=false` en producción ya lo exigía el servidor desde la Fase 0.
+- **5.1 Autenticación real.** Migración `0030` con **10 procesos `proc_auth_*`** (en `docs/08`, «Fase 5 · Autenticación»). Registro, entrar, salir, recuperar y restablecer contraseña, verificar correo, sesión expirada y cambio de contraseña en Ajustes → Cuenta. Argon2id, bloqueo de 15 min tras 5 fallos, límite por IP, respuestas que no revelan si un correo existe al entrar o recuperar, correos por consola (local) o Resend (producción). DEC-AUTH-1.
+- **5.2 Validaciones.** Todos los cuerpos de la API se validan con Zod (`validar()` en cada ruta). Ahora **los mensajes que genera Zod salen en español** en la API y la web (`packages/shared/src/idioma.ts`; antes un campo faltante respondía «Invalid input…»). Los formularios de registro, entrar, recuperar, restablecer, tareas personales y de equipo, crear equipo, contacto, **reuniones, plantillas y configuración del equipo** validan en el cliente con el mismo esquema que la API (`apps/web/src/lib/validacion.ts`). Los campos de texto llevan `maxLength` igual al del esquema. Los demás (comentarios, notas de retro, chat) son de un solo campo y muestran el mensaje del servidor.
+- **5.3 QA de permisos.** `apps/api/src/rutas/matriz.test.ts` recorre **las 41 acciones de la matriz** contra la API real para líder, integrante, invitado y una persona ajena (más de 150 comprobaciones), en un equipo que crea y borra la propia prueba; la del perfil personal y la de **no filtración** (19 lecturas del equipo y del chat dan 404 a quien no pertenece). Las 3 de WhatsApp quedan anotadas como «sin ruta en esta rama». Encontró que «usar plantilla» crea tareas y por eso lo guarda `crear_tarea` (DEC-033): la sonda se separó en ver plantillas (`usar_plantilla`) y convertirlas en tareas (`crear_tarea`). Sesiones: cerrar sesión invalida el token y uno vencido da 401 (`autenticacion.test.ts`, P208).
+- **5.4 Rendimiento.** `pnpm db:volumen` (semilla de `02` 14.3: 50 equipos, 500 usuarios, 20 000 tareas, 200 000 mensajes y 10 000 avisos de WhatsApp) y `pnpm db:explain` (`EXPLAIN (ANALYZE, BUFFERS)` de las 7 consultas de `02` §13). **Ninguna hace barrido secuencial sobre tablas grandes**; evidencia en `docs/rendimiento.md` (generada en local con PGlite/PostgreSQL 18). La CI vuelve a correrlo con PostgreSQL 16 y falla si aparece un `Seq Scan` en una tabla grande.
+- **5.4 Extremo a extremo.** Playwright (`apps/web/e2e/flujos.e2e.ts`): (1) registrarse, crear equipo e invitar, y la otra persona se une con el código; (2) proponer una tarea, votarla, aceptar la asignación, habilitarla, empezarla y completarla; (3) chat en tiempo real entre dos navegadores. Pasa en local (dos corridas seguidas) y corre en la CI. El aviso de WhatsApp simulado del tercer flujo se suma al juntar la rama de WhatsApp.
+- **5.4 Accesibilidad y móvil.** `apps/web/e2e/revision.e2e.ts` recorre 14 pantallas con líder, integrante e invitada: **sin desplazamiento horizontal a 360 px**, **axe-core (WCAG 2.1 A y AA) sin problemas graves ni críticos** y el primer Tab llega a «Saltar al contenido». Lo que encontró y se corrigió: contraste de las iniciales del avatar (6 de 16 colores bajo 4.5:1; ahora el texto se elige por contraste medido, con prueba), de las insignias verde y ámbar en tema claro (tokens un tono más oscuros), de los días de otro mes en el calendario (sin `opacity-60`), tablas con desplazamiento horizontal sin foco de teclado, y el nombre accesible del menú de perfil (WCAG 2.5.3). `prefers-reduced-motion` ya estaba en `index.css`.
+- **5.5 Capturas.** `CAPTURAS=1 pnpm --filter @nexo/web e2e e2e/revision.e2e.ts` guarda en `docs/capturas/` 28 capturas de la app real (14 pantallas, escritorio y móvil): resumen del líder, integrante e invitada, tablero, votación, sprint activo, chat y canal de Invitados, calendario, reportes, miembros, inicio personal y cuenta. Las del artículo de WhatsApp (figuras 3–5 y 7–10) se toman al juntar esa rama.
+- **Pruebas.** SQL de procesos: **138 OK**. API: 175 (11 de autenticación, 4 de la matriz). Web: 100 unitarias + 7 extremo a extremo. `shared`: 197.
 
-### Criterio de la Fase 5
+### Criterio de terminado de la Fase 5
 
-- [x] Registrar, entrar, salir y recuperar contraseña con una cuenta real (local y en pruebas automáticas; **en producción falta** desplegar y configurar el correo).
-- [x] `DEV_LOGIN_ENABLED` en `false` en producción y el servidor lo exige (desde la Fase 0; `render.yaml`).
-- [ ] Prueba de la matriz completa (5.3).
-- [ ] `EXPLAIN` de las 7 consultas en `docs/rendimiento.md` (5.4).
-- [ ] 3 flujos extremo a extremo en la CI (5.4).
-- [ ] CI en verde y tag `fase-5`.
+- [x] Registrar, entrar, salir y recuperar contraseña con una cuenta real (local, pruebas automáticas y extremo a extremo; en producción, tras el despliegue).
+- [x] `DEV_LOGIN_ENABLED=false` en producción y el servidor lo exige.
+- [x] La prueba de la matriz completa pasa (`matriz.test.ts`).
+- [x] Las 7 consultas pasan la revisión de `EXPLAIN` (`docs/rendimiento.md`).
+- [x] Los 3 flujos extremo a extremo pasan (en la CI desde este PR).
+- [ ] CI en verde en `produccion` y tag `fase-5`.
 
 ### Pendiente
 
-- [ ] **Cuenta de Resend** (o el proveedor que elijan) y verificar el dominio `nexo.lol` para enviar desde `no-responder@nexo.lol`; poner `RESEND_API_KEY` en Render. Sin eso, en producción se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo. Es una cuenta nueva: la crea una persona del equipo.
-- [ ] Revisar DEC-AUTH-1, en especial que el **registro revele** si un correo ya tiene cuenta.
-- [ ] 2FA (AUTH-07), cambiar el correo e inicio con Google: fase posterior.
-- [ ] 5.2 validaciones de todos los formularios, 5.3 QA de permisos, 5.4 rendimiento, accesibilidad y extremo a extremo, 5.5 capturas.
+- [ ] **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
+- [ ] **Avisar a quien hace WhatsApp** que renumere sus migraciones desde `0031` (DEC-AUTH-2) y que agregue a `matriz.test.ts` las sondas de `configurar_whatsapp`, `enviar_cola_whatsapp` y `ver_historial_whatsapp`.
+- [ ] Revisar DEC-AUTH-1 (el registro sí dice si un correo ya tiene cuenta).
+- [ ] 2FA (AUTH-07), cambio de correo e inicio con Google: fase posterior.
+- [ ] Capturas de WhatsApp para el artículo, al juntar esa rama.
+- [ ] Revisión visual por una persona: la automática cubre contraste, desbordamiento y estructura, no el aspecto.

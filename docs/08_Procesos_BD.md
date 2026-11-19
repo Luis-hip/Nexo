@@ -1551,7 +1551,7 @@
 
 ## Fase 4 · Chat
 
-Procesos del chat en tiempo real (`03`, tarea 4.1; DEC-CHAT-1 en `decisiones.md`). Migraciones `0014` a `0016` (el rango `0014`–`0019` es del chat; WhatsApp usa desde `0020`). Pruebas `P104`–`P129` en `pruebas_procesos.sql` (rango reservado `P104`–`P149`) y `apps/api/src/rutas/chat.test.ts`.
+Procesos del chat en tiempo real (`03`, tarea 4.1; DEC-CHAT-1 en `decisiones.md`). Migraciones `0014` a `0016` (el rango `0014`–`0019` es del chat; WhatsApp numera desde `0031`, DEC-AUTH-2). Pruebas `P104`–`P129` en `pruebas_procesos.sql` (rango reservado `P104`–`P149`) y `apps/api/src/rutas/chat.test.ts`.
 
 **Regla única de acceso (`fn_chat_puede`).** `equipo`: líder e integrantes. `invitados`: todos los miembros activos, invitados incluidos. `tarea`: líder e integrantes; un invitado solo si la tarea está compartida con su membresía. `dm`: solo las dos personas, y las dos deben seguir siendo líder o integrante activos. Un invitado con el acceso caducado no ve nada (`NX005 acceso_caducado`). Quien no tiene acceso recibe `NX006` (404), como si la conversación no existiera. `fn_chat_exigir` aplica la regla y la usan todos los procesos que reciben una conversación o un mensaje.
 
@@ -1806,7 +1806,7 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_chat_puede`, `fn_chat_exigir
 
 ## Fase 5 · Autenticación
 
-Procesos de la autenticación real (`03`, tarea 5.1; DEC-AUTH-1 en `decisiones.md`). Migración `0030_procesos_autenticacion.sql` (`0014`–`0019` son del chat y `0020`–`0029` de WhatsApp). Pruebas `P200`–`P208` en `pruebas_procesos.sql` y `apps/api/src/rutas/autenticacion.test.ts`.
+Procesos de la autenticación real (`03`, tarea 5.1; DEC-AUTH-1 en `decisiones.md`). Migración `0030_procesos_autenticacion.sql` (`0014`–`0019` son del chat; como el chat y la Fase 5 se despliegan antes, WhatsApp numera desde `0031`, DEC-AUTH-2). Pruebas `P200`–`P208` en `pruebas_procesos.sql` y `apps/api/src/rutas/autenticacion.test.ts`.
 
 **La contraseña nunca llega a la BD.** La API calcula el hash Argon2id (`@node-rs/argon2`) y lo verifica; los procesos solo guardan hashes (y rechazan con `NX010` cualquier valor que no empiece con `$argon2id$`). Los tokens de los enlaces y de las sesiones se guardan como SHA-256. El bloqueo por intentos lo decide la BD.
 

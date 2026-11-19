@@ -300,7 +300,12 @@ function Shell({ yo }: { yo: Yo }) {
                 </Boton>
               )}
               <BotonIcono
-                etiqueta={noLeidas ? `Notificaciones (${noLeidas} sin leer)` : 'Notificaciones'}
+                // El número de la etiqueta es el mismo que se ve en la insignia (WCAG 2.5.3).
+                etiqueta={
+                  noLeidas
+                    ? `Notificaciones, ${noLeidas > 99 ? '99+' : noLeidas} sin leer`
+                    : 'Notificaciones'
+                }
                 contador={noLeidas}
                 onClick={() => nav('/app/notificaciones')}
                 data-tour="notificaciones"
@@ -628,11 +633,14 @@ function MenuPerfil({
         ref={ref}
         type="button"
         onClick={() => setAbierto(!abierto)}
-        aria-label={`Menú de perfil de ${yo.usuario.nombre}`}
+
         aria-expanded={abierto}
         className="grid size-11 shrink-0 place-items-center rounded-full"
         data-cmp="cmp/navegacion/menu-perfil"
       >
+        {/* Nombre accesible desde el contenido: «Menú de perfil de» + el nombre oculto del avatar
+            (sin aria-label, para cumplir «etiqueta en el nombre», WCAG 2.5.3). */}
+        <span className="sr-only">{'Menú de perfil de '}</span>
         <Avatar persona={persona} tamano={32} />
       </button>
       <Popover
