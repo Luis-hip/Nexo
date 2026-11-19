@@ -11,9 +11,9 @@
 
 ## 2. Render: base de datos y API
 
-1. **Blueprint.** En Render: *New → Blueprint*, elige el repositorio y la rama `produccion`. Render lee `render.yaml` y propone `nexo-api` (web) y `nexo-bd` (PostgreSQL 16). Revisa el plan y el precio **antes** de aprobar. ⚠ Confirma en la pantalla que la región es `virginia` y que el repositorio es el correcto.
+1. **Blueprint.** En Render: *New → Blueprint*, elige el repositorio y la rama `produccion`. Render lee `render.yaml` y propone `nexo-api` (web) y `nexo-bd` (PostgreSQL 16), ambos en **plan gratuito** ($0, decisión del 2026-11-18, DEC-036). Revisa que el total sea $0 **antes** de aprobar. ⚠ Confirma en la pantalla que la región es `virginia` y que el repositorio es el correcto.
 2. **Variables que te pide.** `ENCRYPTION_KEY` (la de 64 hex) y `DATABASE_URL`. Para `DATABASE_URL` pon **por ahora** un valor provisional (por ejemplo la cadena interna de la BD): se corrige en el paso 4. `SESSION_SECRET` la genera Render.
-3. **Primer despliegue.** Corre la construcción, luego `pnpm --filter @nexo/api db:migrate` (con `DATABASE_URL_MIGRACIONES`, el dueño de la BD) y por último arranca. Si falla antes de arrancar, mira los registros del despliegue. ⚠ Si `corepack` no existe en el entorno de Render, cambia el comando de construcción a `npm install -g pnpm@10.34.9 && pnpm install --frozen-lockfile --prod=false`. La semilla **no** se carga nunca.
+3. **Primer despliegue.** Corre la construcción y, al arrancar, ejecuta `pnpm --filter @nexo/api db:migrate` (con `DATABASE_URL_MIGRACIONES`, el dueño de la BD) y luego la API. En el plan gratuito no existe `preDeployCommand`, por eso las migraciones van en el arranque. Si falla, mira los registros del despliegue. ⚠ Si `corepack` no existe en el entorno de Render, cambia el comando de construcción a `npm install -g pnpm@10.34.9 && pnpm install --frozen-lockfile --prod=false`. La semilla **no** se carga nunca.
 4. **Rol de la API (`nexo_app`).** La migración 0008 crea `nexo_app` sin inicio de sesión (docs/09). Una persona lo habilita **una vez**, conectándose a la BD con la cadena **externa** que muestra el panel de la BD:
    `ALTER ROLE nexo_app LOGIN PASSWORD '<contraseña larga y única>';`
    Luego arma la cadena `postgres://nexo_app:<contraseña>@<host interno>/nexo` y guárdala como `DATABASE_URL` del servicio `nexo-api` en el panel. Guarda la contraseña en tu gestor de contraseñas, no en el repo. Reinicia el servicio.
@@ -58,7 +58,15 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 - **Restaurar la BD.** Render ofrece recuperación a un punto en el tiempo (3 días en el plan Hobby, según `10` ✔). Después de restaurar, repite la prueba de humo. No edites a mano la BD de producción sin anotarlo.
 - **Migraciones nuevas.** Van en `apps/api/db/migrations`, con *Down*, y se aplican solas en cada despliegue (`preDeployCommand`).
 
-## 7. Pendiente / decisiones
+## 7. Límites del plan gratuito de Render (DEC-036)
+
+- **La API se apaga tras 15 min sin tráfico.** La primera petición después tarda en despertarla (decenas de segundos). El front carga, pero el primer llamado a la API puede parecer lento o fallar por tiempo de espera.
+- **Los temporizadores de la API no corren dormida.** Los plazos de las elecciones de líder (`trabajos/plazos.ts`) solo avanzan con la API despierta; se resuelven al volver a consultar (`GET /liderazgo`).
+- **La BD gratuita expira a los 30 días y no tiene copias de seguridad.** Si se crea el 2026-11-18, vence alrededor del **2026-12-18**. Antes de esa fecha: pasar a un plan de pago (`0.1c-256mb`, ≈ $10.50/mes con el disco por defecto) o exportar los datos. Anotar la fecha real de creación aquí cuando exista.
+- **El chat en tiempo real (Fase 4)** necesita una API siempre encendida: ahí habrá que pasar la API a un plan de pago (`0.5c-512mb`, $7/mes).
+- Las copias y la restauración probada del paso 12 de `10` **no son posibles** en este plan; ese criterio queda sin cumplir hasta pasar a pago.
+
+## 8. Pendiente / decisiones
 
 - ⚠ **Cómo probar en producción sin `DEV_LOGIN`.** La autenticación real es de la Fase 5. Opciones: probar solo `/salud` y las pantallas públicas hasta la Fase 5, o crear un usuario de prueba por un proceso de BD autorizado. Decidir en equipo (DEC-035).
 - El chat en tiempo real y el webhook de WhatsApp no existen hasta la Fase 4; sus pruebas se repiten entonces.
