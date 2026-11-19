@@ -9,18 +9,21 @@ services:
     runtime: node
     # Región: la API y la BD deben estar en la misma y NO se puede cambiar después de crearlas.
     region: virginia
-    # 0.5c-512mb ≈ $7/mes. Los planes gratuitos no sirven (el servicio se apaga solo).
-    plan: 0.5c-512mb
+    # PLAN GRATUITO (decisión del equipo, 2026-11-18). Límites: el servicio se APAGA tras 15 min sin
+    # tráfico (la primera petición tarda) y los temporizadores de la API (plazos de elecciones) no
+    # corren mientras duerme. Para el chat en tiempo real (Fase 4) habrá que pasar a un plan de pago
+    # (0.5c-512mb ≈ $7/mes). Ver docs/operacion.md.
+    plan: free
     repo: https://github.com/Luis-hip/Nexo.git
     branch: produccion
     autoDeployTrigger: checksPass
     # `--prod=false`: las migraciones (node-pg-migrate) viven en devDependencies.
     # ⚠ Confirmar en el primer despliegue que `corepack` está disponible en el entorno de Render.
     buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false
-    # Antes de arrancar: aplica las migraciones con DATABASE_URL_MIGRACIONES. La semilla NO se carga.
-    preDeployCommand: pnpm --filter @nexo/api db:migrate
+    # `preDeployCommand` es solo de planes de pago: en el plan gratuito las migraciones corren al
+    # arrancar, con DATABASE_URL_MIGRACIONES. La semilla NO se carga nunca.
     # DEC-006: la API sigue corriendo con tsx (está en dependencies).
-    startCommand: pnpm --filter @nexo/api start
+    startCommand: pnpm --filter @nexo/api db:migrate && pnpm --filter @nexo/api start
     healthCheckPath: /salud
     domains:
       - api.nexo.lol
@@ -51,8 +54,10 @@ services:
 databases:
   - name: nexo-bd
     region: virginia
-    # 0.1c-256mb ≈ $6/mes (256 MB, 100 conexiones). Los planes gratuitos expiran a los 30 días.
-    plan: 0.1c-256mb
+    # PLAN GRATUITO. ⚠ La BD gratuita EXPIRA a los 30 días de crearse y NO tiene copias de seguridad
+    # (docs/10, sección 3): antes de esa fecha hay que pasar a un plan de pago o exportar los datos.
+    # Alternativa de pago: 0.1c-256mb (~$10.50/mes con el disco por defecto).
+    plan: free
     postgresMajorVersion: '16'
     databaseName: nexo
     # ⚠ Acceso externo: no se fija `ipAllowList`. Para poner la contraseña de `nexo_app` hace falta

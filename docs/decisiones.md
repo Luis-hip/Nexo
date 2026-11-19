@@ -341,3 +341,12 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **`trustProxy` en producción.** Detrás del proxy de Render, el límite de peticiones (contacto) vería a todo el mundo como una sola IP; con `trustProxy` usa `X-Forwarded-For`.
 - **`.node-version` = 22** (Render lo lee; coincide con `engines` y la CI).
 - **Dominio.** `nexo.lol` en Porkbun; subdominios `app.` (Vercel) y `api.` (Render). El dominio raíz debería redirigir a `app.` para que Meta tenga un sitio público que revisar (tarea 0.7).
+
+## DEC-036 · Render en plan gratuito (API y base de datos)
+
+**Fecha:** 2026-11-18 · **Fuente:** decisión del equipo al ver el costo del Blueprint ($17.50/mes: API $7 y BD $10.50) · **Reemplaza en parte:** DEC-035 y la sección 3 de `10`.
+
+- **Qué cambia.** `render.yaml` usa `plan: free` para `nexo-api` y `nexo-bd`. Sin `preDeployCommand` (solo de pago): las migraciones corren en `startCommand` antes de la API.
+- **Límites aceptados.** La API duerme a los 15 min sin tráfico; los temporizadores no corren dormida; la BD **expira a los 30 días** y no tiene copias ni restauración (`10`, sección 3 ✔). Detalle y fechas en `docs/operacion.md`, sección 7.
+- **Cuándo se revisa.** Antes de ~2026-12-18 (vencimiento de la BD) y antes de la Fase 4 (el chat necesita la API encendida): pasar a `0.5c-512mb` y `0.1c-256mb` o exportar los datos.
+- **Criterio de la Fase 3.5 que queda sin cumplir:** «copias de seguridad y restauración probada».
