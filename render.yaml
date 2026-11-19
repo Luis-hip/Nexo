@@ -1,0 +1,59 @@
+# Nexo · Plantilla de infraestructura de Render (docs/10_Plan_de_Despliegue.md, DEC-027).
+# Sintaxis comprobada en https://render.com/docs/blueprint-spec el 2026-11-18.
+# SIN secretos: las variables con `sync: false` se piden en el panel al crear el Blueprint.
+# Solo se despliega desde la rama `produccion` y solo si la CI pasa.
+
+services:
+  - type: web
+    name: nexo-api
+    runtime: node
+    # Región: la API y la BD deben estar en la misma y NO se puede cambiar después de crearlas.
+    region: virginia
+    # 0.5c-512mb ≈ $7/mes. Los planes gratuitos no sirven (el servicio se apaga solo).
+    plan: 0.5c-512mb
+    repo: https://github.com/Luis-hip/Nexo.git
+    branch: produccion
+    autoDeployTrigger: checksPass
+    # `--prod=false`: las migraciones (node-pg-migrate) viven en devDependencies.
+    # ⚠ Confirmar en el primer despliegue que `corepack` está disponible en el entorno de Render.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false
+    # Antes de arrancar: aplica las migraciones con DATABASE_URL_MIGRACIONES. La semilla NO se carga.
+    preDeployCommand: pnpm --filter @nexo/api db:migrate
+    # DEC-006: la API sigue corriendo con tsx (está en dependencies).
+    startCommand: pnpm --filter @nexo/api start
+    healthCheckPath: /salud
+    domains:
+      - api.nexo.lol
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEV_LOGIN_ENABLED
+        value: 'false'
+      - key: APP_URL
+        value: https://app.nexo.lol
+      - key: API_URL
+        value: https://api.nexo.lol
+      # Cadena del dueño de la BD de Render: la usan SOLO las migraciones.
+      - key: DATABASE_URL_MIGRACIONES
+        fromDatabase:
+          name: nexo-bd
+          property: connectionString
+      # Cadena del rol `nexo_app` (la crea una persona tras migrar; ver docs/operacion.md).
+      - key: DATABASE_URL
+        sync: false
+      # Render genera un valor aleatorio de 256 bits (base64, 44 caracteres).
+      - key: SESSION_SECRET
+        generateValue: true
+      # 64 caracteres hexadecimales: `openssl rand -hex 32`. Distinta de local y de CI.
+      - key: ENCRYPTION_KEY
+        sync: false
+
+databases:
+  - name: nexo-bd
+    region: virginia
+    # 0.1c-256mb ≈ $6/mes (256 MB, 100 conexiones). Los planes gratuitos expiran a los 30 días.
+    plan: 0.1c-256mb
+    postgresMajorVersion: '16'
+    databaseName: nexo
+    # ⚠ Acceso externo: no se fija `ipAllowList`. Para poner la contraseña de `nexo_app` hace falta
+    # conectarse una vez desde fuera; después restringir el acceso (docs/operacion.md).
