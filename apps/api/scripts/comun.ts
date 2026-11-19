@@ -33,7 +33,9 @@ export async function leerSql(relativa: string): Promise<string> {
 /** Aplica las migraciones SQL pendientes de db/migrations (node-pg-migrate). */
 export async function migrar(): Promise<void> {
   await runner({
-    databaseUrl: urlBaseDatos(),
+    // En producción las migraciones usan el rol dueño de la BD (DATABASE_URL_MIGRACIONES) y la
+    // API usa `nexo_app` (DATABASE_URL). En local y en CI basta DATABASE_URL.
+    databaseUrl: process.env.DATABASE_URL_MIGRACIONES || urlBaseDatos(),
     dir: resolve(RUTA_DB, 'migrations'),
     migrationsTable: 'pgmigrations',
     direction: 'up',
