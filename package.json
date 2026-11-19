@@ -19,7 +19,10 @@
     "db:migrate": "pnpm --filter @nexo/api db:migrate",
     "db:seed": "pnpm --filter @nexo/api db:seed",
     "db:test": "pnpm --filter @nexo/api db:test",
+    "db:test:procesos": "pnpm --filter @nexo/api db:test:procesos",
+    "procesos:verificar": "pnpm --filter @nexo/api procesos:verificar",
     "db:reset": "pnpm --filter @nexo/api db:reset",
+    "db:local": "npx -y -p @electric-sql/pglite@0.5.16 -p @electric-sql/pglite-socket@0.2.19 pglite-server --db=.pglite --port=5432 --extensions=citext --max-connections=10",
     "db:tipos": "pnpm --filter @nexo/api db:tipos"
   },
   "devDependencies": {

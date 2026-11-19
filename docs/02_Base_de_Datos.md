@@ -224,6 +224,8 @@ erDiagram
   TAREAS ||--o{ TAREA_ETIQUETAS : "lleva"
   ETIQUETAS ||--o{ TAREA_ETIQUETAS : "clasifica"
   TAREAS ||--o{ TAREA_COMPARTIDA : "se comparte"
+  TAREAS ||--o{ TAREA_VOTOS : "recibe votos (propuesta)"
+  USUARIOS ||--o{ TAREA_VOTOS : "emite"
   MEMBRESIAS ||--o{ TAREA_COMPARTIDA : "ve (invitado)"
   SPRINTS ||--o| RETROSPECTIVAS : "cierra con"
   TAREAS {
@@ -237,6 +239,13 @@ erDiagram
     text orden "indice fraccionario"
     int version "concurrencia optimista"
   }
+  TAREA_VOTOS {
+    uuid tarea_id FK
+    uuid usuario_id FK
+    voto_propuesta voto "aceptar | rechazar"
+    text comentario
+    timestamptz votado_en
+  }
   SPRINTS {
     uuid id PK
     int numero
@@ -245,6 +254,8 @@ erDiagram
     date fin
   }
 ```
+
+**Votación (Fase 2.5, DEC-024; migración `0003`).** `TAREA_VOTOS` guarda un voto por integrante activo y propuesta, con clave única `(tarea_id, usuario_id)`; solo existe mientras la tarea está en `propuesta` y se conserva como historial al cerrarse.
 
 **Cómo leerlo.** `TAREAS` pertenece a un equipo **o** a una persona (tarea personal), nunca a ambos (`CHECK`). Las etiquetas son N:M. Las tareas compartidas con invitados son N:M contra `MEMBRESIAS` (no contra usuarios) para que el acceso termine cuando termina la membresía.
 
@@ -390,6 +401,8 @@ Notación: **A → B** se lee «cada A se relaciona con…». *Part.* indica par
 | 36 | Sprint — Retrospectiva | 1 : 0..1 | P | `retrospectivas.sprint_id UNIQUE` | |
 | 37 | Retrospectiva — Nota — Voto | 1 : N : N | P | `retro_notas`, `retro_votos` | |
 | 38 | Usuario — Sesión / Token | 1 : N | P | `sesiones`, `tokens_verificacion` | |
+| 39 | Tarea — Voto de propuesta | 1 : N | P | `tarea_votos.tarea_id` (0003) | Los integrantes activos votan la propuesta del líder |
+| 40 | Usuario — Voto de propuesta | 1 : N | P | `tarea_votos.usuario_id`, `PRIMARY KEY (tarea_id, usuario_id)` (0003) | Un voto por persona y propuesta, que se puede cambiar mientras esté abierta |
 
 ---
 
@@ -466,6 +479,7 @@ El nombre de la persona **no** se repite en `membresias` ni en `mensajes`: se ob
 | RN-TAR-03 | Completada ⇔ fecha de cierre, resultado y 100 % | Tres `CHECK` | `23514` |
 | RN-TAR-04 | Código T-nn consecutivo y único por equipo | Disparador + índice único | `23505` |
 | RN-TAR-05 | Cada actualización incrementa `version` | Disparador | — |
+| RN-TAR-06 | Solo vota un **integrante activo** del mismo equipo (ni el líder ni los invitados) y solo mientras la tarea está en `propuesta`; un voto por persona (cambiarlo actualiza) | Disparador `trg_voto_propuesta_valido` + `PRIMARY KEY (tarea_id, usuario_id)` (migración `0003`) | `NX004` |
 | RN-LID-01 | Una sola transferencia pendiente y una sola elección abierta por equipo | Índices únicos parciales | `23505` |
 | RN-LID-04 | Se vota una vez por ronda | PK `(eleccion_id, ronda, votante_id)` | `23505` |
 | RN-LID-05 | El líder saliente no vota | `trg_voto_valido` | `NX002` |
@@ -480,7 +494,7 @@ El nombre de la persona **no** se repite en `membresias` ni en `mensajes`: se ob
 | Regla | Por qué en la aplicación |
 |---|---|
 | Matriz de permisos por rol (~45 acciones) | Depende del contexto (propia, compartida) y se comparte con el front; vive en `packages/shared` y se aplica **también en el servidor** |
-| Transiciones válidas de estado de tarea | Dependen del rol y del responsable; se prueban con tablas de casos (ver `01_Contexto…`) |
+| Transiciones válidas de estado de tarea | Dependen del rol y del responsable; la fuente de verdad es `packages/shared/src/estados.ts`. La BD guarda una copia (`transiciones_estado`) y **una prueba compara ambas** (Fase 2.5, DEC-025). La mayoría de la votación se calcula en el proceso y se prueba contra la misma tabla de casos |
 | El responsable debe ser miembro activo del equipo | Una FK compuesta no es posible porque `membresias` guarda historial; se valida en el servicio con prueba automatizada |
 | Un invitado solo ve lo compartido | Filtrado en cada consulta (y probado) |
 | Caducidad de invitados, plazos de votación, reportes de WhatsApp | Tareas programadas (`pg-boss`), no disparadores: deben tolerar reintentos y avisar |
@@ -536,7 +550,8 @@ Principio: un índice por cada consulta crítica de una pantalla y **no más**. 
 | Secretos 2FA | `secreto_cifrado` con AES-256-GCM; la clave vive en una variable de entorno, no en la BD |
 | Enlace de invitación del grupo de WhatsApp | `whatsapp_configuracion.enlace_invitacion` se cifra a nivel de aplicación (da acceso al grupo) |
 | Número de WhatsApp | Dato personal: columna aislada en `whatsapp_usuario`, formato E.164, nunca se muestra completo a otros miembros (solo los últimos 4 dígitos) |
-| Roles de base de datos | `nexo_migrador` (DDL, solo en despliegue) y `nexo_app` (solo `SELECT/INSERT/UPDATE/DELETE`; sin `DROP`) |
+| Roles de base de datos | `nexo_migraciones` (dueño del esquema; solo CI y despliegue) y `nexo_app` (la API): **solo `EXECUTE` sobre los procesos `proc_*`, sin permisos sobre tablas** (DEC-025; ver «Procesos y roles de la BD» y `08_Procesos_BD.md`). Antes se llamaba `nexo_migrador` |
+| Secretos | Ningún secreto en el repositorio; los de producción solo en el panel del alojamiento; tokens de terceros cifrados y nunca devueltos por la API (DEC-026, `09_Seguridad_y_Secretos.md`) |
 | Eliminación de cuenta | Borrado lógico + anonimización de nombre y correo; los mensajes se conservan con autor anonimizado |
 | Exportación de datos | `exportaciones_datos` genera un archivo con los datos de la persona; expira |
 | Retención | Sesiones y tokens expirados se purgan con job; webhooks a los 30 días; actividad mientras exista el equipo |
@@ -548,7 +563,8 @@ Principio: un índice por cada consulta crítica de una pantalla y **no más**. 
 ## 12. Migraciones y ciclo de vida del esquema
 
 - Herramienta: **`node-pg-migrate`** con migraciones en SQL puro (`apps/api/db/migrations/NNNN_nombre.sql`).
-- `0001_esquema.sql` = script de la sección 15.1. `0002_…` en adelante = cambios.
+- `0001_esquema.sql` = script de la sección 15.1. `0002_…` en adelante = cambios. Fase 2.5: `0002_enums_votacion`, `0003_votacion`, `0004_procesos_cuenta`, `0005_procesos_equipos`, `0006_procesos_tareas_equipo`, `0007_procesos_tareas_personales` y `0008_roles` (ver `08_Procesos_BD.md`).
+- **Desde la Fase 2.5 (DEC-025)** las migraciones se ejecutan con el rol dueño (`nexo_migraciones`, `DATABASE_URL_MIGRACIONES`) y la API se conecta con `nexo_app`, que solo ejecuta procesos `proc_*`. Toda migración que cree o cambie procesos termina con `SELECT fn_conceder_procesos();`.
 - Cada migración es **transaccional** y tiene su `down` cuando es posible.
 - Tras migrar en local se regeneran los tipos: `pnpm --filter api db:types` (ejecuta `kysely-codegen` y escribe `apps/api/src/db/tipos.ts`, que **sí se versiona**).
 - La semilla se carga con `pnpm --filter api db:seed`; el reinicio completo con `pnpm db:reset` (solo en desarrollo; falla si `NODE_ENV=production`).
@@ -561,10 +577,18 @@ Principio: un índice por cada consulta crítica de una pantalla y **no más**. 
 | `NX001` | Equipo lleno | «Este equipo ya tiene 8 miembros activos.» |
 | `NX002` | El líder saliente no vota | «El líder saliente no participa en la votación.» |
 | `NX003` | Límite de votos de retro | «Ya usaste tus 3 votos.» |
+| `NX004` | Voto de propuesta no permitido (no es integrante activo, o la tarea ya no está en votación) | «Solo los integrantes votan las propuestas; el líder propone.» |
 
+El catálogo completo, incluidos los códigos de los procesos (`NX005` en adelante), vive en `08_Procesos_BD.md`.
+
+### Procesos y roles de la BD (Fase 2.5, DEC-025)
+
+Toda operación sobre datos es un proceso almacenado `proc_<dominio>_<accion>` creado por una migración; la API solo los **llama** desde `apps/api/src/repositorios/`. Las funciones auxiliares y los disparadores conservan el prefijo `fn_`/`trg_` y no son invocables por la aplicación. Los roles son `nexo_migraciones` (dueño) y `nexo_app` (solo `EXECUTE` sobre `proc_*`). Reglas, convenciones y un apartado por proceso: `08_Procesos_BD.md`.
 ---
 
 ## 13. Consultas clave
+
+> **Desde la Fase 2.5 (DEC-025)** estas consultas se implementan como **procesos o vistas** de la BD (`proc_*`, `v_*`) y la aplicación las llama; el SQL de abajo es la **referencia de diseño** y de la revisión con `EXPLAIN` (Fase 5.4), no código de la API.
 
 **Q1 · Datos del Hill Chart** (un punto por tarea del sprint activo, con el color de su responsable):
 
@@ -620,11 +644,13 @@ SELECT t.codigo, t.titulo FROM tareas t
 
 ## 14. Datos de prueba y evolución
 
+> **Cambio de la semilla en la Fase 2.5 (DEC-024).** Las tres tareas con `origen = 'propuesta'` (T-07, T-08 y T-09) ahora las propone la **líder** (antes, integrantes), y T-08, que sigue en votación, trae tres votos de ejemplo en `tarea_votos` (2 a favor y 1 en contra; con 7 integrantes hacen falta 4). El script de la sección 15.2 es la copia original; la semilla vigente es `apps/api/db/seed/semilla.sql`. La regla `whatsapp_reglas.tipo_evento = 'triaje'` se conserva y se interpreta como **votación de propuestas**.
+
 ### 14.1 Semilla
 Reproduce el «Equipo Nexo» del prototipo: 11 personas, 1 equipo con **8 miembros activos** (líder + 7 integrantes, cupo completo a propósito) y 2 invitados, 4 sprints (2 cerrados, 1 activo, 1 planificado), 9 tareas de equipo en distintos estados, 2 tareas personales, etiquetas, chat y la configuración de WhatsApp en modo **simulado** con sus 6 reglas. Los usuarios de la semilla **no tienen contraseña**: se entra con el inicio de sesión de desarrollo (ver `01_Contexto…`).
 
 ### 14.2 Qué no cubre la semilla
-No incluye avisos de WhatsApp enviados, elecciones activas ni retrospectivas: se crean con el uso o con pruebas.
+Desde la Fase 3.3 trae también las instantáneas del burndown (`sprint_instantaneas`): la foto final de los dos sprints cerrados y los días ya pasados del activo. No incluye avisos de WhatsApp enviados, elecciones activas ni retrospectivas: se crean con el uso o con pruebas.
 
 ### 14.3 Semilla ampliada para rendimiento
 Generar con un script de Node (`apps/api/db/seeds/volumen.ts`): 50 equipos, 500 usuarios, 20 000 tareas y 200 000 mensajes.
@@ -1629,6 +1655,8 @@ COMMIT;
 
 ## 16. Pruebas de integridad
 
+> Las 11 pruebas de este archivo no se tocan. Desde la Fase 2.5 hay un segundo archivo, `apps/api/db/tests/pruebas_procesos.sql` (script `db:test:procesos`), con las pruebas de la votación (`tarea_votos`) y de cada proceso: voto de un líder o de un invitado (falla `NX004`), voto doble (actualiza), voto fuera de `propuesta`, mayoría exacta con 3, 4 y 8 integrantes, empate con 4, y que `nexo_app` no pueda leer tablas.
+
 Ejecutar después del esquema y la semilla: `psql -v ON_ERROR_STOP=1 -d nexo -f 03_pruebas.sql`. **Salida esperada:** once líneas `NOTICE: OK …` (pruebas 1, 2, 3, 4, 5, 6, 7, 7b, 8, 9 y 10). Cualquier fallo aborta con `FALLO: …`. Deben automatizarse en la CI (Fase 0).
 
 ```sql
@@ -2052,6 +2080,21 @@ Relación N:M entre tareas y etiquetas.
 | `etiqueta_id` | `uuid NOT NULL REFERENCES etiquetas(id) ON DELETE CASCADE` |  |
 
 Restricciones de tabla: `PRIMARY KEY (tarea_id, etiqueta_id)`
+
+#### `tarea_votos`
+
+*(Migración `0003`, Fase 2.5.)* Voto de un integrante activo sobre una propuesta del líder.
+
+| Columna | Definición | Notas |
+|---|---|---|
+| `tarea_id` | `uuid NOT NULL REFERENCES tareas(id) ON DELETE CASCADE` | |
+| `usuario_id` | `uuid NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE` | Integrante activo del equipo (lo exige un disparador, `NX004`) |
+| `voto` | `voto_propuesta NOT NULL` | `aceptar` \| `rechazar` |
+| `comentario` | `text CHECK (char_length(comentario) BETWEEN 1 AND 500)` | Opcional; solo lo ve quien votó |
+| `votado_en` | `timestamptz NOT NULL DEFAULT now()` | |
+| `actualizado_en` | `timestamptz NOT NULL DEFAULT now()` | |
+
+Restricción: `PRIMARY KEY (tarea_id, usuario_id)`. La migración `0002` agrega los valores de enum `rechazo_por = 'votacion'`, `politica_propuestas = 'votacion'` (nuevo valor por defecto) y `estado_tarea = 'cancelada'` (propuesta retirada); van aparte porque PostgreSQL no deja usar un valor nuevo de enum en la transacción que lo crea. La columna `tareas.cambios_pedidos` queda obsoleta (no se borra). Ver DEC-024.
 
 #### `tarea_compartida`
 

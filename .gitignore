@@ -13,6 +13,9 @@ coverage/
 .env.*
 !.env.example
 
+# Base de datos local sin Docker (`pnpm db:local`)
+.pglite/
+
 # Registros
 logs/
 *.log

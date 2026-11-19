@@ -6,19 +6,24 @@ import { registrarAutenticacion } from './autenticacion';
 import type { Config } from './config';
 import type { BaseDatos } from './db/conexion';
 import { ErrorNexo } from './errores';
+import { exigirOrigenPermitido, RUTAS_OCULTAS_EN_REGISTROS } from './seguridad';
+import { rutasAjustes } from './rutas/ajustes';
 import { rutasContacto } from './rutas/contacto';
 import { rutasDev } from './rutas/dev';
 import { rutasEquipos } from './rutas/equipos';
+import { rutasLiderazgo } from './rutas/liderazgo';
 import { rutasPersonal } from './rutas/personal';
+import { rutasSprints } from './rutas/sprints';
 import { rutasTareasEquipo } from './rutas/tareasEquipo';
+import { rutasVistas } from './rutas/vistas';
 import { rutasYo } from './rutas/yo';
 
 export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
   const app = Fastify({
-    logger:
-      config.NODE_ENV === 'test'
-        ? false
-        : { redact: ['req.headers.cookie', 'req.headers.authorization'] },
+    logger: config.NODE_ENV === 'test' ? false : { redact: RUTAS_OCULTAS_EN_REGISTROS },
+    // Detrás del proxy de Render la IP real llega en X-Forwarded-For; sin esto el límite de
+    // peticiones vería a todo el mundo como una sola IP (docs/10, sección 6).
+    trustProxy: config.NODE_ENV === 'production',
   });
 
   await app.register(cors, {
@@ -27,6 +32,7 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'],
   });
   await app.register(cookie);
+  exigirOrigenPermitido(app, config.APP_URL);
   // Límite de peticiones: solo en las rutas que lo declaran (contacto; login en la Fase 5).
   await app.register(rateLimit, { global: false });
   registrarAutenticacion(app, db);
@@ -61,6 +67,10 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   await app.register(rutasContacto, { db });
   await app.register(rutasEquipos, { db });
   await app.register(rutasTareasEquipo, { db });
+  await app.register(rutasSprints, { db });
+  await app.register(rutasLiderazgo, { db });
+  await app.register(rutasVistas, { db });
+  await app.register(rutasAjustes, { db });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });

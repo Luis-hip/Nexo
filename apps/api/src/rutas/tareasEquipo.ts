@@ -9,14 +9,14 @@ import {
   esquemaEditarTareaEquipo,
   esquemaMoverTarea,
   esquemaResponderAsignacion,
-  esquemaTriaje,
+  esquemaRetirar,
+  esquemaVotar,
 } from '@nexo/shared';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { exigirSesion } from '../autenticacion';
 import type { BaseDatos } from '../db/conexion';
 import { contextoEquipo, requiereEquipoActivo, requierePermiso } from '../equipos/contexto';
-import { ErrorNexo } from '../errores';
 import * as servicio from '../servicios/tareasEquipo';
 import { esquemaId, validar } from '../validacion';
 
@@ -25,12 +25,13 @@ const parametrosTarea = z.object({ equipoId: esquemaId, tareaId: esquemaId });
 const parametrosSubtarea = parametrosTarea.extend({ subId: esquemaId });
 const parametrosComentario = parametrosTarea.extend({ comentarioId: esquemaId });
 const consultaLista = z.object({
-  vista: z.enum(['tablero', 'backlog', 'triaje', 'mias', 'todas']).default('tablero'),
+  vista: z.enum(['tablero', 'backlog', 'votacion', 'mias', 'todas']).default('tablero'),
 });
 
 /**
  * Tareas de equipo (Fase 2, secciones 2.2 y 2.3). Cada ruta: sesión → membresía activa en
- * **este** equipo → permiso de la matriz. Las reglas viven en el servicio.
+ * **este** equipo → permiso de la matriz. Las reglas de datos viven en los procesos de la BD
+ * (docs/08) y el servicio solo los llama.
  */
 export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (app, { db }) => {
   /** Sesión + membresía. Para escribir, además exige que el equipo no esté archivado. */
@@ -49,9 +50,9 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
   app.get('/equipos/:equipoId/tareas', async (req) => {
     const { ctx } = await contexto(req);
     const { vista } = validar(consultaLista, req.query);
-    // Un invitado ve solo lo compartido (lo filtra el servicio); no hay backlog ni triaje para él.
+    // Un invitado ve solo lo compartido (lo filtra el servicio); no hay backlog ni votación para él.
     requierePermiso(ctx, 'ver_resumen', { esCompartido: true });
-    if (vista === 'backlog' || vista === 'triaje') requierePermiso(ctx, 'ver_sprints');
+    if (vista === 'backlog' || vista === 'votacion') requierePermiso(ctx, 'ver_sprints');
     if (vista === 'mias') requierePermiso(ctx, 'ver_sprints');
     return servicio.listar(db, ctx, vista);
   });
@@ -72,8 +73,8 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
 
   app.post('/equipos/:equipoId/tareas', async (req, res) => {
     const { ctx, actor } = await contexto(req, true);
-    // El líder crea; el integrante propone (va a triaje); el invitado, ninguna de las dos.
-    requierePermiso(ctx, ctx.rol === 'lider' ? 'crear_tarea' : 'proponer_tarea');
+    // Solo el líder crea tareas: nacen como propuesta, con sus subtareas, y van a votación (DEC-024).
+    requierePermiso(ctx, 'crear_tarea');
     const tarea = await servicio.crear(db, ctx, actor, validar(esquemaCrearTareaEquipo, req.body));
     return res.status(201).send(tarea);
   });
@@ -118,13 +119,35 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
     return servicio.mover(db, ctx, actor, tareaId(req), validar(esquemaMoverTarea, req.body));
   });
 
-  // --- Triaje y asignación -------------------------------------------------------------------
+  // --- Votación de propuestas (EQ-05, DEC-024) -----------------------------------------------
 
-  app.post('/equipos/:equipoId/tareas/:tareaId/triaje', async (req) => {
+  app.post('/equipos/:equipoId/tareas/:tareaId/voto', async (req) => {
     const { ctx, actor } = await contexto(req, true);
-    requierePermiso(ctx, 'triaje');
-    return servicio.triaje(db, ctx, actor, tareaId(req), validar(esquemaTriaje, req.body));
+    requierePermiso(ctx, 'votar_propuesta');
+    return servicio.votar(db, ctx, actor, tareaId(req), validar(esquemaVotar, req.body));
   });
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/retirar', async (req) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'retirar_propuesta');
+    const { version } = validar(esquemaRetirar, req.body);
+    return servicio.retirar(db, ctx, actor, tareaId(req), version);
+  });
+
+  app.post('/equipos/:equipoId/tareas/:tareaId/reformular', async (req, res) => {
+    const { ctx, actor } = await contexto(req, true);
+    requierePermiso(ctx, 'retirar_propuesta');
+    const nueva = await servicio.reformular(
+      db,
+      ctx,
+      actor,
+      tareaId(req),
+      validar(esquemaCrearTareaEquipo, req.body),
+    );
+    return res.status(201).send(nueva);
+  });
+
+  // --- Asignación ----------------------------------------------------------------------------
 
   app.post('/equipos/:equipoId/tareas/:tareaId/asignar', async (req) => {
     const { ctx, actor } = await contexto(req, true);
@@ -186,9 +209,7 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
     // (c): el servicio responde 404 al invitado si la tarea no está compartida con él.
     requierePermiso(ctx, 'comentar', { esCompartido: true });
     const { texto } = validar(esquemaCrearComentario, req.body);
-    const comentario = await servicio.comentar(db, ctx, actor, tareaId(req), texto);
-    if (!comentario) throw new ErrorNexo(500, 'error_interno', 'Ocurrió un error inesperado.');
-    return res.status(201).send(comentario);
+    return res.status(201).send(await servicio.comentar(db, ctx, actor, tareaId(req), texto));
   });
 
   app.delete('/equipos/:equipoId/tareas/:tareaId/comentarios/:comentarioId', async (req, res) => {

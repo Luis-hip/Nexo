@@ -10,6 +10,7 @@ export const NOMBRE_ESTADO: Record<EstadoTarea, string> = {
   atascada: 'Atascada',
   completada: 'Completada',
   rechazada: 'Rechazada',
+  cancelada: 'Retirada',
 };
 
 export const COLUMNAS_TABLERO: { estado: EstadoTarea; nombre: string }[] = [

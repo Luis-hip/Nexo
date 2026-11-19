@@ -43,6 +43,12 @@ export function fechaCorta(iso: string): string {
   return formatoFecha === 'dd/mm' ? `${dia} ${mes}` : `${mes} ${dia}`;
 }
 
+/** Fecha `AAAA-MM-DD` (las de sprint): se lee como día local, sin correrse por la zona horaria. */
+export function fechaDia(dia: string): string {
+  const d = new Date(+dia.slice(0, 4), +dia.slice(5, 7) - 1, +dia.slice(8, 10), 12);
+  return fechaCorta(d.toISOString());
+}
+
 export function hora(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-MX', {
     hour: 'numeric',
