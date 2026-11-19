@@ -733,3 +733,36 @@ export const esquemaResultadoMensajeATarea = z.object({
   mensaje: esquemaMensajeChat,
   sistema: esquemaMensajeChat,
 }) satisfies z.ZodType<ResultadoMensajeATarea>;
+
+// =============================================================================================
+// Fase 5 · Autenticación (5.1): respuestas de los procesos `proc_auth_*`
+// =============================================================================================
+import type { CuentaAuth } from './autenticacion';
+
+export const esquemaAuthUsuario = z.object({ usuario: esquemaUsuarioSesion });
+
+export const esquemaAuthCredenciales = z
+  .object({ usuario_id: z.string(), hash: z.string() })
+  .nullable();
+
+export const esquemaAuthEntrar = z.object({
+  estado: z.enum(['ok', 'fallo', 'bloqueada']),
+  usuario: esquemaUsuarioSesion.optional(),
+});
+
+export const esquemaAuthDestinatario = z
+  .object({ correo: z.string(), nombre: z.string() })
+  .nullable();
+
+export const esquemaAuthVerificacion = z.object({
+  correo: z.string(),
+  nombre: z.string(),
+  verificado: z.boolean(),
+});
+
+export const esquemaCuentaAuth = z.object({
+  correo: z.string(),
+  correo_verificado: z.boolean(),
+  tiene_contrasena: z.boolean(),
+  sesiones_activas: z.number().int(),
+}) satisfies z.ZodType<CuentaAuth>;

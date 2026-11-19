@@ -50,23 +50,20 @@ const rutas: RouteObject[] = [
           { path: 'entrar', lazy: diferida(auth, (m) => m.Entrar) },
           { path: 'sesion-expirada', lazy: diferida(auth, (m) => m.SesionExpirada) },
           { path: 'bienvenida/:paso', lazy: diferida(auth, (m) => m.Bienvenida) },
-          // Autenticación real: Fase 5.
-          ...(
-            [
-              ['registro', 'Crea tu cuenta'],
-              ['recuperar', 'Recupera tu contraseña'],
-              ['recuperar/enviado', 'Revisa tu correo'],
-              ['restablecer', 'Restablece tu contraseña'],
-              ['verificar', 'Verifica tu correo'],
-              ['2fa', 'Verificación en dos pasos'],
-            ] as const
-          ).map(([path, titulo]): RouteObject => ({
-            path,
+          // Fase 5.1: autenticación real (AUTH-01 a AUTH-06).
+          { path: 'registro', lazy: diferida(auth, (m) => m.Registro) },
+          { path: 'recuperar', lazy: diferida(auth, (m) => m.Recuperar) },
+          { path: 'recuperar/enviado', lazy: diferida(auth, (m) => m.RecuperarEnviado) },
+          { path: 'restablecer', lazy: diferida(auth, (m) => m.Restablecer) },
+          { path: 'verificar', lazy: diferida(auth, (m) => m.Verificar) },
+          {
+            // 2FA (AUTH-07): fase posterior.
+            path: '2fa',
             lazy: async () => {
               const { AuthProximamente } = await auth();
-              return { element: <AuthProximamente titulo={titulo} /> };
+              return { element: <AuthProximamente titulo="Verificación en dos pasos" /> };
             },
-          })),
+          },
         ],
       },
       // El enlace que comparte el líder: lleva a la vista previa de la invitación.

@@ -1801,3 +1801,166 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_chat_puede`, `fn_chat_exigir
 - **Pruebas:** P124, P125; `chat.test.ts`.
 - **Ejemplo de llamada:** `select proc_chat_mensaje_a_tarea($1, $2, '{}')`
 - **Historial:** 2026-11-19 · creación · `0016`.
+
+---
+
+## Fase 5 · Autenticación
+
+Procesos de la autenticación real (`03`, tarea 5.1; DEC-AUTH-1 en `decisiones.md`). Migración `0030_procesos_autenticacion.sql` (`0014`–`0019` son del chat y `0020`–`0029` de WhatsApp). Pruebas `P200`–`P208` en `pruebas_procesos.sql` y `apps/api/src/rutas/autenticacion.test.ts`.
+
+**La contraseña nunca llega a la BD.** La API calcula el hash Argon2id (`@node-rs/argon2`) y lo verifica; los procesos solo guardan hashes (y rechazan con `NX010` cualquier valor que no empiece con `$argon2id$`). Los tokens de los enlaces y de las sesiones se guardan como SHA-256. El bloqueo por intentos lo decide la BD.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_auth_registrar` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_credenciales` | Autenticación (lectura) | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_entrar` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_recuperar` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_restablecer` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_verificacion_solicitar` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_verificar_correo` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_cuenta` | Autenticación (lectura) | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_hash_actual` | Autenticación (lectura) | `0030_procesos_autenticacion.sql` | Vigente |
+| `proc_auth_contrasena_cambiar` | Autenticación | `0030_procesos_autenticacion.sql` | Vigente |
+
+Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_auth_minutos_bloqueo` (15), `fn_auth_crear_sesion`, `fn_auth_consumir_token`. Sin códigos de error nuevos: se usan `NX006`, `NX010`, `NX011` (enlace vencido, usado o anulado → 410) y `NX012` (correo ya registrado → 409).
+
+### proc_auth_registrar
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-01: crear la cuenta y su primera sesión.
+- **Parámetros:** `p_correo text`. `p_nombre text` (2 a 80). `p_hash text` · Argon2id. `p_token_hash bytea` · hash de la cookie. `p_ip text`. `p_dispositivo text`. `p_expira timestamptz`.
+- **Retorno:** `jsonb` `{ usuario: UsuarioSesion }`.
+- **Reglas y validaciones:** correo en minúsculas y con forma de correo; único (`citext`); crea `preferencias_usuario` y la sesión. El correo queda **sin verificar**: la cuenta se usa igual (DEC-AUTH-1).
+- **Errores:** `NX010` · nombre, correo o hash inválidos. `NX012` · el correo ya tiene cuenta («Ese correo ya tiene una cuenta…»).
+- **Tablas que toca:** escritura `usuarios`, `preferencias_usuario`, `sesiones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `registrar()`; `POST /auth/registro` (5 por minuto por IP).
+- **Pruebas:** P200; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_registrar($1, $2, $3, $4, $5, $6, $7)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_credenciales
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-02, paso 1: el hash guardado de un correo, para que la API verifique la contraseña.
+- **Parámetros:** `p_correo text`.
+- **Retorno:** `jsonb` `{ usuario_id, hash }` o `NULL` si no hay cuenta con contraseña (o se eliminó).
+- **Reglas y validaciones:** sin distinguir mayúsculas. Sin cuenta, la API verifica contra un hash señuelo y responde igual (no revela si el correo existe).
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/autenticacion.ts` → `credenciales()`; `POST /auth/entrar`.
+- **Pruebas:** P201; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_credenciales($1)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_entrar
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-02, paso 2: registrar el resultado de la verificación y, si fue correcta, crear la sesión.
+- **Parámetros:** `p_usuario_id uuid`. `p_correcta boolean`. `p_token_hash bytea`. `p_ip text`. `p_dispositivo text`. `p_expira timestamptz`.
+- **Retorno:** `jsonb` `{ estado: ok | fallo | bloqueada, usuario? }`.
+- **Reglas y validaciones:** con `bloqueado_hasta` en el futuro no entra aunque la contraseña sea correcta. Correcta: reinicia los intentos y crea la sesión. Incorrecta: suma un intento; al **quinto seguido** bloquea **15 minutos** y reinicia el contador. La API responde lo mismo a `fallo` y `bloqueada`. Fila bloqueada con `FOR UPDATE` (dos intentos a la vez no se pisan).
+- **Errores:** ninguno (el estado va en el resultado).
+- **Tablas que toca:** escritura `usuarios`, `sesiones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `entrar()`; `POST /auth/entrar` (10 por minuto por IP).
+- **Pruebas:** P202, P203, P208; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_entrar($1, true, $2, $3, $4, $5)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_recuperar
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-03: crear el enlace para restablecer la contraseña.
+- **Parámetros:** `p_correo text`. `p_token_hash bytea`. `p_expira timestamptz` (la API usa 1 hora).
+- **Retorno:** `jsonb` `{ correo, nombre }` para enviar el correo, o `NULL` si no hay cuenta (la API responde igual: 202 con el mismo mensaje).
+- **Reglas y validaciones:** anula los enlaces anteriores sin usar del mismo tipo.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `usuarios`; escritura `tokens_verificacion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `recuperar()`; `POST /auth/recuperar` (5 por minuto por IP).
+- **Pruebas:** P204; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_recuperar($1, $2, $3)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_restablecer
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-05: guardar la contraseña nueva con el enlace.
+- **Parámetros:** `p_token_hash bytea`. `p_hash text` · Argon2id.
+- **Retorno:** `jsonb` `{ restablecida: true }`.
+- **Reglas y validaciones:** el enlace es de un solo uso, del tipo correcto y vigente. Quita el bloqueo, deja el correo verificado (quien abrió el enlace lo recibió) y **cierra todas las sesiones** de la cuenta.
+- **Errores:** `NX010` · hash inválido. `NX011` · enlace inexistente, usado, anulado o vencido («El enlace ya no es válido. Pide uno nuevo.»).
+- **Tablas que toca:** escritura `tokens_verificacion`, `usuarios`, `sesiones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `restablecer()`; `POST /auth/restablecer`.
+- **Pruebas:** P205; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_restablecer($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_verificacion_solicitar
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-06: crear el enlace para verificar el correo de la persona con sesión.
+- **Parámetros:** `p_actor_id uuid`. `p_token_hash bytea`. `p_expira timestamptz` (la API usa 24 horas).
+- **Retorno:** `jsonb` `{ correo, nombre, verificado }`; si ya estaba verificado no crea enlace.
+- **Reglas y validaciones:** anula los enlaces anteriores sin usar. Lo llama el registro y el botón «Enviar enlace» de Ajustes → Cuenta.
+- **Errores:** `NX006` · la cuenta no existe.
+- **Tablas que toca:** lectura `usuarios`; escritura `tokens_verificacion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `solicitarVerificacion()`; `POST /auth/registro` y `POST /auth/verificacion` (3 por minuto).
+- **Pruebas:** P206; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_verificacion_solicitar($1, $2, $3)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_verificar_correo
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** AUTH-06: confirmar el correo con el enlace.
+- **Parámetros:** `p_token_hash bytea`.
+- **Retorno:** `jsonb` `{ verificado: true }`.
+- **Reglas y validaciones:** un solo uso; no hace falta tener sesión; un enlace de restablecer no sirve para verificar.
+- **Errores:** `NX011` · enlace inexistente, usado, anulado o vencido.
+- **Tablas que toca:** escritura `tokens_verificacion`, `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `verificarCorreo()`; `POST /auth/verificar`.
+- **Pruebas:** P206; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_verificar_correo($1)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_cuenta
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** PF-02: estado de la cuenta.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ correo, correo_verificado, tiene_contrasena, sesiones_activas }`.
+- **Reglas y validaciones:** solo la del actor.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `usuarios`, `sesiones`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/autenticacion.ts` → `cuenta()`; `GET /auth/cuenta`.
+- **Pruebas:** P207; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_cuenta($1)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_hash_actual
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** PF-02, paso 1: el hash del actor, para verificar la contraseña actual antes de cambiarla.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ hash }` (`null` si la cuenta no tiene contraseña).
+- **Reglas y validaciones:** solo la del actor.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `usuarios`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/autenticacion.ts` → `hashActual()`; `POST /auth/contrasena`.
+- **Pruebas:** P207; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_hash_actual($1)`
+- **Historial:** 2026-11-19 · creación · `0030`.
+
+### proc_auth_contrasena_cambiar
+- **Migración:** `0030_procesos_autenticacion.sql`
+- **Propósito:** PF-02, paso 2: guardar la contraseña nueva.
+- **Parámetros:** `p_actor_id uuid`. `p_sesion_id uuid` · la sesión actual, que se conserva. `p_hash text` · Argon2id.
+- **Retorno:** `jsonb` `{ cambiada: true, sesiones_cerradas }`.
+- **Reglas y validaciones:** cierra todas las demás sesiones de la cuenta.
+- **Errores:** `NX006` · la cuenta no existe. `NX010` · hash inválido.
+- **Tablas que toca:** escritura `usuarios`, `sesiones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `cambiarContrasena()`; `POST /auth/contrasena` (5 por minuto).
+- **Pruebas:** P207; `autenticacion.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_contrasena_cambiar($1, $2, $3)`
+- **Historial:** 2026-11-19 · creación · `0030`.

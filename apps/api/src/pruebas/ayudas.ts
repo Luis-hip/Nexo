@@ -1,6 +1,7 @@
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { crearApp } from '../app';
 import { cargarConfig } from '../config';
+import { correoEnMemoria, type MensajeCorreo } from '../correo';
 import { crearBaseDatos, type BaseDatos } from '../db/conexion';
 import { COOKIE_SESION } from '../sesiones';
 
@@ -36,16 +37,20 @@ export interface Entorno {
     // justificado: cuerpo JSON arbitrario; cada prueba afirma su forma.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) => Promise<{ estado: number; cuerpo: any }>;
+  /** Correos que la API habría enviado (Fase 5). */
+  correos: MensajeCorreo[];
   cerrar: () => Promise<void>;
 }
 
 export async function crearEntorno(): Promise<Entorno> {
   const config = cargarConfig({ DATABASE_URL, NODE_ENV: 'test', DEV_LOGIN_ENABLED: 'true' });
   const db = crearBaseDatos(config.DATABASE_URL);
-  const app = await crearApp(config, db);
+  const correo = correoEnMemoria();
+  const app = await crearApp(config, db, { correo });
   return {
     db,
     app,
+    correos: correo.enviados,
     async entrar(email) {
       const r = await app.inject({ method: 'POST', url: '/dev/login', payload: { email } });
       const cookie = r.cookies.find((c) => c.name === COOKIE_SESION);

@@ -4,10 +4,12 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { registrarAutenticacion } from './autenticacion';
 import type { Config } from './config';
+import { crearCorreo, type Correo } from './correo';
 import type { BaseDatos } from './db/conexion';
 import { ErrorNexo } from './errores';
 import { exigirOrigenPermitido, RUTAS_OCULTAS_EN_REGISTROS } from './seguridad';
 import { rutasAjustes } from './rutas/ajustes';
+import { rutasAutenticacion } from './rutas/autenticacion';
 import { rutasChat } from './rutas/chat';
 import { rutasContacto } from './rutas/contacto';
 import { rutasDev } from './rutas/dev';
@@ -20,7 +22,12 @@ import { rutasVistas } from './rutas/vistas';
 import { rutasYo } from './rutas/yo';
 import { registrarTiempoReal } from './tiempoReal';
 
-export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyInstance> {
+/** `correo`: en las pruebas se pasa una bandeja en memoria; si falta, sale de la configuración. */
+export async function crearApp(
+  config: Config,
+  db: BaseDatos,
+  opciones: { correo?: Correo } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: config.NODE_ENV === 'test' ? false : { redact: RUTAS_OCULTAS_EN_REGISTROS },
     // Detrás del proxy de Render la IP real llega en X-Forwarded-For; sin esto el límite de
@@ -75,6 +82,11 @@ export async function crearApp(config: Config, db: BaseDatos): Promise<FastifyIn
   await app.register(rutasVistas, { db });
   await app.register(rutasAjustes, { db });
   await app.register(rutasChat, { db });
+  await app.register(rutasAutenticacion, {
+    db,
+    config,
+    correo: opciones.correo ?? crearCorreo(config, app.log),
+  });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });

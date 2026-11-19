@@ -10,5 +10,6 @@ export * from './liderazgo';
 export * from './vistas';
 export * from './ajustes';
 export * from './chat';
+export * from './autenticacion';
 export * from './respuestas';
 export * from './color';

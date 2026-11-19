@@ -2246,3 +2246,202 @@ DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); eq uuid := pg_temp.canal(e, 'equ
   IF (r->>'no_leidos')::int <> 1 THEN RAISE EXCEPTION 'FALLO P129: no contó lo nuevo %', r; END IF;
   RAISE NOTICE 'OK P129: último mensaje y no leídos de quien llega';
 END $$;
+
+-- =============================================================================================
+-- Fase 5 · Autenticación (0030, DEC-AUTH-1). Pruebas P200 en adelante (P104–P149 son del chat y
+-- P150–P199 de WhatsApp). Los hashes de prueba no son reales: la API calcula los Argon2id.
+-- =============================================================================================
+
+CREATE FUNCTION pg_temp.hash_falso(p text DEFAULT 'a') RETURNS text AS $$
+  SELECT '$argon2id$v=19$m=19456,t=2,p=1$prueba$' || p;
+$$ LANGUAGE sql;
+
+CREATE FUNCTION pg_temp.tk(p text DEFAULT gen_random_uuid()::text) RETURNS bytea AS $$
+  SELECT sha256(convert_to(p, 'UTF8'));
+$$ LANGUAGE sql;
+
+-- Cuenta con contraseña (falsa) creada por el proceso de registro. Devuelve su id.
+CREATE FUNCTION pg_temp.cuenta(p_correo text DEFAULT 'c-' || gen_random_uuid() || '@prueba.mx') RETURNS uuid AS $$
+  SELECT (proc_auth_registrar(p_correo, 'Cuenta Prueba', pg_temp.hash_falso(), pg_temp.tk(), '127.0.0.1', 'pruebas',
+          now() + interval '1 day')->'usuario'->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P200. proc_auth_registrar: crea la cuenta sin verificar, sus preferencias y una sesión; el correo
+--       se guarda en minúsculas y uno repetido (sin importar mayúsculas) es NX012; nombre, correo o
+--       hash inválidos son NX010.
+DO $$ DECLARE r jsonb; u uuid; ok int := 0; BEGIN
+  r := proc_auth_registrar('  Nueva.Persona@Prueba.MX ', ' Nueva Persona ', pg_temp.hash_falso(), pg_temp.tk('s1'), '10.0.0.1', 'Firefox', now() + interval '30 days');
+  u := (r->'usuario'->>'id')::uuid;
+  IF r->'usuario'->>'correo' <> 'nueva.persona@prueba.mx' OR r->'usuario'->>'nombre' <> 'Nueva Persona'
+     OR (SELECT correo_verificado_en FROM usuarios WHERE id = u) IS NOT NULL
+     OR NOT EXISTS (SELECT 1 FROM preferencias_usuario WHERE usuario_id = u)
+     OR (SELECT count(*) FROM sesiones WHERE usuario_id = u AND token_hash = pg_temp.tk('s1') AND ip = '10.0.0.1') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P200: %', r;
+  END IF;
+  BEGIN PERFORM proc_auth_registrar('NUEVA.PERSONA@prueba.mx', 'Otra', pg_temp.hash_falso(), pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_registrar('x@prueba.mx', 'A', pg_temp.hash_falso(), pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_registrar('no-es-correo', 'Alguien', pg_temp.hash_falso(), pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_registrar('y@prueba.mx', 'Alguien', 'contraseña-en-claro', pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P200: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P200: proc_auth_registrar';
+END $$;
+
+-- P201. proc_auth_credenciales: devuelve id y hash por correo (sin importar mayúsculas); NULL si no
+--       existe, si la cuenta se eliminó o si no tiene contraseña.
+DO $$ DECLARE c text := 'cred-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); sin uuid := pg_temp.usuario(); r jsonb; BEGIN
+  r := proc_auth_credenciales(upper(c));
+  IF (r->>'usuario_id')::uuid <> u OR r->>'hash' <> pg_temp.hash_falso() THEN RAISE EXCEPTION 'FALLO P201: %', r; END IF;
+  IF proc_auth_credenciales('nadie@prueba.mx') IS NOT NULL
+     OR proc_auth_credenciales((SELECT correo FROM usuarios WHERE id = sin)) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P201: devolvió una cuenta que no debía';
+  END IF;
+  UPDATE usuarios SET eliminado_en = now() WHERE id = u;
+  IF proc_auth_credenciales(c) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P201: cuenta eliminada'; END IF;
+  RAISE NOTICE 'OK P201: proc_auth_credenciales';
+END $$;
+
+-- P202. proc_auth_entrar: con la contraseña correcta crea la sesión y reinicia los intentos; con una
+--       incorrecta suma un intento sin crear sesión.
+DO $$ DECLARE u uuid := pg_temp.cuenta(); r jsonb; BEGIN
+  r := proc_auth_entrar(u, false, pg_temp.tk(), '127.0.0.1', '', now() + interval '1 day');
+  IF r->>'estado' <> 'fallo' OR (SELECT intentos_fallidos FROM usuarios WHERE id = u) <> 1
+     OR (SELECT count(*) FROM sesiones WHERE usuario_id = u) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P202: fallo %', r;
+  END IF;
+  r := proc_auth_entrar(u, true, pg_temp.tk('s202'), '127.0.0.1', 'Chrome', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR (r->'usuario'->>'id')::uuid <> u OR (SELECT intentos_fallidos FROM usuarios WHERE id = u) <> 0
+     OR (proc_sesion_resolver(pg_temp.tk('s202'))->'usuario'->>'id')::uuid <> u THEN
+    RAISE EXCEPTION 'FALLO P202: ok %', r;
+  END IF;
+  IF proc_auth_entrar(gen_random_uuid(), true, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'fallo' THEN
+    RAISE EXCEPTION 'FALLO P202: entró una cuenta inexistente';
+  END IF;
+  RAISE NOTICE 'OK P202: proc_auth_entrar';
+END $$;
+
+-- P203. Bloqueo: al quinto intento fallido seguido la cuenta se bloquea 15 minutos y ni la contraseña
+--       correcta la abre; al vencer el bloqueo vuelve a entrar.
+DO $$ DECLARE u uuid := pg_temp.cuenta(); r jsonb; i int; BEGIN
+  FOR i IN 1..4 LOOP
+    IF proc_auth_entrar(u, false, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'fallo' THEN
+      RAISE EXCEPTION 'FALLO P203: bloqueó antes de tiempo (intento %)', i;
+    END IF;
+  END LOOP;
+  IF proc_auth_entrar(u, false, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'bloqueada' THEN
+    RAISE EXCEPTION 'FALLO P203: no bloqueó al quinto';
+  END IF;
+  IF (SELECT bloqueado_hasta FROM usuarios WHERE id = u) NOT BETWEEN now() + interval '14 minutes' AND now() + interval '16 minutes' THEN
+    RAISE EXCEPTION 'FALLO P203: duración del bloqueo';
+  END IF;
+  r := proc_auth_entrar(u, true, pg_temp.tk(), NULL, '', now() + interval '1 day');
+  IF r->>'estado' <> 'bloqueada' OR (SELECT count(*) FROM sesiones WHERE usuario_id = u) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P203: entró bloqueada %', r;
+  END IF;
+  UPDATE usuarios SET bloqueado_hasta = now() - interval '1 second' WHERE id = u;
+  IF proc_auth_entrar(u, true, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'ok' THEN
+    RAISE EXCEPTION 'FALLO P203: no entró al vencer el bloqueo';
+  END IF;
+  RAISE NOTICE 'OK P203: bloqueo tras 5 intentos';
+END $$;
+
+-- P204. proc_auth_recuperar: crea un enlace por cuenta y anula los anteriores; un correo sin cuenta
+--       devuelve NULL sin crear nada.
+DO $$ DECLARE c text := 'rec-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); r jsonb; n int; BEGIN
+  r := proc_auth_recuperar(upper(c), pg_temp.tk('r1'), now() + interval '1 hour');
+  IF r->>'correo' <> c OR r->>'nombre' <> 'Cuenta Prueba' THEN RAISE EXCEPTION 'FALLO P204: %', r; END IF;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('r2'), now() + interval '1 hour');
+  SELECT count(*) INTO n FROM tokens_verificacion WHERE usuario_id = u AND usado_en IS NULL;
+  IF n <> 1 OR NOT EXISTS (SELECT 1 FROM tokens_verificacion WHERE token_hash = pg_temp.tk('r2') AND usado_en IS NULL) THEN
+    RAISE EXCEPTION 'FALLO P204: % enlaces vigentes', n;
+  END IF;
+  SELECT count(*) INTO n FROM tokens_verificacion;
+  IF proc_auth_recuperar('nadie-' || gen_random_uuid() || '@prueba.mx', pg_temp.tk(), now() + interval '1 hour') IS NOT NULL
+     OR (SELECT count(*) FROM tokens_verificacion) <> n THEN
+    RAISE EXCEPTION 'FALLO P204: correo sin cuenta';
+  END IF;
+  RAISE NOTICE 'OK P204: proc_auth_recuperar';
+END $$;
+
+-- P205. proc_auth_restablecer: cambia el hash, quita el bloqueo, verifica el correo y cierra todas las
+--       sesiones; el enlace sirve una sola vez (NX011), el anulado y el vencido tampoco sirven (NX011)
+--       y un hash que no es Argon2id es NX010.
+DO $$ DECLARE c text := 'res-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); ok int := 0; BEGIN
+  UPDATE usuarios SET bloqueado_hasta = now() + interval '10 minutes', intentos_fallidos = 3 WHERE id = u;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('viejo'), now() + interval '1 hour');
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('nuevo'), now() + interval '1 hour');
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('nuevo'), 'en-claro'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('viejo'), pg_temp.hash_falso('b')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_restablecer(pg_temp.tk('nuevo'), pg_temp.hash_falso('b'));
+  IF (SELECT hash_contrasena FROM usuarios WHERE id = u) <> pg_temp.hash_falso('b')
+     OR (SELECT bloqueado_hasta FROM usuarios WHERE id = u) IS NOT NULL
+     OR (SELECT correo_verificado_en FROM usuarios WHERE id = u) IS NULL
+     OR EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u AND revocada_en IS NULL) THEN
+    RAISE EXCEPTION 'FALLO P205: estado tras restablecer';
+  END IF;
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('nuevo'), pg_temp.hash_falso('c')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('vencido'), now() - interval '1 minute');
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('vencido'), pg_temp.hash_falso('c')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('inventado'), pg_temp.hash_falso('c')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P205: % de 5 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P205: proc_auth_restablecer';
+END $$;
+
+-- P206. Verificar correo: el enlace confirma la cuenta una sola vez (NX011 después); pedirlo de nuevo
+--       anula el anterior; con el correo ya verificado no se crea enlace; un enlace de restablecer no
+--       sirve para verificar (NX011).
+DO $$ DECLARE c text := 'ver-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); r jsonb; ok int := 0; BEGIN
+  r := proc_auth_verificacion_solicitar(u, pg_temp.tk('v1'), now() + interval '1 day');
+  PERFORM proc_auth_verificacion_solicitar(u, pg_temp.tk('v2'), now() + interval '1 day');
+  IF (r->>'verificado')::boolean OR r->>'correo' <> c THEN RAISE EXCEPTION 'FALLO P206: %', r; END IF;
+  BEGIN PERFORM proc_auth_verificar_correo(pg_temp.tk('v1')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('rx'), now() + interval '1 hour');
+  BEGIN PERFORM proc_auth_verificar_correo(pg_temp.tk('rx')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_verificar_correo(pg_temp.tk('v2'));
+  IF (SELECT correo_verificado_en FROM usuarios WHERE id = u) IS NULL THEN RAISE EXCEPTION 'FALLO P206: no verificó'; END IF;
+  BEGIN PERFORM proc_auth_verificar_correo(pg_temp.tk('v2')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  r := proc_auth_verificacion_solicitar(u, pg_temp.tk('v3'), now() + interval '1 day');
+  IF NOT (r->>'verificado')::boolean OR EXISTS (SELECT 1 FROM tokens_verificacion WHERE token_hash = pg_temp.tk('v3')) THEN
+    RAISE EXCEPTION 'FALLO P206: creó enlace estando verificado';
+  END IF;
+  BEGIN PERFORM proc_auth_verificacion_solicitar(gen_random_uuid(), pg_temp.tk(), now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P206: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P206: verificar correo';
+END $$;
+
+-- P207. proc_auth_cuenta, proc_auth_hash_actual y proc_auth_contrasena_cambiar: cambiar la contraseña
+--       conserva la sesión actual y cierra las demás; un hash que no es Argon2id es NX010.
+DO $$ DECLARE u uuid := pg_temp.cuenta(); actual uuid; r jsonb; ok int := 0; BEGIN
+  PERFORM proc_auth_entrar(u, true, pg_temp.tk('otra'), NULL, '', now() + interval '1 day');
+  SELECT id INTO actual FROM sesiones WHERE usuario_id = u ORDER BY creada_en LIMIT 1;
+  r := proc_auth_cuenta(u);
+  IF (r->>'correo_verificado')::boolean OR NOT (r->>'tiene_contrasena')::boolean OR (r->>'sesiones_activas')::int <> 2 THEN
+    RAISE EXCEPTION 'FALLO P207: cuenta %', r;
+  END IF;
+  IF proc_auth_hash_actual(u)->>'hash' <> pg_temp.hash_falso() THEN RAISE EXCEPTION 'FALLO P207: hash actual'; END IF;
+  BEGIN PERFORM proc_auth_contrasena_cambiar(u, actual, 'en-claro'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  r := proc_auth_contrasena_cambiar(u, actual, pg_temp.hash_falso('nueva'));
+  IF (r->>'sesiones_cerradas')::int <> 1 OR (SELECT revocada_en FROM sesiones WHERE id = actual) IS NOT NULL
+     OR proc_sesion_resolver(pg_temp.tk('otra')) IS NOT NULL OR proc_auth_hash_actual(u)->>'hash' <> pg_temp.hash_falso('nueva') THEN
+    RAISE EXCEPTION 'FALLO P207: %', r;
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P207: aceptó un hash inválido'; END IF;
+  RAISE NOTICE 'OK P207: cuenta y cambio de contraseña';
+END $$;
+
+-- P208. Sesiones: una sesión vencida o revocada ya no resuelve (la API responde 401).
+DO $$ DECLARE u uuid := pg_temp.cuenta(); s uuid; BEGIN
+  PERFORM proc_auth_entrar(u, true, pg_temp.tk('vence'), NULL, '', now() + interval '1 day');
+  IF proc_sesion_resolver(pg_temp.tk('vence')) IS NULL THEN RAISE EXCEPTION 'FALLO P208: no resolvió'; END IF;
+  UPDATE sesiones SET expira_en = now() - interval '1 second' WHERE token_hash = pg_temp.tk('vence');
+  IF proc_sesion_resolver(pg_temp.tk('vence')) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P208: resolvió vencida'; END IF;
+  PERFORM proc_auth_entrar(u, true, pg_temp.tk('revoca'), NULL, '', now() + interval '1 day');
+  SELECT id INTO s FROM sesiones WHERE token_hash = pg_temp.tk('revoca');
+  PERFORM proc_sesion_revocar(u, s);
+  IF proc_sesion_resolver(pg_temp.tk('revoca')) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P208: resolvió revocada'; END IF;
+  RAISE NOTICE 'OK P208: sesiones vencidas y revocadas';
+END $$;

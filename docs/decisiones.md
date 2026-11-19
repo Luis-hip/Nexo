@@ -372,3 +372,23 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **No leídos.** Puntero por persona y conversación; quien entra a un equipo no ve como pendiente el historial anterior a su ingreso. Silenciar quita la conversación de la insignia de la barra.
 - **Búsqueda (CH-08).** `websearch_to_tsquery('spanish', …)` sobre el índice GIN que ya existía; el fragmento marca lo encontrado con «…» y la web lo resalta sin interpretar HTML. Las palabras vacías del español («nosotros», «de») no se pueden buscar solas.
 - **Fuera de esta tarea (anotado en `progreso.md`):** adjuntar archivos en el chat (la tabla lo permite; `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes, indicador de «escribiendo…», `pg-boss` y el despachador de eventos (comparten diseño con WhatsApp; se decidirán al juntar ambas partes).
+
+---
+
+## Fase 5 · Autenticación
+
+*Decisiones de la tarea 5.1. Prefijo `DEC-AUTH-` por la misma razón que `DEC-CHAT-`: la parte de WhatsApp se trabaja en paralelo.*
+
+## DEC-AUTH-1 · Fase 5.1: autenticación real
+
+**Fecha:** 2026-11-19 · **Fuente:** `03`, Fase 5, tarea 5.1 (AUTH-01 a AUTH-06, AUTH-11) y PF-02 · **Detalle:** `08_Procesos_BD.md`, sección «Fase 5 · Autenticación» (10 procesos de la `0030`).
+
+- **Argon2id con `@node-rs/argon2`** (binarios precompilados; no necesita compilar en Render ni en Windows) y no con `argon2`, que nombraba `01`. Mismo algoritmo, parámetros por defecto de OWASP (19 MiB, t=2, p=1). La contraseña solo existe en la API: la BD recibe el hash y rechaza lo que no sea `$argon2id$…`.
+- **Sesiones: el mismo mecanismo del acceso de desarrollo** (token opaco de 32 bytes en cookie `HttpOnly`, `SameSite=Lax`, `Secure` en producción; en la BD solo su SHA-256; 30 días). `app.nexo.lol` y `api.nexo.lol` son el mismo sitio, así que `Lax` basta. AUTH-11 ya existía.
+- **No revelar si un correo existe:** al entrar, la respuesta es la misma con correo inexistente, contraseña equivocada o cuenta bloqueada («El correo o la contraseña no son correctos. Si fallas varias veces seguidas, espera 15 minutos.»); sin cuenta se verifica contra un hash señuelo para que el tiempo no lo delate. «Recuperar» responde siempre 202 con el mismo texto. **El registro sí lo dice** (409 «Ese correo ya tiene una cuenta…»): evitarlo obliga a crear la cuenta solo después de confirmar el correo, y sin proveedor de correo en producción nadie podría registrarse. Se mitiga con el límite de 5 registros por minuto por IP. **Para revisión.**
+- **Límite de intentos:** en la BD, 5 fallos seguidos bloquean la cuenta 15 minutos; en la API, límite por IP (registro 5/min, entrar 10/min, recuperar 5/min, reenviar verificación 3/min). En `NODE_ENV=test` los límites por IP se multiplican por 50 para las pruebas.
+- **Correo sin verificar no bloquea la cuenta:** se puede usar la app y Ajustes → Cuenta pide confirmarlo. Restablecer la contraseña lo deja verificado.
+- **Enlaces de un solo uso:** restablecer vence en 1 hora y verificar en 24 horas; pedir otro anula el anterior. Restablecer cierra **todas** las sesiones; cambiar la contraseña desde Ajustes (pide la actual) cierra las **demás**.
+- **Correos.** `src/correo.ts` con tres proveedores: `consola` (local y pruebas; escribe el enlace en el registro de la API), `resend` (API HTTP de Resend, `RESEND_API_KEY`) y `ninguno`. En producción el servidor **no arranca** con `consola` (los enlaces llevan tokens) ni con `resend` sin clave; sin clave usa `ninguno`: se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo. El remitente es `CORREO_REMITENTE` (por defecto `no-responder@nexo.lol`; Resend exige verificar el dominio).
+- **Semilla:** todas las personas entran con «Nexo-2026» (hash en `semilla.sql`; la semilla nunca se carga en producción). El acceso de desarrollo sigue, ahora plegado bajo el formulario de AUTH-02 y solo si la API lo tiene activo.
+- **Fuera de esta tarea:** 2FA (AUTH-07, «solo si hay tiempo» en `03`), cambiar el correo, iniciar sesión con Google (`usuarios.google_sub` existe) y 5.2 a 5.5.

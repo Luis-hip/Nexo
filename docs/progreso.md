@@ -219,3 +219,32 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
 - [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
 - [ ] Las decisiones del chat usan el prefijo `DEC-CHAT-` para no chocar con las de WhatsApp; renumerar al juntar si se prefiere.
+
+## Fase 5 · Autenticación, QA y permisos
+
+**Estado:** la tarea **5.1 (autenticación real)** está construida en la rama `feat/fase-5-auth`, que sale de `feat/fase-4-chat`. 5.2 a 5.5 siguen pendientes. **No se despliega todavía:** se acordó llevar a producción en orden chat → WhatsApp → Fase 5, porque las migraciones se aplican en orden (`checkOrder`) y la Fase 5 usa `0030` mientras WhatsApp usa `0020`–`0029`. Pruebas de procesos desde `P200`.
+
+### Hecho (5.1)
+
+- **Base de datos.** Migración `0030_procesos_autenticacion.sql` con **10 procesos `proc_auth_*`** (en `docs/08`, sección «Fase 5 · Autenticación»). Sin cambios de tablas: `usuarios`, `sesiones` y `tokens_verificacion` ya tenían lo necesario, así que `tipos.ts` no cambia.
+- **API.** `rutas/autenticacion.ts`: `POST /auth/registro`, `/auth/entrar`, `/auth/recuperar`, `/auth/restablecer`, `/auth/verificar`, `/auth/verificacion`, `/auth/contrasena` y `GET /auth/cuenta`. Argon2id, bloqueo de 15 minutos tras 5 fallos, límite por IP y respuestas que no revelan si un correo existe (salvo el registro: DEC-AUTH-1). Correos en `src/correo.ts` (consola en local, Resend en producción). `POST /salir` ya existía.
+- **Web.** AUTH-01 `/registro` (lleva a la bienvenida), AUTH-02 `/entrar` (correo y contraseña; el acceso de desarrollo queda plegado debajo y solo si la API lo tiene), AUTH-03 `/recuperar`, AUTH-04 `/recuperar/enviado`, AUTH-05 `/restablecer`, AUTH-06 `/verificar` y Ajustes → Cuenta con el estado del correo, «Enviar enlace» y cambio de contraseña. Los formularios validan con los mismos esquemas Zod que la API (`packages/shared/src/autenticacion.ts`). Cerrar sesión cierra también la conexión de tiempo real del chat. 2FA sigue en «Próximamente».
+- **Pruebas.** 9 pruebas SQL (**P200–P208**; `db:test:procesos` da 138 OK) y 11 de la API (`autenticacion.test.ts`: registro, duplicado, verificar una sola vez, mismo mensaje con correo inexistente o contraseña mala, bloqueo, recuperar sin revelar, restablecer cierra sesiones, cambiar contraseña, salir invalida la sesión, y la configuración del correo en producción). Totales locales: 194 `shared`, 171 API, 97 web.
+- **Verificado en el navegador (local):** registro con validación en el cliente, llegada a la bienvenida, enlace de verificación tomado del registro de la API → «Correo verificado» y Ajustes → Cuenta en «Verificado», cerrar sesión, contraseña equivocada con el mensaje genérico y entrada con la correcta.
+- **Despliegue preparado:** `render.yaml` agrega `RESEND_API_KEY` (`sync: false`) y `CORREO_REMITENTE`; `.env.example` documenta `CORREO_PROVEEDOR`. `DEV_LOGIN_ENABLED=false` en producción ya lo exigía el servidor desde la Fase 0.
+
+### Criterio de la Fase 5
+
+- [x] Registrar, entrar, salir y recuperar contraseña con una cuenta real (local y en pruebas automáticas; **en producción falta** desplegar y configurar el correo).
+- [x] `DEV_LOGIN_ENABLED` en `false` en producción y el servidor lo exige (desde la Fase 0; `render.yaml`).
+- [ ] Prueba de la matriz completa (5.3).
+- [ ] `EXPLAIN` de las 7 consultas en `docs/rendimiento.md` (5.4).
+- [ ] 3 flujos extremo a extremo en la CI (5.4).
+- [ ] CI en verde y tag `fase-5`.
+
+### Pendiente
+
+- [ ] **Cuenta de Resend** (o el proveedor que elijan) y verificar el dominio `nexo.lol` para enviar desde `no-responder@nexo.lol`; poner `RESEND_API_KEY` en Render. Sin eso, en producción se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo. Es una cuenta nueva: la crea una persona del equipo.
+- [ ] Revisar DEC-AUTH-1, en especial que el **registro revele** si un correo ya tiene cuenta.
+- [ ] 2FA (AUTH-07), cambiar el correo e inicio con Google: fase posterior.
+- [ ] 5.2 validaciones de todos los formularios, 5.3 QA de permisos, 5.4 rendimiento, accesibilidad y extremo a extremo, 5.5 capturas.
