@@ -15,6 +15,9 @@ const publico = () => import('./pages/publico');
 const auth = () => import('./pages/auth');
 const equipos = () => import('./pages/equipos');
 const equipo = () => import('./pages/equipo');
+const sprints = () => import('./pages/equipo/sprints');
+const vistas = () => import('./pages/equipo/vistas');
+const ajustes = () => import('./pages/ajustes');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -118,10 +121,22 @@ const rutas: RouteObject[] = [
               (m) => m.EquiposPersonal,
             ),
           },
-          { path: 'app/personal/reportes', element: proximamente('Reportes personales', 3) },
+          {
+            path: 'app/personal/reportes',
+            lazy: diferida(
+              () => import('./pages/personal/Reportes'),
+              (m) => m.ReportesPersonales,
+            ),
+          },
           { path: 'app/equipos/nuevo', lazy: diferida(equipos, (m) => m.CrearEquipo) },
           { path: 'app/equipos/unirse', lazy: diferida(equipos, (m) => m.Unirse) },
-          { path: 'app/notificaciones', element: proximamente('Notificaciones', 3) },
+          {
+            path: 'app/notificaciones',
+            lazy: diferida(
+              () => import('./pages/Notificaciones'),
+              (m) => m.Notificaciones,
+            ),
+          },
           {
             path: 'app/e/:equipo',
             Component: EquipoGuard,
@@ -147,13 +162,13 @@ const rutas: RouteObject[] = [
                     },
                   },
                   {
-                    path: 'triaje',
+                    path: 'votacion',
                     lazy: async () => {
-                      const { Triaje } = await equipo();
+                      const { Votacion } = await equipo();
                       return {
                         element: (
                           <Requiere permiso="ver_sprints">
-                            <Triaje />
+                            <Votacion />
                           </Requiere>
                         ),
                       };
@@ -163,24 +178,113 @@ const rutas: RouteObject[] = [
                 ],
               },
               {
-                path: 'equipo',
+                // Fase 3.3: sprints y retrospectiva (EQ-09 a EQ-13). Los invitados no los ven.
+                path: 'sprints',
                 lazy: async () => {
-                  const { Miembros } = await equipo();
+                  const { SprintsLayout } = await sprints();
                   return {
                     element: (
-                      <Requiere permiso="ver_miembros">
-                        <Miembros />
+                      <Requiere permiso="ver_sprints">
+                        <SprintsLayout />
                       </Requiere>
                     ),
                   };
                 },
+                children: [
+                  { index: true, element: <Navigate to="activo" replace /> },
+                  { path: 'activo', lazy: diferida(sprints, (m) => m.SprintActivo) },
+                  { path: 'planear', lazy: diferida(sprints, (m) => m.PlanearSprint) },
+                  {
+                    path: 'cerrar',
+                    lazy: async () => {
+                      const { CerrarSprint } = await sprints();
+                      return {
+                        element: (
+                          <Requiere permiso="gestionar_sprints">
+                            <CerrarSprint />
+                          </Requiere>
+                        ),
+                      };
+                    },
+                  },
+                  { path: 'historial', lazy: diferida(sprints, (m) => m.HistorialSprints) },
+                  {
+                    path: 'historial/:sprintId',
+                    lazy: diferida(sprints, (m) => m.SprintHistorico),
+                  },
+                  { path: 'retro', lazy: diferida(sprints, (m) => m.RetroRuta) },
+                  { path: 'retro/:sprintId', lazy: diferida(sprints, (m) => m.RetroRuta) },
+                ],
               },
+              ...(
+                [
+                  ['equipo', 'Miembros'],
+                  // Fase 3.5: liderazgo y elección (AD-07 a AD-09), ajustes (AD-06) y ficha (AD-04).
+                  ['equipo/eleccion', 'Liderazgo'],
+                  ['equipo/ajustes', 'AjustesEquipo'],
+                  ['equipo/:miembroId', 'MiembroDetalle'],
+                ] as const
+              ).map(([path, nombre]) => ({
+                path,
+                lazy: async () => {
+                  const Pantalla = (await equipo())[nombre];
+                  return {
+                    element: (
+                      <Requiere permiso="ver_miembros">
+                        <Pantalla />
+                      </Requiere>
+                    ),
+                  };
+                },
+              })),
+              // Fase 3.4: vistas secundarias del equipo (EQ-14 a EQ-20).
+              ...(
+                [
+                  ['calendario', 'CalendarioEquipo', 'ver_calendario'],
+                  ['reportes', 'Reportes', 'ver_reportes'],
+                  ['actividad', 'Actividad', 'ver_actividad'],
+                  ['archivos', 'Archivos', 'ver_archivos'],
+                  ['plantillas', 'Plantillas', 'usar_plantilla'],
+                ] as const
+              ).map(([path, nombre, permiso]) => ({
+                path,
+                lazy: async () => {
+                  const Pantalla = (await vistas())[nombre];
+                  return {
+                    element: (
+                      <Requiere permiso={permiso}>
+                        <Pantalla />
+                      </Requiere>
+                    ),
+                  };
+                },
+              })),
               { path: 'chat/*', element: proximamente('Chat del equipo', 4) },
               { path: 'whatsapp/*', element: proximamente('WhatsApp', 4) },
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],
           },
-          { path: 'ajustes/*', element: proximamente('Ajustes', 3) },
+          {
+            // Fase 3.6: ajustes de la persona (PF-01 a PF-09).
+            path: 'ajustes',
+            lazy: diferida(ajustes, (m) => m.AjustesLayout),
+            children: [
+              { index: true, element: <Navigate to="perfil" replace /> },
+              ...(
+                [
+                  ['perfil', 'Perfil'],
+                  ['cuenta', 'Cuenta'],
+                  ['apariencia', 'Apariencia'],
+                  ['notificaciones', 'Notificaciones'],
+                  ['whatsapp', 'WhatsAppPersonal'],
+                  ['privacidad', 'Privacidad'],
+                  ['equipos', 'MisEquipos'],
+                  ['atajos', 'Atajos'],
+                  ['ayuda', 'Ayuda'],
+                ] as const
+              ).map(([path, nombre]) => ({ path, lazy: diferida(ajustes, (m) => m[nombre]) })),
+            ],
+          },
         ],
       },
     ],

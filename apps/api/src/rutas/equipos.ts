@@ -34,23 +34,22 @@ export const rutasEquipos: FastifyPluginAsync<{ db: BaseDatos }> = async (app, {
   app.get('/equipos/:equipoId/miembros', async (req) => {
     const { ctx } = await contexto(req);
     requierePermiso(ctx, 'ver_miembros');
-    return servicio.listarMiembros(db, ctx.equipoId);
+    return servicio.listarMiembros(db, ctx);
   });
 
   app.get('/equipos/:equipoId/invitaciones', async (req) => {
     const { ctx } = await contexto(req);
     requierePermiso(ctx, 'invitar_personas');
-    return servicio.listarInvitaciones(db, ctx.equipoId);
+    return servicio.listarInvitaciones(db, ctx);
   });
 
   app.post('/equipos/:equipoId/invitaciones', async (req, res) => {
-    const { usuario, ctx } = await contexto(req);
+    const { ctx } = await contexto(req);
     requierePermiso(ctx, 'invitar_personas');
     requiereEquipoActivo(ctx);
     const invitacion = await servicio.crearInvitacion(
       db,
       ctx,
-      usuario,
       validar(esquemaCrearInvitacion, req.body),
     );
     return res.status(201).send(invitacion);

@@ -7,6 +7,7 @@ import {
   type PrioridadTarea,
   type Semaforo,
 } from './tareas';
+import type { ResumenVotacion } from './votacion';
 
 export const ROLES_EQUIPO = ['lider', 'integrante', 'invitado'] as const;
 export type RolEquipo = (typeof ROLES_EQUIPO)[number];
@@ -150,19 +151,20 @@ export function normalizarCodigoInvitacion(entrada: string): string {
 // Tareas de equipo
 // ---------------------------------------------------------------------------------------------
 
-export const DESTINOS_TAREA = ['tablero', 'backlog'] as const;
-
-/** Cuerpo de POST /equipos/:id/tareas: el líder crea; el integrante propone (va a triaje). */
+/**
+ * Cuerpo de POST /equipos/:id/tareas (EQ-07, solo el líder): la tarea entra en votación con sus
+ * subtareas en una sola operación (DEC-024, V-10). También es el cuerpo de …/reformular.
+ */
 export const esquemaCrearTareaEquipo = z.object({
   titulo,
   descripcion: descripcion.default(''),
   prioridad: z.enum(PRIORIDADES_TAREA).default('media'),
   vence_en: fecha.nullable().default(null),
   etiquetas: etiquetas.default([]),
-  /** Solo el líder: en una propuesta se ignoran. */
+  /** El líder puede asignar al proponer (V-11); el responsable acepta o rechaza la asignación. */
   responsable_id: id.nullable().default(null),
-  /** Solo el líder: al tablero (queda «Aceptada», en el sprint activo si lo hay) o al backlog. */
-  destino: z.enum(DESTINOS_TAREA).default('backlog'),
+  /** Pasos de la tarea; se crean junto con la propuesta. */
+  subtareas: z.array(titulo).max(30, 'Una propuesta admite hasta 30 subtareas.').default([]),
 });
 export type CrearTareaEquipo = z.infer<typeof esquemaCrearTareaEquipo>;
 
@@ -208,28 +210,6 @@ export const esquemaMoverTarea = z.object({
 });
 export type MoverTarea = z.infer<typeof esquemaMoverTarea>;
 
-/** Cuerpo de POST …/triaje (EQ-05): decisión del líder sobre una propuesta o una rechazada. */
-export const esquemaTriaje = z.discriminatedUnion('accion', [
-  z.object({
-    accion: z.literal('aceptar'),
-    version: z.number().int().positive(),
-    /** Al tablero (queda «Aceptada», en el sprint activo si lo hay) o al backlog. */
-    destino: z.enum(DESTINOS_TAREA).default('tablero'),
-    responsable_id: id.nullable().default(null),
-    vence_en: fecha.nullable().optional(),
-  }),
-  z.object({ accion: z.literal('rechazar'), version: z.number().int().positive(), motivo }),
-  z.object({ accion: z.literal('backlog'), version: z.number().int().positive() }),
-  z.object({
-    accion: z.literal('pedir_cambios'),
-    version: z.number().int().positive(),
-    comentario: z.string().trim().min(1, 'Escribe qué cambios pides.').max(500),
-  }),
-]);
-export type Triaje = z.infer<typeof esquemaTriaje>;
-/** Lo que envía el cliente: los campos con valor por defecto son opcionales. */
-export type TriajeEntrada = z.input<typeof esquemaTriaje>;
-
 /** Cuerpo de POST …/asignar (el líder asigna o quita al responsable). */
 export const esquemaAsignar = z.object({
   version: z.number().int().positive(),
@@ -265,7 +245,9 @@ export interface TareaEquipo {
   progreso: number;
   vence_en: string | null;
   motivo: string | null;
-  rechazo_por: 'lider' | 'responsable' | null;
+  /** `votacion`: rechazada por mayoría (DEC-024). `lider`/`responsable`: datos anteriores a la Fase 2.5. */
+  rechazo_por: 'lider' | 'responsable' | 'votacion' | null;
+  /** Obsoleta desde la Fase 2.5 (ya no hay «pedir cambios»); se conserva por los datos viejos. */
   cambios_pedidos: string | null;
   resultado: 'a_tiempo' | 'con_retraso' | null;
   semaforo: Semaforo | null;
@@ -284,6 +266,8 @@ export interface TareaEquipo {
   subtareas_total: number;
   subtareas_hechas: number;
   comentarios_total: number;
+  /** Resumen de la votación (solo propuestas, y nunca para invitados). */
+  votacion?: ResumenVotacion | null;
 }
 
 export interface ComentarioEquipo {
@@ -315,5 +299,13 @@ export interface TareaEquipoDetalle extends TareaEquipo {
 export interface ConteosTareas {
   tablero: number;
   backlog: number;
-  triaje: number;
+  /** Propuestas abiertas en votación. */
+  votacion: number;
 }
+
+/** Respuesta de los procesos que crean o cambian una propuesta. */
+export const esquemaRefTarea = z.object({
+  id: z.string(),
+  codigo: z.number().int(),
+  estado: z.enum(ESTADOS_TAREA),
+});

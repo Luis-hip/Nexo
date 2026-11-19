@@ -287,13 +287,15 @@ export function Tablero() {
             titulo="El tablero no tiene tareas"
             texto={
               esLider
-                ? 'Crea una tarea o trae tareas desde el backlog.'
-                : 'Propón una tarea para que el líder la revise.'
+                ? 'Propón una tarea para que el equipo la vote, o trae tareas desde el backlog.'
+                : 'Las tareas llegan al tablero cuando el equipo acepta las propuestas del líder.'
             }
             accion={
-              <Boton variante="primario" onClick={acc.nuevaTarea}>
-                {esLider ? 'Nueva tarea' : 'Proponer tarea'}
-              </Boton>
+              esLider ? (
+                <Boton variante="primario" onClick={acc.nuevaTarea}>
+                  Nueva propuesta
+                </Boton>
+              ) : undefined
             }
           />
         }

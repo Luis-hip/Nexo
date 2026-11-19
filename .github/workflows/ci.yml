@@ -41,6 +41,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks revisa todo el historial
 
       - uses: pnpm/action-setup@v4
 
@@ -48,6 +50,22 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      - name: Buscar secretos en el historial (gitleaks)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz | tar -xz gitleaks
+          set +e
+          ./gitleaks detect --source . --config .gitleaks.toml --redact --no-banner \
+            --report-format json --report-path gitleaks.json 2> gitleaks.log
+          codigo=$?
+          set -e
+          cat gitleaks.log
+          if [ "$codigo" -ne 0 ]; then
+            # Cada hallazgo como anotación del PR (archivo, línea, regla y commit; el valor va redactado).
+            jq -r '.[] | "::error file=\(.File),line=\(.StartLine)::gitleaks \(.RuleID) en el commit \(.Commit[0:7])"' gitleaks.json 2>/dev/null || true
+            tail -n 3 gitleaks.log | sed 's/^/::error::gitleaks: /'
+            exit "$codigo"
+          fi
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
@@ -57,6 +75,12 @@ jobs:
 
       - name: Pruebas SQL (deben salir 11 OK)
         run: pnpm db:test
+
+      - name: Pruebas de los procesos de la BD (deben salir 103 OK)
+        run: pnpm db:test:procesos
+
+      - name: Procesos de la BD documentados en docs/08
+        run: pnpm procesos:verificar
 
       - name: Pruebas SQL con psql (forma literal del plan, 0.4)
         run: |

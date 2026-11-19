@@ -16,17 +16,20 @@ import {
   Vacio,
   useColorDe,
 } from '@/components/ui';
-import { useTareas } from '@/lib/consultas';
+import { useActualizarTarea, useTareas } from '@/lib/consultas';
 import { diasHasta, relativo } from '@/lib/fechas';
 import { COLUMNAS_PERSONAL, formaDeEstado } from '@/lib/tareas';
+import { mensajeDeError } from '@/lib/api';
+import { toast } from '@/lib/toasts';
 
 const CLAVE_TARJETA = 'nexo.tarjeta-equipo';
 
-/** PER-01: inicio personal, con el Hill Chart personal en solo lectura (arrastrar: Fase 3). */
+/** PER-01: inicio personal, con el Hill Chart personal (se arrastra para actualizar el avance). */
 export function InicioPersonal() {
   const yo = useSesion();
   const acc = useAcciones();
   const consulta = useTareas();
+  const actualizar = useActualizarTarea();
   const colorDe = useColorDe();
   const { color } = colorDe(null);
   const [descartada, setDescartada] = useState(
@@ -132,6 +135,19 @@ export function InicioPersonal() {
                     }))}
                     onAbrir={acc.abrirTarea}
                     etiqueta="Mi Hill Chart personal"
+                    // Una tarea completada siempre está al 100 %.
+                    puedeMover={(id) => tareas.find((t) => t.id === id)?.estado !== 'completada'}
+                    onMover={(id, progreso) => {
+                      const t = tareas.find((x) => x.id === id);
+                      if (!t) return;
+                      actualizar.mutate(
+                        { id, version: t.version, progreso },
+                        {
+                          onSuccess: () => toast(`«${t.titulo}» quedó en ${progreso} %.`),
+                          onError: (e) => toast(mensajeDeError(e), 'danger'),
+                        },
+                      );
+                    }}
                   />
                 </div>
                 <p className="mt-2 text-sm text-muted tabular">

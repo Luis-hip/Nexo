@@ -66,7 +66,7 @@ Revisa **siempre** el resultado contra las tablas: la IA puede omitir arcos o in
 
 ## B.2 Autores
 
-Luis Ángel Ortiz Hipólito; Carlos [apellidos]; Isac [apellidos]; Jova [apellidos]. *(Completar nombres completos; dudas sobre «Carlos»/«Carlo» en D-02.)*
+Luis Ángel Ortiz Hipólito; Carlos [apellidos]; Isac [apellidos]; Jova [apellidos]. *(Completar nombres completos.)*
 
 ## B.3 Adscripciones
 
@@ -147,11 +147,14 @@ Figuras 3 a 5: panel de WhatsApp (WA-01), reglas de eventos (WA-05) y vista prev
 
 | Tipo | Elemento | Significado |
 |---|---|---|
-| Lugar | `Propuesta` | Un integrante propuso la tarea (marca inicial) |
-| Transición | `Aceptar (líder)` | El líder acepta en triaje |
-| Transición | `Rechazar (líder)` | El líder rechaza la propuesta |
-| Lugar | `Rechazada` | Estado final de rechazo |
-| Lugar | `Asignada` | Con responsable, pendiente de respuesta |
+| Lugar | `Propuesta` | El **líder** propuso la tarea con sus subtareas (marca inicial) |
+| Transición | `Votar (integrantes)` | Los integrantes emiten su voto |
+| Lugar | `En votación` | Esperando mayoría |
+| Transición | `Aceptar por mayoría` | Más de la mitad de los integrantes acepta |
+| Transición | `Rechazar por mayoría` | Más de la mitad rechaza |
+| Lugar | `Rechazada` | Estado final del rechazo (el líder puede reformular) |
+| Lugar | `Aceptada` | Disponible para el sprint |
+| Lugar | `Asignada` | Con responsable (parte de `Aceptada`), pendiente de respuesta |
 | Transición | `Aceptar asignación` | El responsable acepta |
 | Lugar | `En curso` | El responsable trabaja |
 | Transición | `Entregar` | El responsable envía a revisión/entrega |
@@ -185,12 +188,13 @@ Figuras 3 a 5: panel de WhatsApp (WA-01), reglas de eventos (WA-05) y vista prev
 | `Vencer` | `Evento recibido` | «Tarea vencida» |
 | `Entregar` | `Evento recibido` | «Entrega a tiempo» |
 | `Entregar tarde` | `Evento recibido` | «Entrega tardía» |
-| `Rechazar (líder)` | `Evento recibido` | «Propuesta rechazada» |
+| `Rechazar por mayoría` | `Evento recibido` | «Propuesta rechazada» |
+| `Aceptar por mayoría` | `Evento recibido` | «Propuesta aceptada» |
 
 #### B.9.4.4 Escenarios que debe recorrer la red
 
-1. **Tarea rechazada:** `Propuesta → Rechazar (líder) → Rechazada`; mensaje «Propuesta rechazada»; `Evaluar reglas` → `Mensaje generado → Encolar → En cola → Enviar (líder) → Enviado → Confirmar estado`.
-2. **Entrega a tiempo:** `Propuesta → Aceptar → Asignada → Aceptar asignación → En curso → Entregar → Entregada → Hecha`; mensaje «Entrega a tiempo».
+1. **Tarea rechazada:** `Propuesta → Votar (integrantes) → En votación → Rechazar por mayoría → Rechazada`; mensaje «Propuesta rechazada»; `Evaluar reglas` → `Mensaje generado → Encolar → En cola → Enviar (líder) → Enviado → Confirmar estado`.
+2. **Entrega a tiempo:** `Propuesta → Votar (integrantes) → En votación → Aceptar por mayoría → Aceptada → Asignada → Aceptar asignación → En curso → Entregar → Entregada → Hecha`; mensaje «Entrega a tiempo».
 3. **Entrega tardía:** `… En curso → Vencer → Vencida → Entregar tarde → Hecha`; mensajes «Tarea vencida» y luego «Entrega tardía».
 4. **Sin consentimiento:** `Evaluar reglas → Sin regla / sin consentimiento` (no se avisa a esa persona).
 
