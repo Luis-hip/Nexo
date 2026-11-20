@@ -29,12 +29,14 @@ export const proveedorSimulado: ProveedorWhatsApp = {
   },
 };
 
-const GRAPH = 'https://graph.facebook.com/v21.0';
-
 /** Proveedor de la API Cloud de Meta (grupos o directo, según el aviso). */
-export function proveedorCloudApi(token: string, phoneId: string): ProveedorWhatsApp {
+export function proveedorCloudApi(
+  token: string,
+  phoneId: string,
+  graph = 'https://graph.facebook.com/v21.0',
+): ProveedorWhatsApp {
   const publicar = async (cuerpo: object) => {
-    const r = await fetch(`${GRAPH}/${encodeURIComponent(phoneId)}/messages`, {
+    const r = await fetch(`${graph}/${encodeURIComponent(phoneId)}/messages`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', ...cuerpo }),
@@ -84,7 +86,11 @@ export function proveedorCloudApi(token: string, phoneId: string): ProveedorWhat
 export function proveedorPara(config: Config, aviso: AvisoParaEnviar): ProveedorWhatsApp {
   if (config.WHATSAPP_PROVIDER !== 'real' || aviso.proveedor === 'simulado')
     return proveedorSimulado;
-  return proveedorCloudApi(config.WHATSAPP_TOKEN!, config.WHATSAPP_PHONE_ID!);
+  return proveedorCloudApi(
+    config.WHATSAPP_TOKEN!,
+    config.WHATSAPP_PHONE_ID!,
+    config.WHATSAPP_API_URL,
+  );
 }
 
 /**

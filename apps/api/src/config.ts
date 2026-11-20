@@ -44,6 +44,8 @@ const esquemaEntorno = z.object({
   WHATSAPP_PHONE_ID: textoOpcional,
   WHATSAPP_APP_SECRET: textoOpcional,
   WHATSAPP_VERIFY_TOKEN: textoOpcional,
+  /** URL base de la API Graph de Meta. Solo se cambia en pruebas (un servidor que imita a Meta). */
+  WHATSAPP_API_URL: z.string().url().default('https://graph.facebook.com/v21.0'),
 });
 
 export type Config = z.infer<typeof esquemaEntorno>;
@@ -91,6 +93,10 @@ function problemasDeProduccion(entorno: Record<string, string | undefined>, c: C
     ] as const) {
       if (!c[k]) problemas.push(`falta ${k} (WHATSAPP_PROVIDER=real)`);
     }
+  }
+  // El token de Meta solo viaja a Meta.
+  if (!c.WHATSAPP_API_URL.startsWith('https://graph.facebook.com/')) {
+    problemas.push('WHATSAPP_API_URL debe ser la API de Meta (https://graph.facebook.com/…)');
   }
   return problemas;
 }
