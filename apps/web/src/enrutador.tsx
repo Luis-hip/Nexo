@@ -18,6 +18,7 @@ const equipo = () => import('./pages/equipo');
 const sprints = () => import('./pages/equipo/sprints');
 const vistas = () => import('./pages/equipo/vistas');
 const ajustes = () => import('./pages/ajustes');
+const chat = () => import('./pages/equipo/chat');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -49,23 +50,20 @@ const rutas: RouteObject[] = [
           { path: 'entrar', lazy: diferida(auth, (m) => m.Entrar) },
           { path: 'sesion-expirada', lazy: diferida(auth, (m) => m.SesionExpirada) },
           { path: 'bienvenida/:paso', lazy: diferida(auth, (m) => m.Bienvenida) },
-          // Autenticación real: Fase 5.
-          ...(
-            [
-              ['registro', 'Crea tu cuenta'],
-              ['recuperar', 'Recupera tu contraseña'],
-              ['recuperar/enviado', 'Revisa tu correo'],
-              ['restablecer', 'Restablece tu contraseña'],
-              ['verificar', 'Verifica tu correo'],
-              ['2fa', 'Verificación en dos pasos'],
-            ] as const
-          ).map(([path, titulo]): RouteObject => ({
-            path,
+          // Fase 5.1: autenticación real (AUTH-01 a AUTH-06).
+          { path: 'registro', lazy: diferida(auth, (m) => m.Registro) },
+          { path: 'recuperar', lazy: diferida(auth, (m) => m.Recuperar) },
+          { path: 'recuperar/enviado', lazy: diferida(auth, (m) => m.RecuperarEnviado) },
+          { path: 'restablecer', lazy: diferida(auth, (m) => m.Restablecer) },
+          { path: 'verificar', lazy: diferida(auth, (m) => m.Verificar) },
+          {
+            // 2FA (AUTH-07): fase posterior.
+            path: '2fa',
             lazy: async () => {
               const { AuthProximamente } = await auth();
-              return { element: <AuthProximamente titulo={titulo} /> };
+              return { element: <AuthProximamente titulo="Verificación en dos pasos" /> };
             },
-          })),
+          },
         ],
       },
       // El enlace que comparte el líder: lleva a la vista previa de la invitación.
@@ -259,7 +257,10 @@ const rutas: RouteObject[] = [
                   };
                 },
               })),
-              { path: 'chat/*', element: proximamente('Chat del equipo', 4) },
+              // Fase 4 · Chat (CH-01 a CH-10). Los invitados entran: ven el canal de Invitados.
+              { path: 'chat', lazy: diferida(chat, (m) => m.Chat) },
+              { path: 'chat/tarea/:tareaId', lazy: diferida(chat, (m) => m.ChatDeTarea) },
+              { path: 'chat/:conversacionId', lazy: diferida(chat, (m) => m.Chat) },
               { path: 'whatsapp/*', element: proximamente('WhatsApp', 4) },
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],

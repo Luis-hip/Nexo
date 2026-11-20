@@ -14,6 +14,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ErrorApi } from './api';
 import { aplicarPreferencias } from './apariencia';
+import { cerrarTiempoRealChat } from './consultasChat';
 
 /** Claves de caché de TanStack Query. */
 export const claves = {
@@ -153,7 +154,11 @@ export function useSalir() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api<void>('/salir', { metodo: 'POST' }),
-    onSettled: () => qc.clear(),
+    onSettled: () => {
+      // La conexión de tiempo real era de esta sesión: se cierra con ella.
+      cerrarTiempoRealChat();
+      qc.clear();
+    },
   });
 }
 

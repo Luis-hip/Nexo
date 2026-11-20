@@ -16,9 +16,10 @@
   --signal-warn: #d97706;
   --signal-danger: #dc2626;
   --signal-info: #2563eb;
-  /* Variantes de texto: ajustadas para alcanzar 4.5:1 sobre fondos claros */
-  --signal-ok-text: #15803d;
-  --signal-warn-text: #b45309;
+  /* Variantes de texto: ajustadas para alcanzar 4.5:1 sobre fondos claros, también sobre las
+     insignias teñidas (bg-ok/10, bg-warn/12; revisión con axe de la Fase 5.4) */
+  --signal-ok-text: #166534;
+  --signal-warn-text: #92400e;
   --signal-danger-text: #b91c1c;
   --signal-info-text: #1d4ed8;
   --shadow-soft: 0 1px 2px rgb(17 24 39 / 0.06), 0 1px 3px rgb(17 24 39 / 0.08);

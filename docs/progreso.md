@@ -191,3 +191,64 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [x] PR `Dev_Luis` → `dev` → `main` de las Fases 2.5 y 3 (pendiente de la Fase 2.5): hecho el 2026-11-18.
 - [ ] Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
 - [ ] Revisión **visual** por una persona del tablero, sprints y ajustes en claro/oscuro y móvil (Fases 1 a 3). La verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
+
+## Fase 4 · Chat
+
+**Estado:** la parte del chat (tarea 4.1) está construida en la rama `feat/fase-4-chat` (sale de `Dev_Luis`). La parte de WhatsApp (4.2, 4.3, PF-05, FALT-03/04 y consentimiento) la hace otro integrante en paralelo en su rama. El tag `fase-4` se crea al juntar ambas partes. Reservas para no chocar: migraciones `0014`–`0019` y pruebas de procesos `P104`–`P149` para el chat; WhatsApp usa pruebas desde `P150` y, como el chat y la Fase 5 se despliegan antes (DEC-AUTH-2), migraciones desde `0031`.
+
+### Hecho
+
+- **Base de datos.** Migraciones `0014_procesos_chat_lectura.sql`, `0015_procesos_chat_envio.sql` y `0016_procesos_chat_conversaciones.sql` con **16 procesos `proc_chat_*`** (todos en `docs/08`, sección «Fase 4 · Chat») y una sola regla de acceso, `fn_chat_puede`. No hubo cambios de tablas (solo el índice `ix_menciones_usuario`), así que `apps/api/src/db/tipos.ts` no cambia. Quedan libres `0017`–`0019`.
+- **API.** `rutas/chat.ts` y `repositorios/chat.ts`: conversaciones, mensajes paginados por cursor, enviar (con `id_cliente` para no duplicar), hilos, reacciones, menciones con notificación, lecturas, fijar y silenciar conversaciones, fijar y eliminar mensajes (moderación del líder), mensajes directos, chat por tarea, búsqueda y convertir un mensaje en tarea.
+- **Tiempo real.** `src/tiempoReal.ts`: Socket.IO en el mismo servidor, autenticado con la cookie de sesión; salas por conversación que decide el servidor; la audiencia se recalcula en cada emisión. Ver DEC-CHAT-1.
+- **Web.** `/app/e/:equipo/chat` y `/chat/:conversacion` con CH-01 (lista con no leídos y menciones), CH-02 (canal del equipo), CH-03 (chat de tarea: botón «Abrir el chat de la tarea» en el detalle y ruta `chat/tarea/:tareaId`), CH-04 y CH-07 (mensajes directos y «Nueva»), CH-05 (hilo en panel), CH-06 (fijados), CH-08 (búsqueda con resaltado), CH-09 (convertir en tarea, solo líder) y CH-10 (canal de Invitados). Insignia de no leídos junto a «Chat» en la barra lateral. Menciones con sugerencias al escribir `@`.
+- **Pruebas.** 26 pruebas SQL de procesos (**P104–P129**; `pnpm db:test:procesos` da 129 OK), 9 de la API en `chat.test.ts` (incluida la de tiempo real con tres sockets: **Carlos y Daniela reciben el mensaje del equipo y Mariana, la invitada, no**; ella sí recibe el del canal de Invitados) y 4 de la web (`menciones.test.ts`). Totales locales: 194 `shared`, 160 API, 97 web; `procesos:verificar` cuenta 113 procesos. Contadores actualizados en `apps/api/scripts/pruebas-procesos.ts` (ahora por rangos, uno por línea, para que la rama de WhatsApp agregue el suyo sin conflicto) y en el nombre del paso de `.github/workflows/ci.yml`.
+- **Verificado en el navegador** con la semilla (como Carlos): canal del equipo, mención a Valeria con sugerencia y resaltado, un mensaje de Valeria enviado por la API desde fuera **apareció sin recargar** y «Leído por» se actualizó solo; respuesta en un hilo con el panel lateral a 1280 px; vista de una columna a 800 px. Sin errores en la consola. **Local con PGlite**; la CI lo comprueba con PostgreSQL 16 (aún no corre: no se ha hecho push).
+
+### Criterio de la Fase 4 que cubre esta parte
+
+- [x] «Dos navegadores con distintos usuarios intercambian mensajes en tiempo real; un invitado **no** recibe mensajes del chat del equipo (prueba)»: probado de forma automática en `chat.test.ts` con tres conexiones reales. En la interfaz se probó con un navegador y un segundo usuario por la API, **no con dos navegadores reales**.
+- [ ] Los demás puntos del criterio son de WhatsApp (otra rama).
+- [ ] CI en verde: pendiente del push.
+
+### Pendiente o movido
+
+- [ ] **`pg-boss` y el despachador de eventos** (notificaciones de asignaciones, menciones y vencimientos; sustituir `trabajos/plazos.ts`; foto nocturna del burndown). No se hicieron aquí porque comparten diseño con la cola y el modo reporte de WhatsApp (4.2): decidir quién los hace antes de juntar las ramas. Mientras tanto, las menciones del chat ya notifican desde su proceso.
+- [ ] Adjuntar archivos en el chat (la tabla `archivos` tiene `mensaje_id`, pero `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes e indicador de «escribiendo…».
+- [ ] La insignia de no leídos de la barra se refresca cada 2 minutos fuera del chat; dentro del chat es en tiempo real.
+- [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
+- [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
+- [ ] Las decisiones del chat usan el prefijo `DEC-CHAT-` para no chocar con las de WhatsApp; renumerar al juntar si se prefiere.
+
+## Fase 5 · Autenticación, QA y permisos
+
+**Estado:** construida en la rama `feat/fase-5-auth` (sale de `feat/fase-4-chat`, así que trae también el chat). **Se despliega junto con el chat antes que WhatsApp** (decisión del 2026-11-19, DEC-AUTH-2): la parte de WhatsApp, que se hace en paralelo en otra rama, debe numerar sus migraciones **desde `0031`** (no `0020`) porque las migraciones se aplican en orden (`checkOrder`) y producción ya tendrá la `0030`. Sus pruebas de procesos siguen en `P150`–`P199`. El tag `fase-5` se crea con la CI en verde en `produccion`; el `fase-4`, al juntar WhatsApp.
+
+### Hecho
+
+- **5.1 Autenticación real.** Migración `0030` con **10 procesos `proc_auth_*`** (en `docs/08`, «Fase 5 · Autenticación»). Registro, entrar, salir, recuperar y restablecer contraseña, verificar correo, sesión expirada y cambio de contraseña en Ajustes → Cuenta. Argon2id, bloqueo de 15 min tras 5 fallos, límite por IP, respuestas que no revelan si un correo existe al entrar o recuperar, correos por consola (local) o Resend (producción). DEC-AUTH-1.
+- **5.2 Validaciones.** Todos los cuerpos de la API se validan con Zod (`validar()` en cada ruta). Ahora **los mensajes que genera Zod salen en español** en la API y la web (`packages/shared/src/idioma.ts`; antes un campo faltante respondía «Invalid input…»). Los formularios de registro, entrar, recuperar, restablecer, tareas personales y de equipo, crear equipo, contacto, **reuniones, plantillas y configuración del equipo** validan en el cliente con el mismo esquema que la API (`apps/web/src/lib/validacion.ts`). Los campos de texto llevan `maxLength` igual al del esquema. Los demás (comentarios, notas de retro, chat) son de un solo campo y muestran el mensaje del servidor.
+- **5.3 QA de permisos.** `apps/api/src/rutas/matriz.test.ts` recorre **las 41 acciones de la matriz** contra la API real para líder, integrante, invitado y una persona ajena (más de 150 comprobaciones), en un equipo que crea y borra la propia prueba; la del perfil personal y la de **no filtración** (19 lecturas del equipo y del chat dan 404 a quien no pertenece). Las 3 de WhatsApp quedan anotadas como «sin ruta en esta rama». Encontró que «usar plantilla» crea tareas y por eso lo guarda `crear_tarea` (DEC-033): la sonda se separó en ver plantillas (`usar_plantilla`) y convertirlas en tareas (`crear_tarea`). Sesiones: cerrar sesión invalida el token y uno vencido da 401 (`autenticacion.test.ts`, P208).
+- **5.4 Rendimiento.** `pnpm db:volumen` (semilla de `02` 14.3: 50 equipos, 500 usuarios, 20 000 tareas, 200 000 mensajes y 10 000 avisos de WhatsApp) y `pnpm db:explain` (`EXPLAIN (ANALYZE, BUFFERS)` de las 7 consultas de `02` §13). En local (PGlite/PostgreSQL 18) ninguna hace barrido secuencial sobre tablas grandes; evidencia en `docs/rendimiento.md`. **En la CI, con PostgreSQL 16, Q4 (siguiente lote del worker de WhatsApp) sí hace `Seq Scan` en `whatsapp_mensajes`:** el índice parcial es de la cola de WhatsApp, que esta rama no toca, así que Q4 queda como *pendiente de la rama de WhatsApp* (se informa, no hace fallar) y las otras 6 sí hacen fallar la CI. El índice a agregar está en `apps/api/scripts/explain.ts` y en DEC-AUTH-3.
+- **5.4 Extremo a extremo.** Playwright (`apps/web/e2e/flujos.e2e.ts`): (1) registrarse, crear equipo e invitar, y la otra persona se une con el código; (2) proponer una tarea, votarla, aceptar la asignación, habilitarla, empezarla y completarla; (3) chat en tiempo real entre dos navegadores. Pasa en local (dos corridas seguidas) y corre en la CI. El aviso de WhatsApp simulado del tercer flujo se suma al juntar la rama de WhatsApp.
+- **5.4 Accesibilidad y móvil.** `apps/web/e2e/revision.e2e.ts` recorre 14 pantallas con líder, integrante e invitada: **sin desplazamiento horizontal a 360 px**, **axe-core (WCAG 2.1 A y AA) sin problemas graves ni críticos** y el primer Tab llega a «Saltar al contenido». Lo que encontró y se corrigió: contraste de las iniciales del avatar (6 de 16 colores bajo 4.5:1; ahora el texto se elige por contraste medido, con prueba), de las insignias verde y ámbar en tema claro (tokens un tono más oscuros), de los días de otro mes en el calendario (sin `opacity-60`), tablas con desplazamiento horizontal sin foco de teclado, y el nombre accesible del menú de perfil (WCAG 2.5.3). `prefers-reduced-motion` ya estaba en `index.css`.
+- **5.5 Capturas.** `CAPTURAS=1 pnpm --filter @nexo/web e2e e2e/revision.e2e.ts` guarda en `docs/capturas/` 28 capturas de la app real (14 pantallas, escritorio y móvil): resumen del líder, integrante e invitada, tablero, votación, sprint activo, chat y canal de Invitados, calendario, reportes, miembros, inicio personal y cuenta. Las del artículo de WhatsApp (figuras 3–5 y 7–10) se toman al juntar esa rama.
+- **Pruebas.** SQL de procesos: **138 OK**. API: 175 (11 de autenticación, 4 de la matriz). Web: 100 unitarias + 7 extremo a extremo. `shared`: 197.
+
+### Criterio de terminado de la Fase 5
+
+- [x] Registrar, entrar, salir y recuperar contraseña con una cuenta real (local, pruebas automáticas y extremo a extremo; en producción, tras el despliegue).
+- [x] `DEV_LOGIN_ENABLED=false` en producción y el servidor lo exige.
+- [x] La prueba de la matriz completa pasa (`matriz.test.ts`).
+- [ ] Las 7 consultas pasan la revisión de `EXPLAIN`: 6 de 7 en PostgreSQL 16; Q4 espera su índice en la rama de WhatsApp.
+- [x] Los 3 flujos extremo a extremo pasan (en la CI desde este PR).
+- [ ] CI en verde en `produccion` y tag `fase-5`.
+
+### Pendiente
+
+- [ ] **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
+- [ ] **Avisar a quien hace WhatsApp** que renumere sus migraciones desde `0031` (DEC-AUTH-2), que agregue en una de ellas el índice `ix_wa_msj_pendientes` para Q4 (y quite `pendiente` de Q4 en `explain.ts`), y que sume a `matriz.test.ts` las sondas de `configurar_whatsapp`, `enviar_cola_whatsapp` y `ver_historial_whatsapp`.
+- [ ] Revisar DEC-AUTH-1 (el registro sí dice si un correo ya tiene cuenta).
+- [ ] 2FA (AUTH-07), cambio de correo e inicio con Google: fase posterior.
+- [ ] Capturas de WhatsApp para el artículo, al juntar esa rama.
+- [ ] Revisión visual por una persona: la automática cubre contraste, desbordamiento y estructura, no el aspecto.
