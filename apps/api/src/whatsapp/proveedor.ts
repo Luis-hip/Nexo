@@ -29,27 +29,86 @@ export const proveedorSimulado: ProveedorWhatsApp = {
   },
 };
 
-/** Proveedor de la API Cloud de Meta (grupos o directo, según el aviso). */
-export function proveedorCloudApi(
-  token: string,
-  phoneId: string,
-  graph = 'https://graph.facebook.com/v21.0',
-): ProveedorWhatsApp {
+/** Error de la API Graph con su código (p. ej. 131047: fuera de la ventana de 24 h). */
+export class ErrorMeta extends Error {
+  constructor(
+    mensaje: string,
+    readonly codigo: number | undefined,
+  ) {
+    super(mensaje);
+  }
+}
+
+/** Códigos de Meta que significan «fuera de la ventana de 24 h: usa una plantilla». */
+const FUERA_DE_VENTANA = new Set([131047, 131051, 470]);
+
+export interface OpcionesCloudApi {
+  token: string;
+  phoneId: string;
+  graph?: string;
+  /** Plantilla aprobada para cuando Meta rechaza el texto libre (DEC-WA-2). */
+  plantilla?: string;
+  idioma?: string;
+}
+
+/**
+ * Proveedor de la API Cloud de Meta (grupos o directo, según el aviso). En directo, Meta solo acepta
+ * texto libre dentro de la ventana de 24 h desde el último mensaje de la persona; fuera de ella se
+ * manda la plantilla configurada (`hello_world` no lleva variables; cualquier otra recibe el texto
+ * del aviso como `{{1}}`).
+ */
+export function proveedorCloudApi(o: OpcionesCloudApi): ProveedorWhatsApp {
+  const graph = o.graph ?? 'https://graph.facebook.com/v21.0';
   const publicar = async (cuerpo: object) => {
-    const r = await fetch(`${graph}/${encodeURIComponent(phoneId)}/messages`, {
+    const r = await fetch(`${graph}/${encodeURIComponent(o.phoneId)}/messages`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      headers: { authorization: `Bearer ${o.token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', ...cuerpo }),
       signal: AbortSignal.timeout(15_000),
     });
     const datos = (await r.json().catch(() => null)) as {
       messages?: { id: string }[];
-      error?: { message?: string };
+      error?: { message?: string; code?: number };
     } | null;
     if (!r.ok || !datos?.messages?.[0]?.id) {
-      throw new Error(datos?.error?.message ?? `Meta respondió ${r.status}`);
+      throw new ErrorMeta(
+        datos?.error?.message ?? `Meta respondió ${r.status}`,
+        datos?.error?.code,
+      );
     }
     return datos.messages[0].id;
+  };
+  const plantilla = (to: string, texto: string) => {
+    const nombre = o.plantilla ?? 'hello_world';
+    return publicar({
+      recipient_type: 'individual',
+      to,
+      type: 'template',
+      template: {
+        name: nombre,
+        language: { code: o.idioma ?? 'en_US' },
+        ...(nombre === 'hello_world'
+          ? {}
+          : { components: [{ type: 'body', parameters: [{ type: 'text', text: texto }] }] }),
+      },
+    });
+  };
+  /** Un mensaje directo: texto y, si Meta lo rechaza por la ventana de 24 h, la plantilla. */
+  const directo = async (numero: string, texto: string) => {
+    const to = numero.replace(/^\+/, '');
+    try {
+      return await publicar({
+        recipient_type: 'individual',
+        to,
+        type: 'text',
+        text: { body: texto },
+      });
+    } catch (e) {
+      if (e instanceof ErrorMeta && e.codigo !== undefined && FUERA_DE_VENTANA.has(e.codigo)) {
+        return plantilla(to, texto);
+      }
+      throw e;
+    }
   };
   return {
     nombre: 'cloud_api',
@@ -66,17 +125,17 @@ export function proveedorCloudApi(
       if (aviso.destinatarios.length === 0) {
         throw new Error('Nadie del equipo tiene número y consentimiento para avisos directos.');
       }
+      // Un destinatario que falla no impide que los demás lo reciban; el aviso falla solo si nadie.
       const ids: string[] = [];
+      const errores: string[] = [];
       for (const numero of aviso.destinatarios) {
-        ids.push(
-          await publicar({
-            recipient_type: 'individual',
-            to: numero.replace(/^\+/, ''),
-            type: 'text',
-            text: { body: aviso.texto },
-          }),
-        );
+        try {
+          ids.push(await directo(numero, aviso.texto));
+        } catch (e) {
+          errores.push(`${numero}: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
+      if (ids.length === 0) throw new Error(errores.join(' · '));
       return ids[0]!;
     },
   };
@@ -86,11 +145,13 @@ export function proveedorCloudApi(
 export function proveedorPara(config: Config, aviso: AvisoParaEnviar): ProveedorWhatsApp {
   if (config.WHATSAPP_PROVIDER !== 'real' || aviso.proveedor === 'simulado')
     return proveedorSimulado;
-  return proveedorCloudApi(
-    config.WHATSAPP_TOKEN!,
-    config.WHATSAPP_PHONE_ID!,
-    config.WHATSAPP_API_URL,
-  );
+  return proveedorCloudApi({
+    token: config.WHATSAPP_TOKEN!,
+    phoneId: config.WHATSAPP_PHONE_ID!,
+    graph: config.WHATSAPP_API_URL,
+    plantilla: config.WHATSAPP_PLANTILLA,
+    idioma: config.WHATSAPP_PLANTILLA_IDIOMA,
+  });
 }
 
 /**

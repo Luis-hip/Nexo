@@ -22,7 +22,8 @@ interface PeticionMeta {
     recipient_type: 'individual' | 'group';
     to: string;
     type: string;
-    text: { body: string };
+    text?: { body: string };
+    template?: { name: string; language: { code: string } };
   };
 }
 
@@ -37,7 +38,7 @@ describe.skipIf(!DATABASE_URL)('integración de WhatsApp con la API de Meta (imi
   let e: Entorno;
   const peticiones: PeticionMeta[] = [];
   /** Lo que responde la Meta de prueba: un id por mensaje o un error como los de la API Graph. */
-  let modo: 'ok' | 'error' = 'ok';
+  let modo: 'ok' | 'error' | 'ventana' = 'ok';
   let siguiente = 0;
   const cookies: Record<'ana' | 'beto' | 'caro', Cookies> = {} as never;
   const numeros = { ana: '+5212221110001', beto: '+5212221110002', caro: '+5212221110003' };
@@ -93,6 +94,18 @@ describe.skipIf(!DATABASE_URL)('integración de WhatsApp con la API de Meta (imi
           cuerpo: JSON.parse(datos) as PeticionMeta['cuerpo'],
         });
         res.setHeader('content-type', 'application/json');
+        if (modo === 'ventana' && JSON.parse(datos).type === 'text') {
+          res.statusCode = 400;
+          res.end(
+            JSON.stringify({
+              error: {
+                message: '(#131047) Re-engagement message',
+                code: 131047,
+              },
+            }),
+          );
+          return;
+        }
         if (modo === 'error') {
           res.statusCode = 400;
           res.end(
@@ -251,6 +264,23 @@ describe.skipIf(!DATABASE_URL)('integración de WhatsApp con la API de Meta (imi
     expect((await historial()).find((m) => m.id === aviso.id)).toMatchObject({
       estado: 'enviado',
       intentos: 2,
+    });
+  });
+
+  it('fuera de la ventana de 24 h: Meta rechaza el texto y se manda la plantilla (DEC-WA-2)', async () => {
+    modo = 'ventana';
+    const aviso = await reunion('Prueba fuera de ventana');
+    peticiones.length = 0;
+    const envio = await e.pedir(cookies.ana, 'POST', `${E}/whatsapp/cola/enviar`, {
+      ids: [aviso.id],
+    });
+    modo = 'ok';
+    expect(envio.cuerpo).toEqual({ enviados: 1, fallidos: 0 });
+    // Por persona: el texto (rechazado) y después la plantilla.
+    expect(peticiones.map((p) => p.cuerpo.type)).toEqual(['text', 'template', 'text', 'template']);
+    expect(peticiones[1]!.cuerpo.template).toEqual({
+      name: 'hello_world',
+      language: { code: 'en_US' },
     });
   });
 
