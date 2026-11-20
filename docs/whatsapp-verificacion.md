@@ -1,5 +1,7 @@
 # Nexo · Verificación de la API de WhatsApp (tarea 0.7)
 
+> **Estado (2026-11-20, DEC-WA-2):** la verificación del negocio, la OBA y la API de grupos quedan **ignoradas hasta nuevo aviso**. Nexo usa el número de pruebas con mensajes directos (hasta 5 destinatarios dados de alta en Meta). D-01 queda resuelta para esta etapa: sin grupos, el tope de 8 no depende de Meta.
+
 > **Estado: investigación de documentación hecha el 2026-11-18; trámites de cuenta en curso.** Dueños: Carlos e Isac, con apoyo de Jova. Este documento se llena **solo con la documentación oficial de Meta** (developers.facebook.com), con enlace y fecha de consulta en cada dato. Si algo no se puede confirmar, se escribe «no se pudo verificar» y el motivo. Con el resultado, el equipo resuelve **D-01** (`01`, sección 7.3).
 
 ## 1. Trámites

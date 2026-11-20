@@ -4,7 +4,7 @@
 
 ## Estado general
 
-*Actualizado el 2026-11-19, al juntar la parte de WhatsApp de la Fase 4.*
+*Actualizado el 2026-11-20: Fase 4 completa en producción (tag `fase-4`) y auditoría de pendientes hasta la Fase 5 (ver «Pendientes tras la Fase 5»).*
 
 | Fase | Estado | Etiqueta | Dónde está |
 |---|---|---|---|
@@ -13,13 +13,13 @@
 | 2 · Equipos, tablero y estados | Terminada | `fase-2` | `main` y `produccion` |
 | 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
 | 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
-| 3.5 · Despliegue | En curso (front y API en línea; faltan prueba de humo, copias y raíz) | — | — |
-| 4 · Chat y WhatsApp | Construida: chat en producción; WhatsApp simulado en `feat/fase-4-whatsapp` (envío real no, DEC-WA-1) | — (al cerrar) | `produccion` (chat) y `feat/fase-4-whatsapp` |
+| 3.5 · Despliegue | En línea con las Fases 0–5; prueba de humo hecha (Fase 5). Faltan copias, raíz `nexo.lol` y plan de pago (personas) | — | `produccion` |
+| 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp en modo simulado; envío real por el número de pruebas, DEC-WA-2) | `fase-4` | `produccion` |
 | 5 · Autenticación, QA y permisos | Terminada y en producción | `fase-5` | `produccion` |
 
-**`produccion` ya tiene las Fases 2.5 y 3** (PR #16, 2026-11-18) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
+**`produccion` tiene las Fases 0 a 5** (último: PR #30, `de2f9a1`, 2026-11-19) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
-Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas.
+Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas; las `[~]` están **ignoradas hasta nuevo aviso** (no cuentan como faltantes: dependen de la verificación del negocio en Meta, DEC-WA-2).
 
 ## Fase 0 · Arranque del repositorio y de la BD
 
@@ -41,7 +41,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 - [x] **Proteger `main`, `dev` y `produccion`** en GitHub (DEC-001). Comprobado el 2026-11-18: las tres ramas figuran como protegidas (`protected: true`); el detalle de las reglas (PR obligatorio y el check **Verificar (BD, tipos, lint, pruebas, build)**) no se pudo leer sin sesión de administrador.
 - [ ] Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
 - [ ] Tablero de proyecto en GitHub (Por hacer / En curso / En revisión / Hecho) e *issues* por fase y módulo grande.
-- [ ] **0.7 WhatsApp** (Carlos e Isac, con Jova): cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**. **Avance (2026-11-18):** cuenta, app «Nexo conexión de equipos», WABA de prueba y número de pruebas **hechos**; `docs/whatsapp-verificacion.md` llenado con datos oficiales (preguntas 2 y 6 y la tarifa en MXN, «no se pudo verificar»). **Pendiente:** verificación de la empresa (faltan documentos reales; el sitio `nexo.lol` ya existe pero el dominio raíz sigue en el parking de Porkbun), solicitud de OBA (exige verificación, 30 días y un número real) y decidir D-01. Capturas de evidencia sin adjuntar.
+- [x] **0.7 WhatsApp** (Carlos e Isac, con Jova). **Hecho lo necesario (2026-11-20):** cuenta, app, WABA de prueba y número de pruebas; D-01 resuelta para esta etapa (DEC-WA-2: mensajes directos con el número de pruebas). [~] La verificación de la empresa, la OBA y los grupos quedan **ignorados hasta nuevo aviso**. Historial:: cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**. **Avance (2026-11-18):** cuenta, app «Nexo conexión de equipos», WABA de prueba y número de pruebas **hechos**; `docs/whatsapp-verificacion.md` llenado con datos oficiales (preguntas 2 y 6 y la tarifa en MXN, «no se pudo verificar»). **Pendiente:** verificación de la empresa (faltan documentos reales; el sitio `nexo.lol` ya existe pero el dominio raíz sigue en el parking de Porkbun), solicitud de OBA (exige verificación, 30 días y un número real) y decidir D-01. Capturas de evidencia sin adjuntar.
 - [ ] Probar `docker compose up -d` + `pnpm db:reset` en una máquina con Docker (la de Luis aún no lo tiene). Mientras tanto la BD se cubre con `pnpm db:local` (PGlite) y con la CI en PostgreSQL 16.
 
 ## Fase 1 · Base, roles y espacio personal
@@ -209,8 +209,8 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 ### Criterio de la Fase 4 que cubre esta parte
 
 - [x] «Dos navegadores con distintos usuarios intercambian mensajes en tiempo real; un invitado **no** recibe mensajes del chat del equipo (prueba)»: probado de forma automática en `chat.test.ts` con tres conexiones reales. En la interfaz se probó con un navegador y un segundo usuario por la API, **no con dos navegadores reales**.
-- [ ] Los demás puntos del criterio son de WhatsApp (otra rama).
-- [ ] CI en verde: pendiente del push.
+- [x] Los demás puntos del criterio son de WhatsApp: cubiertos en «Fase 4 · WhatsApp» (abajo).
+- [x] CI en verde (PR #23 a #30).
 
 ### Pendiente o movido
 
@@ -219,11 +219,11 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [ ] La insignia de no leídos de la barra se refresca cada 2 minutos fuera del chat; dentro del chat es en tiempo real.
 - [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
 - [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
-- [ ] Las decisiones del chat usan el prefijo `DEC-CHAT-` para no chocar con las de WhatsApp; renumerar al juntar si se prefiere.
+- [x] Las decisiones del chat usan el prefijo `DEC-CHAT-` y las de WhatsApp `DEC-WA-`: se conservan así (no se renumera, para no romper referencias).
 
 ### Fase 4 · WhatsApp (4.2 y 4.3)
 
-**Estado:** construida en `feat/fase-4-whatsapp` (sale de `produccion` con el chat y la Fase 5). La rama `Dev_Isac` se juntó ahí (`5f5e9fa`): traía otra versión del chat, no WhatsApp, y se conservó la nuestra (DEC-WA-1).
+**Estado:** terminada y en producción desde el 2026-11-19 (PR #27 → #29 → #28 → #30, tag `fase-4` en `de2f9a1`). Se construyó en `feat/fase-4-whatsapp` (sale de `produccion` con el chat y la Fase 5). La rama `Dev_Isac` se juntó ahí (`5f5e9fa`): traía otra versión del chat, no WhatsApp, y se conservó la nuestra (DEC-WA-1).
 
 #### Hecho
 
@@ -242,15 +242,16 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [x] Sin consentimiento no se menciona a la persona (P152, `whatsapp.test.ts`).
 - [x] Un reporte programado se genera y se envía a la hora (P161, P162, `whatsapp.test.ts`).
 - [x] Envío real: **nota explícita de por qué no se hizo** (DEC-WA-1: falta la cuenta OBA; el proveedor real y el webhook están construidos y probados sin cuenta).
-- [ ] CI en verde y tag `fase-4`: tras el push y los PR.
+- [x] CI en verde y tag `fase-4` (en `de2f9a1`, 2026-11-20).
 
 #### Pendiente
 
-- [ ] **Envío real (4.3):** verificación de la empresa, OBA y número real (Fase 0.7); después poner `WHATSAPP_PROVIDER=real` y las cuatro variables en Render y probar con el grupo de prueba. Es decisión del equipo.
-- [ ] **FALT-03 y FALT-04** (unirse al grupo y aprobar solicitudes): necesitan la API de grupos con cuenta real. Mientras, el enlace de invitación se ve en Ajustes → WhatsApp.
-- [ ] Verificar el número por código (`whatsapp_usuario.verificado` existe, no hay flujo) y la decisión D-01.
+- [~] **Envío a grupos (4.3 con API de grupos):** verificación de la empresa, OBA y número real. Ignorado hasta nuevo aviso (DEC-WA-2).
+- [ ] **Envío real con el número de pruebas** (mensajes directos, DEC-WA-2): ver «Pendientes tras la Fase 5».
+- [~] **FALT-03 y FALT-04** (unirse al grupo y aprobar solicitudes): necesitan la API de grupos con OBA. Ignorado hasta nuevo aviso; mientras, el enlace de invitación se ve en Ajustes → WhatsApp.
+- [ ] Verificar el número por código (`whatsapp_usuario.verificado_en` existe, no hay flujo). D-01 ya resuelta (DEC-WA-2).
 - [ ] La API duerme en el plan gratuito de Render: los reportes pueden salir tarde (al despertar).
-- [ ] Desplegar: la `0031` marca como procesados los eventos viejos para no mandar avisos atrasados.
+- [x] Desplegado el 2026-11-19 (Render, *Manual Deploy* de `de2f9a1`): la `0031` se aplicó y marcó como procesados los eventos viejos; `/yo/whatsapp` responde 401 sin sesión y el webhook rechaza peticiones sin firma.
 
 ## Fase 5 · Autenticación, QA y permisos
 
@@ -292,3 +293,31 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [ ] 2FA (AUTH-07), cambio de correo e inicio con Google: fase posterior.
 - [x] Capturas de WhatsApp para el artículo (`docs/capturas/wa-*` y `pf-05-*`).
 - [ ] Revisión visual por una persona: la automática cubre contraste, desbordamiento y estructura, no el aspecto.
+
+## Pendientes tras la Fase 5 (auditoría del 2026-11-20)
+
+Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo construido. Se trabajan en `Dev_Luis`. **Tipo:** *código* (lo hace el equipo de desarrollo), *persona* (decisión, cuenta o revisión que no se puede automatizar) o *ignorado* (`[~]`, DEC-WA-2).
+
+| # | Pendiente | Origen | Tipo | Cómo se aborda | Estado |
+|---|---|---|---|---|---|
+| P-01 | Exportar y eliminar mis datos (FALT-09, PF-06) | `03` 9.2, Fase 5 | código | Procesos sobre `exportaciones_datos`: pedir exportación (JSON con todo lo de la persona) y borrar la cuenta con confirmación por contraseña; Ajustes → Privacidad | Pendiente |
+| P-02 | Reuniones del equipo en el calendario personal (PER-04) | Fase 1 | código | `proc_personal_calendario` suma las reuniones de los equipos activos de la persona | Pendiente |
+| P-03 | Adjuntar archivos desde el detalle de la tarea (EQ-06 / EQ-19) | Fase 3 | código | La API ya acepta `tarea_id`; falta la sección «Archivos» del detalle | Pendiente |
+| P-04 | Invitar por correo (AD-02) | Fase 2 | código | Al crear una invitación, opcionalmente enviarla por correo con el servicio de la Fase 5 | Pendiente |
+| P-05 | Solicitudes del invitado (DEC-023) | Fase 2 | código | Procesos sobre `solicitudes_invitado`: el invitado pide ampliar acceso o ser integrante; el líder aprueba o rechaza | Pendiente |
+| P-06 | Foto diaria del burndown | Fase 3 → 4 | código | El temporizador de la API guarda una instantánea diaria del sprint activo | Pendiente |
+| P-07 | Chat: editar mensajes e indicador «escribiendo…» | Fase 4 | código | Proceso para editar el propio mensaje; evento de socket «escribiendo» por sala | Pendiente |
+| P-08 | Envío real con el número de pruebas (DEC-WA-2) | Fase 4.3 | código + persona | Plantilla fuera de la ventana de 24 h y `wa:probar`; la prueba real necesita el token y el id del número en `apps/api/.env` | Pendiente |
+| P-09 | Adjunto en contacto y foto de perfil en el onboarding | Fase 1 | código | Reutilizar la API de archivos | Pendiente |
+| P-10 | Insignia de no leídos del chat en tiempo real fuera del chat | Fase 4 | código | Escuchar el socket del equipo en la barra lateral | Pendiente |
+| P-11 | Verificar el número de WhatsApp por código | Fase 4 | ignorado | Requiere enviar el código por WhatsApp real: se retoma con P-08 en producción | [~] |
+| P-12 | Verificación del negocio, OBA, grupos, FALT-03/04 | 0.7 / 4.3 | ignorado | DEC-WA-2 | [~] |
+| P-13 | Repositorio privado y licencia; *secret scanning* y *push protection* | Fases 0 y 2.5 | persona | Decisión de Luis | Abierto |
+| P-14 | Tablero de proyecto e *issues* en GitHub | Fase 0 | persona | Decisión del equipo (el seguimiento real vive en `progreso.md`) | Abierto |
+| P-15 | Probar `docker compose` en una máquina con Docker | Fase 0 | persona | Falta una máquina con Docker | Abierto |
+| P-16 | Revisión visual por una persona (claro/oscuro y móvil) | Fases 1 a 5 | persona | La automática (axe, 360 px) ya pasa | Abierto |
+| P-17 | Revisar DEC-030 a DEC-034, V-10, V-11 y DEC-AUTH-1 | Fases 2.5, 3 y 5 | persona | Lectura de Luis | Abierto |
+| P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | persona | Sin ella no hay correos en producción (P-04 depende de esto en producción) | Abierto |
+| P-19 | Copias de seguridad, raíz `nexo.lol`, plan de pago antes del 2026-12-18 y *Auto-Deploy* de Render | Fase 3.5 | persona | Paneles de Render y Porkbun | Abierto |
+| P-20 | 2FA, cambio de correo e inicio con Google | Fase 5 | — | Fuera de alcance («solo si hay tiempo», `03` 5.1): fase posterior | Fase posterior |
+
