@@ -70,3 +70,13 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 - ⚠ **Cómo probar en producción sin `DEV_LOGIN`.** La autenticación real es de la Fase 5. Opciones: probar solo `/salud` y las pantallas públicas hasta la Fase 5, o crear un usuario de prueba por un proceso de BD autorizado. Decidir en equipo (DEC-035).
 - El chat en tiempo real y el webhook de WhatsApp no existen hasta la Fase 4; sus pruebas se repiten entonces.
 - La lista de IP permitidas de la BD y la región se revisan al crear el Blueprint.
+
+## 9. Despliegue del chat y la autenticación (Fases 4.1 y 5)
+
+*Agregado el 2026-11-19 (DEC-AUTH-2).* El despliegue sigue siendo automático al llegar a `produccion` (Render y Vercel); estas son las diferencias:
+
+1. **Migraciones.** Render aplica al arrancar `0014`–`0016` (chat) y `0030` (autenticación). Ninguna cambia tablas; cada una termina con `fn_conceder_procesos()`, así que `nexo_app` recibe los procesos nuevos sin pasos a mano. Comprobar en el registro de Render que aparecen las cuatro y que la API arranca.
+2. **Variables nuevas en Render (`nexo-api`):** `RESEND_API_KEY` (opcional; sin ella no se envían correos: se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo) y `CORREO_REMITENTE` (ya en `render.yaml`). **No** poner `CORREO_PROVEEDOR=consola`: el servidor no arranca en producción con ese valor.
+3. **Tiempo real.** Socket.IO usa el mismo servicio y el mismo dominio (`api.nexo.lol`). En el plan gratuito la API duerme a los 15 minutos: el primer acceso tarda y el socket se reconecta solo.
+4. **Prueba de humo del login:** en `https://app.nexo.lol/registro` crear una cuenta (correo real de una persona del equipo), cerrar sesión y volver a entrar; si hay Resend, pedir «¿Olvidaste tu contraseña?» y usar el enlace.
+5. **Después, para WhatsApp:** sus migraciones van desde `0031`.

@@ -350,3 +350,64 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Límites aceptados.** La API duerme a los 15 min sin tráfico; los temporizadores no corren dormida; la BD **expira a los 30 días** y no tiene copias ni restauración (`10`, sección 3 ✔). Detalle y fechas en `docs/operacion.md`, sección 7.
 - **Cuándo se revisa.** Antes de ~2026-12-18 (vencimiento de la BD) y antes de la Fase 4 (el chat necesita la API encendida): pasar a `0.5c-512mb` y `0.1c-256mb` o exportar los datos.
 - **Criterio de la Fase 3.5 que queda sin cumplir:** «copias de seguridad y restauración probada».
+
+---
+
+## Fase 4 · Chat
+
+*Decisiones del chat (tarea 4.1). Llevan el prefijo `DEC-CHAT-` para no chocar con la numeración que use la parte de WhatsApp, que se trabaja en paralelo en otra rama; al juntar ambas partes se pueden renumerar.*
+
+## DEC-CHAT-1 · Fase 4.1: chat en tiempo real
+
+**Fecha:** 2026-11-19 · **Fuente:** `03`, Fase 4, tarea 4.1 (CH-01 a CH-10) · **Detalle:** `08_Procesos_BD.md`, sección «Fase 4 · Chat» (16 procesos de `0014` a `0016`).
+
+- **Una sola regla de acceso en la BD (`fn_chat_puede`).** Canal del equipo: líder e integrantes. Canal de Invitados: todos. Chat de tarea: líder e integrantes, y el invitado solo si la tarea está compartida con él. Mensaje directo: solo las dos personas, **ni el líder lo ve**; si una sale del equipo, deja de verse para las dos. Quien no tiene acceso recibe 404, como en el resto de la API (DEC-018).
+- **Tiempo real.** Socket.IO en el mismo servidor de la API, autenticado con la cookie de sesión. El servidor une cada conexión a una sala por conversación visible (`proc_chat_salas`); el cliente no pide salas. **Al emitir se vuelve a calcular la audiencia** (`proc_chat_miembros`) y solo reciben las conexiones de esas personas: así, si a un invitado se le deja de compartir una tarea o alguien sale del equipo, deja de recibir aunque su conexión siga abierta (cuesta una consulta por emisión; con equipos de hasta 8 es poco). No se usa una sala general «por equipo»: no hay eventos que deba recibir todo el equipo sin filtrar, y una sala así le llegaría al invitado.
+- **El socket solo recibe.** Los mensajes se envían por HTTP (validados con Zod y con la misma API de errores) y el socket solo avisa; la web vuelve a pedir lo afectado. Es más simple, las reacciones traen «yo» según quien mira y, al reconectar, lo perdido llega por HTTP.
+- **Mensajes sin eventos de dominio.** Escribir, reaccionar, fijar o borrar no genera `eventos_dominio` ni actividad: llenaría el registro del equipo y la cola de WhatsApp de ruido. Solo convertir un mensaje en tarea registra `tarea.propuesta`, igual que proponer.
+- **Menciones.** Se escriben `@Nombre Apellido` (la web propone nombres al teclear `@`). Solo cuentan las personas con acceso a la conversación; cada una recibe una notificación «X te mencionó» (categoría `menciones`, abre el chat) salvo que haya apagado «Menciones» en la app (PF-04). No se notifica por WhatsApp desde aquí: eso le toca al despachador de la Fase 4.2.
+- **Moderación (matriz `moderar_chat`).** Solo el líder fija mensajes y borra los ajenos; cada quien borra los suyos. El borrado es lógico (el texto deja de salir). No se fijan mensajes en los directos ni respuestas de hilo.
+- **Hilos de un solo nivel.** Responder a una respuesta se cuelga de la raíz.
+- **Convertir en tarea (CH-09) es del líder**, porque desde DEC-024 solo el líder propone: la tarea entra a votación con el título de la primera línea (editable) y deja un aviso en el chat. Los directos no se convierten (son privados).
+- **No leídos.** Puntero por persona y conversación; quien entra a un equipo no ve como pendiente el historial anterior a su ingreso. Silenciar quita la conversación de la insignia de la barra.
+- **Búsqueda (CH-08).** `websearch_to_tsquery('spanish', …)` sobre el índice GIN que ya existía; el fragmento marca lo encontrado con «…» y la web lo resalta sin interpretar HTML. Las palabras vacías del español («nosotros», «de») no se pueden buscar solas.
+- **Fuera de esta tarea (anotado en `progreso.md`):** adjuntar archivos en el chat (la tabla lo permite; `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes, indicador de «escribiendo…», `pg-boss` y el despachador de eventos (comparten diseño con WhatsApp; se decidirán al juntar ambas partes).
+
+---
+
+## Fase 5 · Autenticación
+
+*Decisiones de la tarea 5.1. Prefijo `DEC-AUTH-` por la misma razón que `DEC-CHAT-`: la parte de WhatsApp se trabaja en paralelo.*
+
+## DEC-AUTH-1 · Fase 5.1: autenticación real
+
+**Fecha:** 2026-11-19 · **Fuente:** `03`, Fase 5, tarea 5.1 (AUTH-01 a AUTH-06, AUTH-11) y PF-02 · **Detalle:** `08_Procesos_BD.md`, sección «Fase 5 · Autenticación» (10 procesos de la `0030`).
+
+- **Argon2id con `@node-rs/argon2`** (binarios precompilados; no necesita compilar en Render ni en Windows) y no con `argon2`, que nombraba `01`. Mismo algoritmo, parámetros por defecto de OWASP (19 MiB, t=2, p=1). La contraseña solo existe en la API: la BD recibe el hash y rechaza lo que no sea `$argon2id$…`.
+- **Sesiones: el mismo mecanismo del acceso de desarrollo** (token opaco de 32 bytes en cookie `HttpOnly`, `SameSite=Lax`, `Secure` en producción; en la BD solo su SHA-256; 30 días). `app.nexo.lol` y `api.nexo.lol` son el mismo sitio, así que `Lax` basta. AUTH-11 ya existía.
+- **No revelar si un correo existe:** al entrar, la respuesta es la misma con correo inexistente, contraseña equivocada o cuenta bloqueada («El correo o la contraseña no son correctos. Si fallas varias veces seguidas, espera 15 minutos.»); sin cuenta se verifica contra un hash señuelo para que el tiempo no lo delate. «Recuperar» responde siempre 202 con el mismo texto. **El registro sí lo dice** (409 «Ese correo ya tiene una cuenta…»): evitarlo obliga a crear la cuenta solo después de confirmar el correo, y sin proveedor de correo en producción nadie podría registrarse. Se mitiga con el límite de 5 registros por minuto por IP. **Para revisión.**
+- **Límite de intentos:** en la BD, 5 fallos seguidos bloquean la cuenta 15 minutos; en la API, límite por IP (registro 5/min, entrar 10/min, recuperar 5/min, reenviar verificación 3/min). En `NODE_ENV=test` los límites por IP se multiplican por 50 para las pruebas.
+- **Correo sin verificar no bloquea la cuenta:** se puede usar la app y Ajustes → Cuenta pide confirmarlo. Restablecer la contraseña lo deja verificado.
+- **Enlaces de un solo uso:** restablecer vence en 1 hora y verificar en 24 horas; pedir otro anula el anterior. Restablecer cierra **todas** las sesiones; cambiar la contraseña desde Ajustes (pide la actual) cierra las **demás**.
+- **Correos.** `src/correo.ts` con tres proveedores: `consola` (local y pruebas; escribe el enlace en el registro de la API), `resend` (API HTTP de Resend, `RESEND_API_KEY`) y `ninguno`. En producción el servidor **no arranca** con `consola` (los enlaces llevan tokens) ni con `resend` sin clave; sin clave usa `ninguno`: se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo. El remitente es `CORREO_REMITENTE` (por defecto `no-responder@nexo.lol`; Resend exige verificar el dominio).
+- **Semilla:** todas las personas entran con «Nexo-2026» (hash en `semilla.sql`; la semilla nunca se carga en producción). El acceso de desarrollo sigue, ahora plegado bajo el formulario de AUTH-02 y solo si la API lo tiene activo.
+- **Fuera de esta tarea:** 2FA (AUTH-07, «solo si hay tiempo» en `03`), cambiar el correo, iniciar sesión con Google (`usuarios.google_sub` existe) y 5.2 a 5.5.
+
+## DEC-AUTH-2 · Desplegar el chat y la Fase 5 antes que WhatsApp
+
+**Fecha:** 2026-11-19 · **Fuente:** decisión de Luis («desplegar ya chat + login») · **Reemplaza:** el orden chat → WhatsApp → Fase 5 acordado antes ese mismo día.
+
+- **Qué cambia.** `produccion` recibe el chat (`0014`–`0016`) y la Fase 5 (`0030`) sin WhatsApp. Como `node-pg-migrate` aplica en orden y rechaza una migración con número menor que otra ya aplicada (`checkOrder`), **las migraciones de WhatsApp deben numerarse desde `0031`**. Sus pruebas de procesos siguen en `P150`–`P199` (no dependen del orden).
+- **Por qué.** Sin autenticación real no se podía entrar a la app desplegada (en producción no hay acceso de desarrollo); esto permite ver las vistas en línea ya.
+- **Costo.** Quien hace WhatsApp renumera sus archivos antes de juntar; el flujo extremo a extremo «chat y aviso de WhatsApp» y las capturas de WhatsApp se completan al juntar.
+
+## DEC-AUTH-3 · Fase 5.2 a 5.5: validación, permisos, rendimiento y accesibilidad
+
+**Fecha:** 2026-11-19 · **Fuente:** `03`, Fase 5.
+
+- **Mensajes de Zod en español** con `z.config(z.locales.es())` en `packages/shared/src/idioma.ts`, que se importa primero en el índice: vale para la API y la web. Los mensajes propios de cada campo se conservan.
+- **Prueba de la matriz:** se considera *permitida* una petición que no responde 401, 403 ni 404; *prohibida*, la que da 403 o 404 (la API usa 404 para no revelar lo ajeno). Para no cambiar datos las sondas mandan cuerpos inválidos (la guardia va antes de validar) o versiones viejas. Toda acción debe tener sonda o un motivo escrito: la prueba falla si se agrega una acción sin cubrir.
+- **`usar_plantilla` es ver las plantillas**; convertir una de proyecto en tareas lo guarda `crear_tarea` (solo el líder propone, DEC-024 y DEC-033). La matriz no cambia.
+- **Rendimiento:** «tabla grande» = 5000 filas o más; la CI corre `db:volumen` y `db:explain` al final, sobre PostgreSQL 16, y falla con un `Seq Scan` en una tabla grande. **Excepción: Q4** (lote del worker de WhatsApp) hace `Seq Scan` en PostgreSQL 16 y su índice es de la cola de WhatsApp, que esta rama no toca: queda marcada como pendiente (se informa, no falla) hasta que esa rama agregue `CREATE INDEX ix_wa_msj_pendientes ON whatsapp_mensajes (creado_en) WHERE estado = 'pendiente' AND seleccionado AND tipo_envio = 'instantaneo'`.
+- **Extremo a extremo con Playwright** en `apps/web/e2e/` (Chromium). La configuración levanta la API en modo `test` y la web; en local reutiliza las que estén abiertas. Las cuentas son nuevas en cada corrida (`@e2e.test`); el recorrido de primer uso se marca como visto por la API para que no tape las pantallas.
+- **Accesibilidad:** axe-core falla con problemas *serious* o *critical*. Tokens `--signal-ok-text` y `--signal-warn-text` del tema claro pasan a `#166534` y `#92400e` (las insignias teñidas no llegaban a 4.5:1). Las iniciales del avatar eligen texto oscuro o blanco según el **contraste medido** (WCAG) y no por la luminosidad OKLCH; las iniciales son decorativas (`aria-hidden`) porque el nombre ya va en texto oculto.

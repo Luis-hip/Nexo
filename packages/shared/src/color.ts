@@ -60,8 +60,44 @@ export function colorDeIntegrante(indice: number, tema: TemaResuelto): string {
 
 /** Texto legible sobre el color del integrante. */
 export function textoSobreIntegrante(indice: number, tema: TemaResuelto): string {
-  const nivel = (indice % 3) + (tema === 'oscuro' ? 1 : 0);
-  return (LUMINOSIDADES[nivel] ?? 0.5) >= 0.7 ? '#111827' : '#ffffff';
+  // Fase 5.4: se elige por contraste medido (WCAG), no por la luminosidad OKLCH: con el umbral
+  // anterior, 6 de los 16 colores quedaban por debajo de 4.5:1 con las iniciales del avatar.
+  const fondo = luminanciaOklch(oklchDeIntegrante(indice, tema));
+  return contrasteWcag(fondo, LUMINANCIA_TEXTO_OSCURO) >= contrasteWcag(fondo, 1)
+    ? TEXTO_OSCURO
+    : '#ffffff';
+}
+
+const TEXTO_OSCURO = '#111827';
+
+/** Luminancia relativa (WCAG) de un color sRGB en hexadecimal. */
+export function luminanciaHex(hex: string): number {
+  const canal = (i: number) => {
+    const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * canal(0) + 0.7152 * canal(1) + 0.0722 * canal(2);
+}
+const LUMINANCIA_TEXTO_OSCURO = luminanciaHex(TEXTO_OSCURO);
+
+/** Luminancia relativa (WCAG) de un color OKLCH, recortado al gamut sRGB. */
+export function luminanciaOklch({ l, c, h }: Oklch): number {
+  const rad = Math.PI / 180;
+  const a = c * Math.cos(h * rad);
+  const b = c * Math.sin(h * rad);
+  const l3 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m3 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s3 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const recorte = (x: number) => Math.min(1, Math.max(0, x));
+  const r = recorte(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3);
+  const g = recorte(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3);
+  const bl = recorte(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+}
+
+/** Razón de contraste WCAG entre dos luminancias relativas. */
+export function contrasteWcag(a: number, b: number): number {
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
 // ---------------------------------------------------------------------------------------------

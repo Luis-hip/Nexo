@@ -7,12 +7,14 @@ import {
   Inbox,
   Link2,
   Lock,
+  MessageCircle,
   Pencil,
   Plus,
   Trash2,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import {
   AreaTexto,
   Avatar,
@@ -557,6 +559,14 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
           )}
         </section>
       )}
+
+      {/* Fase 4 · Chat (CH-03): el chat de la tarea; el invitado entra si está compartida con él. */}
+      <Link
+        to={`${base}/chat/tarea/${t.id}`}
+        className="inline-flex items-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-sm hover:bg-surface"
+      >
+        <MessageCircle className="size-4 text-brand" aria-hidden /> Abrir el chat de la tarea
+      </Link>
 
       <section>
         {esInvitado ? (

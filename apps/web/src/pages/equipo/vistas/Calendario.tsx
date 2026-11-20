@@ -1,4 +1,4 @@
-import type { Repeticion, Reunion, TareaEquipo } from '@nexo/shared';
+import { esquemaCrearReunion, type Repeticion, type Reunion, type TareaEquipo } from '@nexo/shared';
 import { CalendarPlus, ChevronLeft, ChevronRight, MapPin, Repeat } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useAcciones } from '@/components/shell/contexto';
@@ -24,6 +24,7 @@ import { mensajeDeError } from '@/lib/api';
 import { useAccionesVistas, useCalendario } from '@/lib/consultasVistas';
 import { hora, mismaFecha } from '@/lib/fechas';
 import { toast } from '@/lib/toasts';
+import { primerError } from '@/lib/validacion';
 import { useEquipoActual } from '../contexto';
 import { codigoTarea } from '../tareas/comunes';
 
@@ -129,7 +130,7 @@ export function CalendarioEquipo() {
                           elegido
                             ? 'border-brand bg-brand/10'
                             : 'border-transparent hover:bg-surface',
-                          d.getMonth() !== mes.getMonth() && 'text-muted opacity-60',
+                          d.getMonth() !== mes.getMonth() && 'text-muted',
                         )}
                       >
                         <span
@@ -302,23 +303,24 @@ function NuevaReunion({ dia, onCerrar }: { dia: Date; onCerrar: () => void }) {
       setError('Escribe el título, la fecha y la hora.');
       return;
     }
-    crearReunion.mutate(
-      {
-        titulo: titulo.trim(),
-        inicio: inicio.toISOString(),
-        duracion_min: duracion,
-        repeticion,
-        lugar,
-        descripcion,
+    const datos = {
+      titulo: titulo.trim(),
+      inicio: inicio.toISOString(),
+      duracion_min: duracion,
+      repeticion,
+      lugar,
+      descripcion,
+    };
+    // Mismo esquema que la API (5.2).
+    const invalido = primerError(esquemaCrearReunion, datos);
+    if (invalido) return setError(invalido);
+    crearReunion.mutate(datos, {
+      onSuccess: () => {
+        toast('Reunión agendada: el equipo recibió el aviso.');
+        onCerrar();
       },
-      {
-        onSuccess: () => {
-          toast('Reunión agendada: el equipo recibió el aviso.');
-          onCerrar();
-        },
-        onError: (e) => setError(mensajeDeError(e)),
-      },
-    );
+      onError: (e) => setError(mensajeDeError(e)),
+    });
   };
 
   return (

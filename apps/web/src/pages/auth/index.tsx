@@ -1,32 +1,28 @@
 import type { Yo } from '@nexo/shared';
-import { Crown, FlaskConical, KeyRound, User } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { Crown, KeyRound, User } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Logo } from '@/components/shell/Logo';
 import {
   Avatar,
-  Banner,
   Boton,
   Campo,
   Entrada,
   ErrorEstado,
   EsqueletoLista,
-  EstadosDatos,
   Interruptor,
   Radios,
   Segmentado,
   Selector,
   cx,
 } from '@/components/ui';
-import { ErrorApi, mensajeDeError } from '@/lib/api';
-import {
-  useDevLogin,
-  useGuardarPerfil,
-  useGuardarPreferencias,
-  useUsuariosDev,
-  useYo,
-} from '@/lib/consultas';
+import { mensajeDeError } from '@/lib/api';
+import { useGuardarPerfil, useGuardarPreferencias, useYo } from '@/lib/consultas';
 import { AvisoCookies } from '@/pages/publico/AvisoCookies';
+import { destinoSeguro, Tarjeta } from './comunes';
+
+// Fase 5.1: AUTH-01 a AUTH-06 (registro, entrar, recuperar, restablecer y verificar).
+export { Entrar, Recuperar, RecuperarEnviado, Registro, Restablecer, Verificar } from './Acceso';
 
 export function AuthLayout() {
   return (
@@ -52,119 +48,12 @@ export function AuthLayout() {
   );
 }
 
-function Tarjeta({
-  titulo,
-  subtitulo,
-  children,
-  nombre,
-  icono,
-}: {
-  titulo: string;
-  subtitulo?: ReactNode;
-  children: ReactNode;
-  nombre: string;
-  icono?: ReactNode;
-}) {
-  return (
-    <div
-      className="anim-up rounded-[16px] border border-line bg-raised p-6 shadow-soft sm:p-8"
-      data-name={nombre}
-    >
-      {icono && (
-        <div className="mb-4 grid size-12 place-items-center rounded-full bg-brand/10 text-brand [&>svg]:size-6">
-          {icono}
-        </div>
-      )}
-      <h1 className="text-[22px] sm:text-[28px]">{titulo}</h1>
-      {subtitulo && <p className="mt-1.5 text-sm text-muted">{subtitulo}</p>}
-      <div className="mt-6">{children}</div>
-    </div>
-  );
-}
-
-/** Solo se aceptan destinos internos, para no redirigir fuera de Nexo. */
-const destinoSeguro = (volver: string | null) =>
-  volver && volver.startsWith('/') && !volver.startsWith('//') ? volver : null;
-
-/**
- * AUTH-02 en la Fase 1: acceso de desarrollo. Mientras no existe la autenticación real
- * (Fase 5), se entra como cualquier usuario de la semilla; la API solo lo permite con
- * DEV_LOGIN_ENABLED=true y nunca en producción.
- */
-export function Entrar() {
-  const nav = useNavigate();
-  const [sp] = useSearchParams();
-  const usuarios = useUsuariosDev();
-  const login = useDevLogin();
-  const [elegido, setElegido] = useState<string | null>(null);
-  const noDisponible = usuarios.error instanceof ErrorApi && usuarios.error.estado === 404;
-
-  const entrar = (correo: string) => {
-    setElegido(correo);
-    login.mutate(correo, {
-      onSuccess: () => nav(destinoSeguro(sp.get('volver')) ?? '/app', { replace: true }),
-    });
-  };
-
-  return (
-    <Tarjeta
-      titulo="Inicia sesión"
-      subtitulo={sp.get('salio') ? 'Cerraste sesión correctamente.' : 'Qué bueno verte de nuevo.'}
-      nombre="NX/AUTH-02-Inicio-sesion"
-    >
-      {noDisponible ? (
-        <Banner tono="info">
-          El inicio de sesión con correo y contraseña estará disponible próximamente.
-        </Banner>
-      ) : (
-        <>
-          <Banner tono="marca" icono={<FlaskConical />} className="mb-4">
-            <strong>Acceso de desarrollo.</strong> Elige un usuario de la semilla para entrar con su
-            rol. El registro y la contraseña llegan en la Fase 5.
-          </Banner>
-          {login.error && (
-            <Banner tono="danger" className="mb-4">
-              No pudimos iniciar la sesión. {mensajeDeError(login.error)}
-            </Banner>
-          )}
-          <EstadosDatos consulta={usuarios} esqueleto={<EsqueletoLista filas={4} />}>
-            {(lista) => (
-              <ul className="divide-y divide-line rounded-[12px] border border-line">
-                {lista.map((u) => (
-                  <li key={u.id}>
-                    <button
-                      type="button"
-                      disabled={login.isPending}
-                      onClick={() => entrar(u.correo)}
-                      aria-busy={login.isPending && elegido === u.correo}
-                      className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface disabled:opacity-60"
-                    >
-                      <Avatar persona={{ nombre: u.nombre }} tamano={36} conAnillo={false} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{u.nombre}</span>
-                        <span className="block truncate text-xs text-muted">
-                          {u.cargo ? `${u.cargo} · ` : ''}
-                          {u.correo}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </EstadosDatos>
-        </>
-      )}
-    </Tarjeta>
-  );
-}
-
-/** Rutas de autenticación que se construyen en la Fase 5 (registro, recuperar, verificar…). */
+/** Rutas de autenticación que aún no existen (2FA, AUTH-07: fase posterior). */
 export function AuthProximamente({ titulo }: { titulo: string }) {
   return (
     <Tarjeta
       titulo={titulo}
-      subtitulo="Esta pantalla se construye en la Fase 5, junto con la autenticación real."
+      subtitulo="La verificación en dos pasos llega en una fase posterior."
       nombre="NX/AUTH-proximamente"
     >
       <Link

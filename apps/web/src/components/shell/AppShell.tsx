@@ -50,6 +50,7 @@ import { AccionesCtx, perfilEn, SesionCtx, type AccionesGlobales } from './conte
 import { Logo } from './Logo';
 import { navegacion, pie, type ItemNav } from './navegacion';
 import { Tour } from './Tour';
+import { useNoLeidosChat } from '@/lib/consultasChat';
 import { useNotificaciones } from '@/lib/consultasVistas';
 
 function useEnLinea() {
@@ -299,7 +300,12 @@ function Shell({ yo }: { yo: Yo }) {
                 </Boton>
               )}
               <BotonIcono
-                etiqueta={noLeidas ? `Notificaciones (${noLeidas} sin leer)` : 'Notificaciones'}
+                // El número de la etiqueta es el mismo que se ve en la insignia (WCAG 2.5.3).
+                etiqueta={
+                  noLeidas
+                    ? `Notificaciones, ${noLeidas > 99 ? '99+' : noLeidas} sin leer`
+                    : 'Notificaciones'
+                }
                 contador={noLeidas}
                 onClick={() => nav('/app/notificaciones')}
                 data-tour="notificaciones"
@@ -427,6 +433,15 @@ function EnlaceNav({
     ? loc.pathname === item.ruta
     : loc.pathname === item.ruta || loc.pathname.startsWith(item.ruta + '/');
   const I = item.icono;
+  // Fase 4 · Chat: mensajes sin leer del equipo junto a «Chat» (ruta /app/e/:id/chat).
+  const sinLeer = useNoLeidosChat(item.clave === 'chat' ? (item.ruta.split('/')[3] ?? null) : null);
+  const insignia =
+    sinLeer > 0 ? (
+      <span className="ml-auto rounded-full bg-brand px-1.5 text-[11px] font-semibold text-on-brand tabular">
+        <span className="sr-only">, sin leer: </span>
+        {sinLeer > 99 ? '99+' : sinLeer}
+      </span>
+    ) : null;
   if (variante === 'lateral')
     return (
       <NavLink
@@ -442,6 +457,7 @@ function EnlaceNav({
       >
         <I className={cx('size-5', activo && 'text-brand')} aria-hidden />
         {item.etiqueta}
+        {insignia}
       </NavLink>
     );
   if (variante === 'rail')
@@ -617,11 +633,14 @@ function MenuPerfil({
         ref={ref}
         type="button"
         onClick={() => setAbierto(!abierto)}
-        aria-label={`Menú de perfil de ${yo.usuario.nombre}`}
+
         aria-expanded={abierto}
         className="grid size-11 shrink-0 place-items-center rounded-full"
         data-cmp="cmp/navegacion/menu-perfil"
       >
+        {/* Nombre accesible desde el contenido: «Menú de perfil de» + el nombre oculto del avatar
+            (sin aria-label, para cumplir «etiqueta en el nombre», WCAG 2.5.3). */}
+        <span className="sr-only">{'Menú de perfil de '}</span>
         <Avatar persona={persona} tamano={32} />
       </button>
       <Popover

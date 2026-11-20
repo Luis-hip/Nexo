@@ -17,7 +17,7 @@ jobs:
   verificar:
     name: Verificar (BD, tipos, lint, pruebas, build)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -76,7 +76,7 @@ jobs:
       - name: Pruebas SQL (deben salir 11 OK)
         run: pnpm db:test
 
-      - name: Pruebas de los procesos de la BD (deben salir 103 OK)
+      - name: Pruebas de los procesos de la BD (deben salir 138 OK, P1–P103, P104–P129 del chat y P200–P208 de autenticación)
         run: pnpm db:test:procesos
 
       - name: Procesos de la BD documentados en docs/08
@@ -111,3 +111,26 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Fase 5.4 · los 3 flujos críticos en un navegador real (Playwright levanta la API y la web).
+      - name: Navegador para las pruebas extremo a extremo
+        run: pnpm --filter @nexo/web exec playwright install --with-deps chromium
+
+      - name: Pruebas extremo a extremo (3 flujos)
+        run: pnpm --filter @nexo/web e2e
+        env:
+          CI: 'true'
+
+      - name: Informe de Playwright si fallan
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
+      # Fase 5.4 · semilla de volumen y EXPLAIN de las 7 consultas clave (falla si hay Seq Scan en tablas grandes).
+      - name: Rendimiento de las consultas clave (EXPLAIN)
+        run: |
+          pnpm db:volumen
+          pnpm db:explain

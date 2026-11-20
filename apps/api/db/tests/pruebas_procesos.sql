@@ -1731,3 +1731,717 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(2); yo uuid := pg_temp.integrante(e, 
   IF jsonb_array_length(proc_reporte_personal(yo)->'por_espacio') <> 1 THEN RAISE EXCEPTION 'FALLO P103: contó un equipo ajeno'; END IF;
   RAISE NOTICE 'OK P103: proc_reporte_personal';
 END $$;
+
+-- =============================================================================================
+-- Fase 4 · Chat (0014 a 0016, DEC-CHAT-1). Pruebas P104 a P149 (reservadas para el chat).
+-- =============================================================================================
+
+-- Equipo de prueba con sus dos canales fijos (equipo_con inserta a mano y no los crea).
+CREATE FUNCTION pg_temp.equipo_chat(n int DEFAULT 2) RETURNS uuid AS $$
+DECLARE e uuid := pg_temp.equipo_con(n);
+BEGIN
+  INSERT INTO conversaciones (equipo_id, tipo, nombre) VALUES (e, 'equipo', 'Equipo de prueba'), (e, 'invitados', 'Invitados');
+  RETURN e;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.canal(p_equipo uuid, p_tipo text) RETURNS uuid AS $$
+  SELECT id FROM conversaciones WHERE equipo_id = p_equipo AND tipo = p_tipo::tipo_conversacion;
+$$ LANGUAGE sql;
+
+-- Envía un mensaje (con campos extra opcionales como `hilo_de_id`, `menciones` o `id_cliente`).
+CREATE FUNCTION pg_temp.decir(p_actor uuid, p_conv uuid, p_texto text, p_extra jsonb DEFAULT '{}') RETURNS jsonb AS $$
+  SELECT proc_chat_enviar(p_actor, p_conv, jsonb_build_object('texto', p_texto) || p_extra);
+$$ LANGUAGE sql;
+
+-- P104. Quién entra a cada canal: líder e integrantes a los dos; el invitado solo a «Invitados»;
+--       quien no es del equipo y una conversación inexistente dan NX006 (404).
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  ajeno uuid := pg_temp.usuario(); ok int := 0; BEGIN
+  PERFORM proc_chat_mensajes(pg_temp.lider(e), eq);
+  PERFORM proc_chat_mensajes(pg_temp.integrante(e, 1), eq);
+  PERFORM proc_chat_mensajes(pg_temp.lider(e), inv);
+  PERFORM proc_chat_mensajes(pg_temp.integrante(e, 1), inv);
+  PERFORM proc_chat_mensajes(pg_temp.invitado(e), inv);
+  BEGIN PERFORM proc_chat_mensajes(pg_temp.invitado(e), eq); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_mensajes(ajeno, eq); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_mensajes(ajeno, inv); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_mensajes(pg_temp.lider(e), gen_random_uuid()); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P104: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P104: acceso a los canales';
+END $$;
+
+-- P105. proc_chat_enviar: guarda el mensaje recortado con su autor y deja el puntero del autor en él;
+--       vacío o de más de 4000 caracteres da NX010; el invitado no escribe en «Equipo» pero sí en «Invitados».
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  l uuid := pg_temp.lider(e); m jsonb; ok int := 0; BEGIN
+  m := pg_temp.decir(l, eq, '  Hola equipo  ');
+  IF m->>'texto' <> 'Hola equipo' OR (m->'autor'->>'usuario_id')::uuid <> l OR (m->>'seq')::bigint < 1
+     OR (m->>'eliminado')::boolean OR (m->>'respuestas')::int <> 0 THEN
+    RAISE EXCEPTION 'FALLO P105: %', m;
+  END IF;
+  IF (SELECT ultimo_leido_seq FROM conversacion_lecturas WHERE conversacion_id = eq AND usuario_id = l) <> (m->>'seq')::bigint THEN
+    RAISE EXCEPTION 'FALLO P105: el autor no quedó al día';
+  END IF;
+  BEGIN PERFORM pg_temp.decir(l, eq, '   '); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.decir(l, eq, repeat('a', 4001)); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.decir(pg_temp.invitado(e), eq, 'hola'); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  PERFORM pg_temp.decir(pg_temp.invitado(e), inv, 'Hola desde afuera');
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P105: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P105: proc_chat_enviar';
+END $$;
+
+-- P106. Reenviar con el mismo id_cliente devuelve el mismo mensaje (una sola fila); otra persona
+--       que reutiliza ese id_cliente recibe NX012 y no ve el mensaje ajeno.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  cid uuid := gen_random_uuid(); a jsonb; b jsonb; ok int := 0; BEGIN
+  a := pg_temp.decir(l, eq, 'Uno', jsonb_build_object('id_cliente', cid));
+  b := pg_temp.decir(l, eq, 'Otro texto', jsonb_build_object('id_cliente', cid));
+  IF a->>'id' <> b->>'id' OR b->>'texto' <> 'Uno' OR (SELECT count(*) FROM mensajes WHERE conversacion_id = eq) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P106: se duplicó %', b;
+  END IF;
+  BEGIN PERFORM pg_temp.decir(pg_temp.integrante(e, 1), eq, 'Intruso', jsonb_build_object('id_cliente', cid));
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P106: reutilizó el id de otra persona'; END IF;
+  RAISE NOTICE 'OK P106: id_cliente idempotente';
+END $$;
+
+-- P107. Hilos: una respuesta a una respuesta se une a la raíz; las respuestas no salen en la página
+--       principal pero cuentan en la raíz; proc_chat_hilo da raíz y respuestas en orden; responder a un
+--       mensaje de otra conversación o eliminado da NX010; el invitado no ve el hilo del equipo.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  l uuid := pg_temp.lider(e); i1 uuid := pg_temp.integrante(e, 1); raiz jsonb; r1 jsonb; r2 jsonb; fuera jsonb; h jsonb; ok int := 0; BEGIN
+  raiz := pg_temp.decir(l, eq, 'Raíz');
+  r1 := pg_temp.decir(i1, eq, 'Primera', jsonb_build_object('hilo_de_id', raiz->>'id'));
+  r2 := pg_temp.decir(l, eq, 'Segunda', jsonb_build_object('hilo_de_id', r1->>'id'));
+  IF r1->>'hilo_de_id' <> raiz->>'id' OR r2->>'hilo_de_id' <> raiz->>'id' THEN RAISE EXCEPTION 'FALLO P107: no usó la raíz'; END IF;
+  h := proc_chat_hilo(i1, (r2->>'id')::uuid);
+  IF h->'raiz'->>'id' <> raiz->>'id' OR (h->'raiz'->>'respuestas')::int <> 2 OR jsonb_array_length(h->'respuestas') <> 2
+     OR h->'respuestas'->0->>'texto' <> 'Primera' THEN
+    RAISE EXCEPTION 'FALLO P107: hilo %', h;
+  END IF;
+  IF jsonb_array_length(proc_chat_mensajes(l, eq)->'items') <> 1 THEN RAISE EXCEPTION 'FALLO P107: las respuestas salieron en la página'; END IF;
+  fuera := pg_temp.decir(l, inv, 'En otro canal');
+  BEGIN PERFORM pg_temp.decir(l, eq, 'x', jsonb_build_object('hilo_de_id', fuera->>'id')); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_chat_eliminar(l, (r1->>'id')::uuid);
+  BEGIN PERFORM pg_temp.decir(l, eq, 'x', jsonb_build_object('hilo_de_id', r1->>'id')); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_hilo(pg_temp.invitado(e), (raiz->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P107: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P107: hilos';
+END $$;
+
+-- P108. Menciones: solo cuentan las personas con acceso al canal y no uno mismo; cada una recibe una
+--       notificación de «menciones» que abre el chat; con «mencion» apagada en la app no se notifica;
+--       en el canal de Invitados sí se puede mencionar al invitado.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  l uuid := pg_temp.lider(e); i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); g uuid := pg_temp.invitado(e);
+  ajeno uuid := pg_temp.usuario(); m jsonb; n record; BEGIN
+  m := pg_temp.decir(i1, eq, '@Integrante 2 y @Líder, mírenlo',
+         jsonb_build_object('menciones', jsonb_build_array(i2, l, i1, g, ajeno)));
+  IF jsonb_array_length(m->'menciones') <> 2 OR NOT (m->'menciones' @> to_jsonb(i2::text)) OR NOT (m->'menciones' @> to_jsonb(l::text)) THEN
+    RAISE EXCEPTION 'FALLO P108: menciones %', m->'menciones';
+  END IF;
+  SELECT * INTO n FROM notificaciones WHERE usuario_id = i2;
+  IF n.categoria <> 'menciones' OR n.accion_tipo <> 'abrir_chat' OR n.accion_ref <> eq::text OR n.titulo <> 'Integrante te mencionó'
+     OR n.enlace <> '/app/e/' || e || '/chat/' || eq THEN
+    RAISE EXCEPTION 'FALLO P108: notificación %', to_jsonb(n);
+  END IF;
+  IF (SELECT count(*) FROM notificaciones WHERE usuario_id IN (i1, g, ajeno)) <> 0 THEN RAISE EXCEPTION 'FALLO P108: notificó de más'; END IF;
+  INSERT INTO preferencias_notificacion (usuario_id, evento, por_app) VALUES (i2, 'mencion', false);
+  PERFORM pg_temp.decir(i1, eq, 'Otra vez', jsonb_build_object('menciones', jsonb_build_array(i2)));
+  IF (SELECT count(*) FROM notificaciones WHERE usuario_id = i2) <> 1 THEN RAISE EXCEPTION 'FALLO P108: ignoró la preferencia'; END IF;
+  m := pg_temp.decir(l, inv, 'Bienvenido', jsonb_build_object('menciones', jsonb_build_array(g)));
+  IF (SELECT count(*) FROM notificaciones WHERE usuario_id = g AND categoria = 'menciones') <> 1 THEN RAISE EXCEPTION 'FALLO P108: no mencionó al invitado'; END IF;
+  RAISE NOTICE 'OK P108: menciones y notificaciones';
+END $$;
+
+-- P109. Paginación por cursor: páginas de 2 de más nuevas a más antiguas, cada una en orden ascendente.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  p1 jsonb; p2 jsonb; p3 jsonb; i int; BEGIN
+  FOR i IN 1..5 LOOP PERFORM pg_temp.decir(l, eq, 'Mensaje ' || i); END LOOP;
+  p1 := proc_chat_mensajes(l, eq, NULL, 2);
+  IF jsonb_array_length(p1->'items') <> 2 OR NOT (p1->>'hay_mas')::boolean OR p1->'items'->0->>'texto' <> 'Mensaje 4'
+     OR p1->'items'->1->>'texto' <> 'Mensaje 5' THEN RAISE EXCEPTION 'FALLO P109: página 1 %', p1->'items'; END IF;
+  p2 := proc_chat_mensajes(l, eq, (p1->'items'->0->>'seq')::bigint, 2);
+  IF p2->'items'->0->>'texto' <> 'Mensaje 2' OR p2->'items'->1->>'texto' <> 'Mensaje 3' OR NOT (p2->>'hay_mas')::boolean THEN
+    RAISE EXCEPTION 'FALLO P109: página 2 %', p2->'items';
+  END IF;
+  p3 := proc_chat_mensajes(l, eq, (p2->'items'->0->>'seq')::bigint, 2);
+  IF jsonb_array_length(p3->'items') <> 1 OR (p3->>'hay_mas')::boolean OR p3->'items'->0->>'texto' <> 'Mensaje 1' THEN
+    RAISE EXCEPTION 'FALLO P109: página 3 %', p3->'items';
+  END IF;
+  RAISE NOTICE 'OK P109: paginación por cursor';
+END $$;
+
+-- P110. No leídos y puntero: lo propio no cuenta; las menciones se cuentan aparte; leer avanza pero
+--       nunca retrocede ni pasa del último mensaje.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); m1 jsonb; m2 jsonb; r jsonb; BEGIN
+  m1 := pg_temp.decir(l, eq, 'Uno');
+  m2 := pg_temp.decir(l, eq, 'Dos', jsonb_build_object('menciones', jsonb_build_array(i1)));
+  PERFORM pg_temp.decir(l, eq, 'Tres');
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(i1, e)) x WHERE x->>'id' = eq::text);
+  IF (r->>'no_leidos')::int <> 3 OR (r->>'menciones_sin_leer')::int <> 1 THEN RAISE EXCEPTION 'FALLO P110: %', r; END IF;
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(l, e)) x WHERE x->>'id' = eq::text);
+  IF (r->>'no_leidos')::int <> 0 THEN RAISE EXCEPTION 'FALLO P110: contó lo propio %', r; END IF;
+  r := proc_chat_leer(i1, eq, (m2->>'seq')::bigint);
+  IF (r->>'no_leidos')::int <> 1 THEN RAISE EXCEPTION 'FALLO P110: leer %', r; END IF;
+  r := proc_chat_leer(i1, eq, (m1->>'seq')::bigint);
+  IF (r->>'ultimo_leido_seq')::bigint <> (m2->>'seq')::bigint THEN RAISE EXCEPTION 'FALLO P110: retrocedió %', r; END IF;
+  r := proc_chat_leer(i1, eq, 1000000000);
+  IF (r->>'no_leidos')::int <> 0 OR (r->>'ultimo_leido_seq')::bigint <> (SELECT max(seq) FROM mensajes WHERE conversacion_id = eq) THEN
+    RAISE EXCEPTION 'FALLO P110: pasó del último %', r;
+  END IF;
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(i2, e)) x WHERE x->>'id' = eq::text);
+  IF (r->>'no_leidos')::int <> 3 THEN RAISE EXCEPTION 'FALLO P110: leyó por otra persona %', r; END IF;
+  RAISE NOTICE 'OK P110: no leídos y puntero de lectura';
+END $$;
+
+-- P111. proc_chat_conversaciones: el líder ve los dos canales y su mensaje directo; el invitado solo
+--       «Invitados»; el chat de una tarea sin mensajes no aparece hasta que alguien escribe.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); l uuid := pg_temp.lider(e); i1 uuid := pg_temp.integrante(e, 1);
+  g uuid := pg_temp.invitado(e); t uuid := pg_temp.aceptada(e, 0, 'Tarea con chat'); c jsonb; d jsonb; BEGIN
+  IF jsonb_array_length(proc_chat_conversaciones(l, e)) <> 2 OR jsonb_array_length(proc_chat_conversaciones(g, e)) <> 1
+     OR proc_chat_conversaciones(g, e)->0->>'tipo' <> 'invitados' THEN
+    RAISE EXCEPTION 'FALLO P111: canales';
+  END IF;
+  c := proc_chat_conversacion_tarea(l, e, t);
+  IF jsonb_array_length(proc_chat_conversaciones(l, e)) <> 2 THEN RAISE EXCEPTION 'FALLO P111: listó una tarea sin mensajes'; END IF;
+  PERFORM pg_temp.decir(l, (c->>'id')::uuid, 'Arrancamos');
+  d := proc_chat_dm_abrir(l, e, i1);
+  IF jsonb_array_length(proc_chat_conversaciones(l, e)) <> 4 OR jsonb_array_length(proc_chat_conversaciones(i1, e)) <> 4 THEN
+    RAISE EXCEPTION 'FALLO P111: tarea y directo %', proc_chat_conversaciones(l, e);
+  END IF;
+  IF d->>'nombre' <> 'Integrante 1' OR d->'con'->>'usuario_id' <> i1::text
+     OR NOT (proc_chat_conversaciones(i1, e)::text LIKE '%"nombre": "Líder Prueba"%') THEN
+    RAISE EXCEPTION 'FALLO P111: nombre del directo %', d;
+  END IF;
+  RAISE NOTICE 'OK P111: proc_chat_conversaciones';
+END $$;
+
+-- P112. proc_chat_conversacion_tarea: la primera vez crea el chat y después devuelve el mismo; un
+--       invitado solo abre tareas compartidas; una tarea de otro equipo es NX006.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); otro uuid := pg_temp.equipo_chat(1); l uuid := pg_temp.lider(e); g uuid := pg_temp.invitado(e);
+  t uuid := pg_temp.aceptada(e, 0, 'Diseñar'); t_otro uuid := pg_temp.aceptada(otro, 0, 'Ajena'); a jsonb; b jsonb; ok int := 0; BEGIN
+  a := proc_chat_conversacion_tarea(pg_temp.integrante(e, 1), e, t);
+  b := proc_chat_conversacion_tarea(l, e, t);
+  IF a->>'id' <> b->>'id' OR a->>'tipo' <> 'tarea' OR a->>'nombre' NOT LIKE 'T-%Diseñar' OR (a->'tarea'->>'id')::uuid <> t
+     OR (SELECT count(*) FROM conversaciones WHERE tarea_id = t) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P112: %', a;
+  END IF;
+  BEGIN PERFORM proc_chat_conversacion_tarea(g, e, t); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_conversacion_tarea(l, e, t_otro); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  INSERT INTO tarea_compartida (tarea_id, membresia_id) VALUES (t, pg_temp.membresia(e, g));
+  IF (proc_chat_conversacion_tarea(g, e, t)->>'id') <> a->>'id' THEN RAISE EXCEPTION 'FALLO P112: el invitado no entró'; END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P112: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P112: proc_chat_conversacion_tarea';
+END $$;
+
+-- P113. El invitado escribe en el chat de una tarea compartida y, en cuanto se deja de compartir,
+--       pierde el acceso (también a sus salas y a la lista de miembros); el líder conserva el historial.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); l uuid := pg_temp.lider(e); g uuid := pg_temp.invitado(e);
+  t uuid := pg_temp.aceptada(e, 0, 'Compartida'); c uuid; ok int := 0; BEGIN
+  INSERT INTO tarea_compartida (tarea_id, membresia_id) VALUES (t, pg_temp.membresia(e, g));
+  c := (proc_chat_conversacion_tarea(l, e, t)->>'id')::uuid;
+  PERFORM pg_temp.decir(g, c, 'Yo también opino');
+  IF NOT (proc_chat_miembros(l, c)::text LIKE '%"rol": "invitado"%') THEN RAISE EXCEPTION 'FALLO P113: no lista al invitado'; END IF;
+  DELETE FROM tarea_compartida WHERE tarea_id = t;
+  BEGIN PERFORM proc_chat_mensajes(g, c); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.decir(g, c, 'Sigo aquí'); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF proc_chat_salas(g)::text LIKE '%' || c::text || '%' THEN RAISE EXCEPTION 'FALLO P113: sigue en la sala'; END IF;
+  IF proc_chat_miembros(l, c)::text LIKE '%"rol": "invitado"%' THEN RAISE EXCEPTION 'FALLO P113: sigue en miembros'; END IF;
+  IF jsonb_array_length(proc_chat_mensajes(l, c)->'items') <> 1 THEN RAISE EXCEPTION 'FALLO P113: el líder perdió el historial'; END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P113: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P113: invitado y tarea compartida';
+END $$;
+
+-- P114. proc_chat_dm_abrir: una sola conversación por pareja (da igual quién abre); el invitado no
+--       escribe a nadie (NX005), no se escribe a un invitado ni a uno mismo ni a quien no es del equipo
+--       (NX010); un tercero, ni siquiera el líder, ve esa conversación (NX006).
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); l uuid := pg_temp.lider(e); i1 uuid := pg_temp.integrante(e, 1);
+  i2 uuid := pg_temp.integrante(e, 2); g uuid := pg_temp.invitado(e); a jsonb; b jsonb; ok int := 0; BEGIN
+  a := proc_chat_dm_abrir(i1, e, i2);
+  b := proc_chat_dm_abrir(i2, e, i1);
+  IF a->>'id' <> b->>'id' OR a->>'tipo' <> 'dm' OR (SELECT count(*) FROM conversaciones WHERE equipo_id = e AND tipo = 'dm') <> 1
+     OR a->>'nombre' <> 'Integrante 2' OR b->>'nombre' <> 'Integrante 1' THEN
+    RAISE EXCEPTION 'FALLO P114: %', a;
+  END IF;
+  PERFORM pg_temp.decir(i1, (a->>'id')::uuid, 'Pssst');
+  BEGIN PERFORM proc_chat_dm_abrir(g, e, l); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_dm_abrir(l, e, g); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_dm_abrir(l, e, l); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_dm_abrir(l, e, pg_temp.usuario()); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_mensajes(l, (a->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.decir(l, (a->>'id')::uuid, 'Metiche'); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 6 THEN RAISE EXCEPTION 'FALLO P114: % de 6 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P114: proc_chat_dm_abrir';
+END $$;
+
+-- P115. Si una de las dos personas sale del equipo, el mensaje directo deja de verse para quien se queda.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2);
+  d uuid := (proc_chat_dm_abrir(pg_temp.integrante(e, 1), e, pg_temp.integrante(e, 2))->>'id')::uuid; ok int := 0; BEGIN
+  PERFORM pg_temp.decir(i1, d, 'Antes de irte');
+  PERFORM proc_equipo_salir(i2, e);
+  BEGIN PERFORM proc_chat_mensajes(i1, d); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_mensajes(i2, d); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P115: % de 2 rechazos', ok; END IF;
+  IF jsonb_array_length(proc_chat_conversaciones(i1, e)) <> 2 THEN RAISE EXCEPTION 'FALLO P115: lista con el directo'; END IF;
+  RAISE NOTICE 'OK P115: directo tras salir del equipo';
+END $$;
+
+-- P116. proc_chat_eliminar: cada quien borra lo suyo (el texto deja de salir y se desfija); un
+--       integrante no borra lo ajeno (NX005); el líder sí en canales, pero no en un directo ajeno
+--       (NX006); borrar dos veces no falla; los mensajes de sistema solo los borra el líder.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); propio jsonb; ajeno jsonb; sis uuid; d uuid; dm jsonb; ok int := 0; BEGIN
+  propio := pg_temp.decir(i1, eq, 'Me equivoqué');
+  PERFORM proc_chat_fijar(l, (propio->>'id')::uuid, true);
+  propio := proc_chat_eliminar(i1, (propio->>'id')::uuid);
+  IF NOT (propio->>'eliminado')::boolean OR propio->>'texto' <> '' OR (propio->>'fijado')::boolean THEN RAISE EXCEPTION 'FALLO P116: %', propio; END IF;
+  PERFORM proc_chat_eliminar(i1, (propio->>'id')::uuid);
+  ajeno := pg_temp.decir(i1, eq, 'Mío');
+  BEGIN PERFORM proc_chat_eliminar(i2, (ajeno->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  ajeno := proc_chat_eliminar(l, (ajeno->>'id')::uuid);
+  IF NOT (ajeno->>'eliminado')::boolean OR (SELECT eliminado_por FROM mensajes WHERE id = (ajeno->>'id')::uuid) <> l THEN RAISE EXCEPTION 'FALLO P116: moderación'; END IF;
+  INSERT INTO mensajes (conversacion_id, es_sistema, texto) VALUES (eq, true, 'Aviso') RETURNING id INTO sis;
+  BEGIN PERFORM proc_chat_eliminar(i1, sis); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_chat_eliminar(l, sis);
+  dm := proc_chat_dm_abrir(i1, e, i2);
+  d := (pg_temp.decir(i1, (dm->>'id')::uuid, 'Privado')->>'id')::uuid;
+  BEGIN PERFORM proc_chat_eliminar(l, d); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_eliminar(i1, gen_random_uuid()); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P116: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P116: proc_chat_eliminar';
+END $$;
+
+-- P117. proc_chat_fijar: solo el líder fija y desfija (NX005 al integrante); salen en proc_chat_fijados;
+--       no se fijan mensajes directos, respuestas de hilo ni mensajes eliminados (NX007); eliminar un
+--       fijado lo quita de la lista; quien no ve la conversación no ve sus fijados.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); a jsonb; b jsonb; r jsonb; dm uuid; dmm jsonb; ok int := 0; BEGIN
+  a := pg_temp.decir(i1, eq, 'Importante');
+  b := pg_temp.decir(i2, eq, 'En un hilo', jsonb_build_object('hilo_de_id', a->>'id'));
+  BEGIN PERFORM proc_chat_fijar(i1, (a->>'id')::uuid, true); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF NOT (proc_chat_fijar(l, (a->>'id')::uuid, true)->>'fijado')::boolean THEN RAISE EXCEPTION 'FALLO P117: no fijó'; END IF;
+  IF jsonb_array_length(proc_chat_fijados(i2, eq)) <> 1 OR proc_chat_fijados(i2, eq)->0->>'id' <> a->>'id' THEN RAISE EXCEPTION 'FALLO P117: fijados'; END IF;
+  BEGIN PERFORM proc_chat_fijar(l, (b->>'id')::uuid, true); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  dm := (proc_chat_dm_abrir(l, e, i1)->>'id')::uuid;
+  dmm := pg_temp.decir(l, dm, 'Hola');
+  BEGIN PERFORM proc_chat_fijar(l, (dmm->>'id')::uuid, true); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_fijados(i2, dm); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  r := proc_chat_fijar(l, (a->>'id')::uuid, false);
+  IF (r->>'fijado')::boolean OR jsonb_array_length(proc_chat_fijados(l, eq)) <> 0 THEN RAISE EXCEPTION 'FALLO P117: no desfijó'; END IF;
+  PERFORM proc_chat_fijar(l, (a->>'id')::uuid, true);
+  PERFORM proc_chat_eliminar(l, (a->>'id')::uuid);
+  IF jsonb_array_length(proc_chat_fijados(l, eq)) <> 0 THEN RAISE EXCEPTION 'FALLO P117: sigue fijado tras borrar'; END IF;
+  BEGIN PERFORM proc_chat_fijar(l, (a->>'id')::uuid, true); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P117: % de 5 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P117: proc_chat_fijar';
+END $$;
+
+-- P118. proc_chat_reaccionar: suma, repetir el tipo lo quita, cada persona cuenta una vez por tipo y
+--       «yo» es de quien consulta; un tipo desconocido es NX010 y reaccionar a un mensaje eliminado, NX007.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); m jsonb; r jsonb; ok int := 0; BEGIN
+  m := pg_temp.decir(l, eq, 'Entregamos hoy');
+  r := proc_chat_reaccionar(i1, (m->>'id')::uuid, 'hecho');
+  IF r->'reacciones'->0->>'tipo' <> 'hecho' OR (r->'reacciones'->0->>'total')::int <> 1 OR NOT (r->'reacciones'->0->>'yo')::boolean THEN RAISE EXCEPTION 'FALLO P118: %', r; END IF;
+  r := proc_chat_reaccionar(i2, (m->>'id')::uuid, 'hecho');
+  PERFORM proc_chat_reaccionar(i2, (m->>'id')::uuid, 'corazon');
+  r := proc_chat_reaccionar(l, (m->>'id')::uuid, 'hecho');
+  IF (SELECT (x->>'total')::int FROM jsonb_array_elements(r->'reacciones') x WHERE x->>'tipo' = 'hecho') <> 3 OR jsonb_array_length(r->'reacciones') <> 2 THEN RAISE EXCEPTION 'FALLO P118: suma %', r; END IF;
+  r := proc_chat_reaccionar(i1, (m->>'id')::uuid, 'hecho');
+  IF (SELECT (x->>'total')::int FROM jsonb_array_elements(r->'reacciones') x WHERE x->>'tipo' = 'hecho') <> 2
+     OR (SELECT (x->>'yo')::boolean FROM jsonb_array_elements(r->'reacciones') x WHERE x->>'tipo' = 'hecho') THEN RAISE EXCEPTION 'FALLO P118: quitar %', r; END IF;
+  IF (SELECT count(*) FROM jsonb_array_elements(proc_chat_mensajes(i2, eq)->'items'->0->'reacciones') x WHERE (x->>'yo')::boolean) <> 2 THEN RAISE EXCEPTION 'FALLO P118: yo'; END IF;
+  BEGIN PERFORM proc_chat_reaccionar(i1, (m->>'id')::uuid, 'enojo'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_reaccionar(pg_temp.invitado(e), (m->>'id')::uuid, 'ok'); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  PERFORM proc_chat_eliminar(l, (m->>'id')::uuid);
+  BEGIN PERFORM proc_chat_reaccionar(i1, (m->>'id')::uuid, 'ok'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P118: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P118: proc_chat_reaccionar';
+END $$;
+
+-- P119. proc_chat_preferencias: fijar y silenciar una conversación vale solo para quien lo hace;
+--       un cambio parcial conserva los demás valores.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); r jsonb; BEGIN
+  r := proc_chat_preferencias(i1, eq, '{"fijada": true}');
+  IF NOT (r->>'fijada')::boolean OR (r->>'silenciada')::boolean THEN RAISE EXCEPTION 'FALLO P119: %', r; END IF;
+  r := proc_chat_preferencias(i1, eq, '{"silenciada": true}');
+  IF NOT (r->>'fijada')::boolean OR NOT (r->>'silenciada')::boolean THEN RAISE EXCEPTION 'FALLO P119: perdió lo anterior %', r; END IF;
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(l, e)) x WHERE x->>'id' = eq::text);
+  IF (r->>'fijada')::boolean OR (r->>'silenciada')::boolean THEN RAISE EXCEPTION 'FALLO P119: afectó a otra persona %', r; END IF;
+  RAISE NOTICE 'OK P119: proc_chat_preferencias';
+END $$;
+
+-- P120. proc_chat_miembros: en «Equipo» solo líder e integrantes; en «Invitados» también el invitado;
+--       quien no puede ver la conversación no puede pedir la lista (NX006).
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  l uuid := pg_temp.lider(e); ok int := 0; BEGIN
+  IF jsonb_array_length(proc_chat_miembros(l, eq)) <> 3 OR proc_chat_miembros(l, eq)::text LIKE '%"rol": "invitado"%'
+     OR proc_chat_miembros(l, eq)->0->>'rol' <> 'lider' THEN
+    RAISE EXCEPTION 'FALLO P120: equipo %', proc_chat_miembros(l, eq);
+  END IF;
+  IF jsonb_array_length(proc_chat_miembros(pg_temp.invitado(e), inv)) <> 4 THEN RAISE EXCEPTION 'FALLO P120: invitados'; END IF;
+  BEGIN PERFORM proc_chat_miembros(pg_temp.invitado(e), eq); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P120: el invitado vio miembros del equipo'; END IF;
+  RAISE NOTICE 'OK P120: proc_chat_miembros';
+END $$;
+
+-- P121. proc_chat_salas: las conversaciones que la persona ve en todos sus equipos y nada más
+--       (el invitado, solo «Invitados»; no hay salas de equipos ajenos).
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); otro uuid := pg_temp.equipo_chat(1); l uuid := pg_temp.lider(e); s jsonb; BEGIN
+  s := proc_chat_salas(l);
+  IF jsonb_array_length(s) <> 2 OR s::text LIKE '%' || otro::text || '%' THEN RAISE EXCEPTION 'FALLO P121: líder %', s; END IF;
+  s := proc_chat_salas(pg_temp.invitado(e));
+  IF jsonb_array_length(s) <> 1 OR s->0->>'conversacion_id' <> pg_temp.canal(e, 'invitados')::text THEN RAISE EXCEPTION 'FALLO P121: invitado %', s; END IF;
+  IF proc_chat_salas(pg_temp.usuario()) <> '[]'::jsonb THEN RAISE EXCEPTION 'FALLO P121: ajeno'; END IF;
+  RAISE NOTICE 'OK P121: proc_chat_salas';
+END $$;
+
+-- P122. proc_chat_buscar: encuentra por palabra (con variantes del español) y marca lo hallado con «…»;
+--       respeta la visibilidad (el invitado no encuentra lo del equipo; un directo ajeno nunca sale);
+--       no devuelve eliminados ni mensajes de sistema; menos de 2 caracteres es NX010.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  l uuid := pg_temp.lider(e); i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); g uuid := pg_temp.invitado(e);
+  borrado jsonb; r jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.decir(l, eq, 'Agendamos la reunión semanal del jueves');
+  PERFORM pg_temp.decir(l, inv, 'La reunión con el cliente es el lunes');
+  PERFORM pg_temp.decir(i1, (proc_chat_dm_abrir(i1, e, i2)->>'id')::uuid, 'Hablemos de la reunión en privado');
+  borrado := pg_temp.decir(l, eq, 'Otra reunión que mejor borro');
+  PERFORM proc_chat_eliminar(l, (borrado->>'id')::uuid);
+  INSERT INTO mensajes (conversacion_id, es_sistema, texto) VALUES (eq, true, 'Aviso de reunión');
+  r := proc_chat_buscar(l, e, 'reuniones');
+  IF jsonb_array_length(r) <> 2 OR NOT (r::text LIKE '%«reunión»%') THEN RAISE EXCEPTION 'FALLO P122: líder %', r; END IF;
+  r := proc_chat_buscar(g, e, 'reunión');
+  IF jsonb_array_length(r) <> 1 OR r->0->>'tipo' <> 'invitados' THEN RAISE EXCEPTION 'FALLO P122: invitado %', r; END IF;
+  r := proc_chat_buscar(i1, e, 'reunión');
+  IF jsonb_array_length(r) <> 3 THEN RAISE EXCEPTION 'FALLO P122: el integrante no ve su directo %', r; END IF;
+  IF jsonb_array_length(proc_chat_buscar(l, e, 'privado')) <> 0 THEN RAISE EXCEPTION 'FALLO P122: el líder vio un directo ajeno'; END IF;
+  IF proc_chat_buscar(l, e, 'xyzinexistente') <> '[]'::jsonb THEN RAISE EXCEPTION 'FALLO P122: inventó resultados'; END IF;
+  BEGIN PERFORM proc_chat_buscar(l, e, 'a'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_buscar(pg_temp.usuario(), e, 'reunión'); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P122: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P122: proc_chat_buscar';
+END $$;
+
+-- P123. proc_chat_buscar limitado a una conversación y con límite de resultados.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); eq uuid := pg_temp.canal(e, 'equipo'); inv uuid := pg_temp.canal(e, 'invitados');
+  l uuid := pg_temp.lider(e); i int; BEGIN
+  FOR i IN 1..4 LOOP PERFORM pg_temp.decir(l, eq, 'Sprint número ' || i); END LOOP;
+  PERFORM pg_temp.decir(l, inv, 'Sprint de invitados');
+  IF jsonb_array_length(proc_chat_buscar(l, e, 'sprint')) <> 5 THEN RAISE EXCEPTION 'FALLO P123: total'; END IF;
+  IF jsonb_array_length(proc_chat_buscar(l, e, 'sprint', inv)) <> 1 THEN RAISE EXCEPTION 'FALLO P123: una conversación'; END IF;
+  IF jsonb_array_length(proc_chat_buscar(l, e, 'sprint', NULL, 2)) <> 2 THEN RAISE EXCEPTION 'FALLO P123: límite'; END IF;
+  RAISE NOTICE 'OK P123: búsqueda por conversación y límite';
+END $$;
+
+-- P124. proc_chat_mensaje_a_tarea: el líder convierte un mensaje en una propuesta (en votación) que
+--       recuerda su mensaje; el mensaje queda ligado, el chat recibe un aviso de sistema y se registra el
+--       evento; el título sale de la primera línea. Convertirlo otra vez es NX012.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  m jsonb; r jsonb; t tareas; ok int := 0; BEGIN
+  m := pg_temp.decir(pg_temp.integrante(e, 1), eq, E'Preparar la demo del jueves\nCon datos reales de la semilla');
+  r := proc_chat_mensaje_a_tarea(l, (m->>'id')::uuid);
+  SELECT * INTO t FROM tareas WHERE id = (r->'tarea'->>'id')::uuid;
+  IF t.titulo <> 'Preparar la demo del jueves' OR t.estado <> 'propuesta' OR t.mensaje_origen_id <> (m->>'id')::uuid
+     OR t.descripcion NOT LIKE '%datos reales%' OR t.equipo_id <> e THEN
+    RAISE EXCEPTION 'FALLO P124: tarea %', to_jsonb(t);
+  END IF;
+  IF r->'mensaje'->'tarea'->>'id' <> t.id::text OR NOT (r->'sistema'->>'es_sistema')::boolean
+     OR r->'sistema'->>'texto' NOT LIKE '%convirtió un mensaje en la tarea T-%' THEN
+    RAISE EXCEPTION 'FALLO P124: mensajes %', r;
+  END IF;
+  IF (SELECT count(*) FROM eventos_dominio WHERE objeto_id = t.id AND tipo = 'tarea.propuesta') <> 1 THEN RAISE EXCEPTION 'FALLO P124: sin evento'; END IF;
+  BEGIN PERFORM proc_chat_mensaje_a_tarea(l, (m->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P124: convirtió dos veces'; END IF;
+  RAISE NOTICE 'OK P124: proc_chat_mensaje_a_tarea';
+END $$;
+
+-- P125. proc_chat_mensaje_a_tarea con título y datos propios; solo el líder (NX005); no se convierten
+--       mensajes directos (NX005), eliminados ni de sistema (NX007).
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); m jsonb; r jsonb; t tareas; sis uuid; dm jsonb; ok int := 0; BEGIN
+  m := pg_temp.decir(i1, eq, 'Alguien podría revisar el contrato');
+  BEGIN PERFORM proc_chat_mensaje_a_tarea(i1, (m->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  r := proc_chat_mensaje_a_tarea(l, (m->>'id')::uuid,
+         jsonb_build_object('titulo', 'Revisar contrato', 'descripcion', 'Con legal', 'prioridad', 'alta', 'responsable_id', i1));
+  SELECT * INTO t FROM tareas WHERE id = (r->'tarea'->>'id')::uuid;
+  IF t.titulo <> 'Revisar contrato' OR t.descripcion <> 'Con legal' OR t.prioridad <> 'alta' OR t.responsable_id <> i1 THEN
+    RAISE EXCEPTION 'FALLO P125: %', to_jsonb(t);
+  END IF;
+  INSERT INTO mensajes (conversacion_id, es_sistema, texto) VALUES (eq, true, 'Aviso') RETURNING id INTO sis;
+  BEGIN PERFORM proc_chat_mensaje_a_tarea(l, sis); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  m := pg_temp.decir(i1, eq, 'Borrado');
+  PERFORM proc_chat_eliminar(l, (m->>'id')::uuid);
+  BEGIN PERFORM proc_chat_mensaje_a_tarea(l, (m->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  dm := proc_chat_dm_abrir(l, e, i1);
+  m := pg_temp.decir(l, (dm->>'id')::uuid, 'Nota privada');
+  BEGIN PERFORM proc_chat_mensaje_a_tarea(l, (m->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P125: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P125: mensaje a tarea con datos propios y rechazos';
+END $$;
+
+-- P126. Un equipo archivado es de solo lectura: se lee y se busca, pero enviar, reaccionar, fijar,
+--       eliminar, abrir un directo nuevo o crear un chat de tarea dan NX009.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  i1 uuid := pg_temp.integrante(e, 1); t uuid := pg_temp.aceptada(e, 0, 'Sin chat'); m jsonb; ok int := 0; BEGIN
+  m := pg_temp.decir(l, eq, 'Último mensaje');
+  PERFORM proc_equipo_archivar(l, e, true);
+  PERFORM proc_chat_mensajes(i1, eq);
+  PERFORM proc_chat_buscar(i1, e, 'mensaje');
+  PERFORM proc_chat_leer(i1, eq, (m->>'seq')::bigint);
+  BEGIN PERFORM pg_temp.decir(l, eq, 'Ya no'); EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_reaccionar(i1, (m->>'id')::uuid, 'ok'); EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_fijar(l, (m->>'id')::uuid, true); EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_eliminar(l, (m->>'id')::uuid); EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_dm_abrir(l, e, i1); EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_conversacion_tarea(l, e, t); EXCEPTION WHEN SQLSTATE 'NX009' THEN ok := ok + 1; END;
+  IF ok <> 6 THEN RAISE EXCEPTION 'FALLO P126: % de 6 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P126: equipo archivado en solo lectura';
+END $$;
+
+-- P127. Un invitado con el acceso caducado no entra a nada (NX005 acceso_caducado) y no figura en sus
+--       salas; un integrante que salió del equipo recibe NX006.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); inv uuid := pg_temp.canal(e, 'invitados'); g uuid := pg_temp.invitado(e);
+  i2 uuid := pg_temp.integrante(e, 2); ok int := 0; BEGIN
+  PERFORM pg_temp.decir(g, inv, 'Todavía puedo');
+  UPDATE membresias SET caduca_en = now() - interval '1 day' WHERE equipo_id = e AND usuario_id = g;
+  BEGIN PERFORM proc_chat_mensajes(g, inv); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM pg_temp.decir(g, inv, 'Ya no'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF proc_chat_salas(g) <> '[]'::jsonb OR proc_chat_miembros(pg_temp.lider(e), inv)::text LIKE '%"rol": "invitado"%' THEN
+    RAISE EXCEPTION 'FALLO P127: sigue con acceso';
+  END IF;
+  PERFORM proc_equipo_salir(i2, e);
+  BEGIN PERFORM proc_chat_mensajes(i2, pg_temp.canal(e, 'equipo')); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P127: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P127: acceso caducado y salida del equipo';
+END $$;
+
+-- P128. «Leído por»: cuenta a quienes avanzaron su puntero hasta el mensaje, sin el autor.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(2); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e); m jsonb; BEGIN
+  m := pg_temp.decir(l, eq, 'Enterados');
+  IF (proc_chat_mensajes(l, eq)->'items'->0->>'leido_por')::int <> 0 THEN RAISE EXCEPTION 'FALLO P128: contó al autor'; END IF;
+  PERFORM proc_chat_leer(pg_temp.integrante(e, 1), eq, (m->>'seq')::bigint);
+  PERFORM proc_chat_leer(pg_temp.integrante(e, 2), eq, (m->>'seq')::bigint);
+  IF (proc_chat_mensajes(l, eq)->'items'->0->>'leido_por')::int <> 2 THEN RAISE EXCEPTION 'FALLO P128: %', proc_chat_mensajes(l, eq)->'items'->0; END IF;
+  RAISE NOTICE 'OK P128: leído por';
+END $$;
+
+-- P129. «Último mensaje» de la lista: ignora lo eliminado; quien se une después no ve como no leído
+--       lo anterior a su ingreso.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); eq uuid := pg_temp.canal(e, 'equipo'); l uuid := pg_temp.lider(e);
+  a jsonb; b jsonb; nuevo uuid := pg_temp.usuario('Recién llegada'); r jsonb; BEGIN
+  a := pg_temp.decir(l, eq, 'Primero');
+  b := pg_temp.decir(l, eq, 'Segundo');
+  PERFORM proc_chat_eliminar(l, (b->>'id')::uuid);
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(l, e)) x WHERE x->>'id' = eq::text);
+  IF r->'ultimo'->>'texto' <> 'Primero' THEN RAISE EXCEPTION 'FALLO P129: último %', r->'ultimo'; END IF;
+  UPDATE mensajes SET creado_en = now() - interval '2 days' WHERE conversacion_id = eq;
+  INSERT INTO membresias (equipo_id, usuario_id, rol, color_idx) VALUES (e, nuevo, 'integrante', 5);
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(nuevo, e)) x WHERE x->>'id' = eq::text);
+  IF (r->>'no_leidos')::int <> 0 THEN RAISE EXCEPTION 'FALLO P129: historial anterior sin leer %', r; END IF;
+  PERFORM pg_temp.decir(l, eq, 'Bienvenida');
+  r := (SELECT x FROM jsonb_array_elements(proc_chat_conversaciones(nuevo, e)) x WHERE x->>'id' = eq::text);
+  IF (r->>'no_leidos')::int <> 1 THEN RAISE EXCEPTION 'FALLO P129: no contó lo nuevo %', r; END IF;
+  RAISE NOTICE 'OK P129: último mensaje y no leídos de quien llega';
+END $$;
+
+-- =============================================================================================
+-- Fase 5 · Autenticación (0030, DEC-AUTH-1). Pruebas P200 en adelante (P104–P149 son del chat y
+-- P150–P199 de WhatsApp). Los hashes de prueba no son reales: la API calcula los Argon2id.
+-- =============================================================================================
+
+CREATE FUNCTION pg_temp.hash_falso(p text DEFAULT 'a') RETURNS text AS $$
+  SELECT '$argon2id$v=19$m=19456,t=2,p=1$prueba$' || p;
+$$ LANGUAGE sql;
+
+CREATE FUNCTION pg_temp.tk(p text DEFAULT gen_random_uuid()::text) RETURNS bytea AS $$
+  SELECT sha256(convert_to(p, 'UTF8'));
+$$ LANGUAGE sql;
+
+-- Cuenta con contraseña (falsa) creada por el proceso de registro. Devuelve su id.
+CREATE FUNCTION pg_temp.cuenta(p_correo text DEFAULT 'c-' || gen_random_uuid() || '@prueba.mx') RETURNS uuid AS $$
+  SELECT (proc_auth_registrar(p_correo, 'Cuenta Prueba', pg_temp.hash_falso(), pg_temp.tk(), '127.0.0.1', 'pruebas',
+          now() + interval '1 day')->'usuario'->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P200. proc_auth_registrar: crea la cuenta sin verificar, sus preferencias y una sesión; el correo
+--       se guarda en minúsculas y uno repetido (sin importar mayúsculas) es NX012; nombre, correo o
+--       hash inválidos son NX010.
+DO $$ DECLARE r jsonb; u uuid; ok int := 0; BEGIN
+  r := proc_auth_registrar('  Nueva.Persona@Prueba.MX ', ' Nueva Persona ', pg_temp.hash_falso(), pg_temp.tk('s1'), '10.0.0.1', 'Firefox', now() + interval '30 days');
+  u := (r->'usuario'->>'id')::uuid;
+  IF r->'usuario'->>'correo' <> 'nueva.persona@prueba.mx' OR r->'usuario'->>'nombre' <> 'Nueva Persona'
+     OR (SELECT correo_verificado_en FROM usuarios WHERE id = u) IS NOT NULL
+     OR NOT EXISTS (SELECT 1 FROM preferencias_usuario WHERE usuario_id = u)
+     OR (SELECT count(*) FROM sesiones WHERE usuario_id = u AND token_hash = pg_temp.tk('s1') AND ip = '10.0.0.1') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P200: %', r;
+  END IF;
+  BEGIN PERFORM proc_auth_registrar('NUEVA.PERSONA@prueba.mx', 'Otra', pg_temp.hash_falso(), pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_registrar('x@prueba.mx', 'A', pg_temp.hash_falso(), pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_registrar('no-es-correo', 'Alguien', pg_temp.hash_falso(), pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_registrar('y@prueba.mx', 'Alguien', 'contraseña-en-claro', pg_temp.tk(), NULL, '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P200: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P200: proc_auth_registrar';
+END $$;
+
+-- P201. proc_auth_credenciales: devuelve id y hash por correo (sin importar mayúsculas); NULL si no
+--       existe, si la cuenta se eliminó o si no tiene contraseña.
+DO $$ DECLARE c text := 'cred-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); sin uuid := pg_temp.usuario(); r jsonb; BEGIN
+  r := proc_auth_credenciales(upper(c));
+  IF (r->>'usuario_id')::uuid <> u OR r->>'hash' <> pg_temp.hash_falso() THEN RAISE EXCEPTION 'FALLO P201: %', r; END IF;
+  IF proc_auth_credenciales('nadie@prueba.mx') IS NOT NULL
+     OR proc_auth_credenciales((SELECT correo FROM usuarios WHERE id = sin)) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P201: devolvió una cuenta que no debía';
+  END IF;
+  UPDATE usuarios SET eliminado_en = now() WHERE id = u;
+  IF proc_auth_credenciales(c) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P201: cuenta eliminada'; END IF;
+  RAISE NOTICE 'OK P201: proc_auth_credenciales';
+END $$;
+
+-- P202. proc_auth_entrar: con la contraseña correcta crea la sesión y reinicia los intentos; con una
+--       incorrecta suma un intento sin crear sesión.
+DO $$ DECLARE u uuid := pg_temp.cuenta(); r jsonb; BEGIN
+  r := proc_auth_entrar(u, false, pg_temp.tk(), '127.0.0.1', '', now() + interval '1 day');
+  IF r->>'estado' <> 'fallo' OR (SELECT intentos_fallidos FROM usuarios WHERE id = u) <> 1
+     OR (SELECT count(*) FROM sesiones WHERE usuario_id = u) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P202: fallo %', r;
+  END IF;
+  r := proc_auth_entrar(u, true, pg_temp.tk('s202'), '127.0.0.1', 'Chrome', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR (r->'usuario'->>'id')::uuid <> u OR (SELECT intentos_fallidos FROM usuarios WHERE id = u) <> 0
+     OR (proc_sesion_resolver(pg_temp.tk('s202'))->'usuario'->>'id')::uuid <> u THEN
+    RAISE EXCEPTION 'FALLO P202: ok %', r;
+  END IF;
+  IF proc_auth_entrar(gen_random_uuid(), true, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'fallo' THEN
+    RAISE EXCEPTION 'FALLO P202: entró una cuenta inexistente';
+  END IF;
+  RAISE NOTICE 'OK P202: proc_auth_entrar';
+END $$;
+
+-- P203. Bloqueo: al quinto intento fallido seguido la cuenta se bloquea 15 minutos y ni la contraseña
+--       correcta la abre; al vencer el bloqueo vuelve a entrar.
+DO $$ DECLARE u uuid := pg_temp.cuenta(); r jsonb; i int; BEGIN
+  FOR i IN 1..4 LOOP
+    IF proc_auth_entrar(u, false, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'fallo' THEN
+      RAISE EXCEPTION 'FALLO P203: bloqueó antes de tiempo (intento %)', i;
+    END IF;
+  END LOOP;
+  IF proc_auth_entrar(u, false, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'bloqueada' THEN
+    RAISE EXCEPTION 'FALLO P203: no bloqueó al quinto';
+  END IF;
+  IF (SELECT bloqueado_hasta FROM usuarios WHERE id = u) NOT BETWEEN now() + interval '14 minutes' AND now() + interval '16 minutes' THEN
+    RAISE EXCEPTION 'FALLO P203: duración del bloqueo';
+  END IF;
+  r := proc_auth_entrar(u, true, pg_temp.tk(), NULL, '', now() + interval '1 day');
+  IF r->>'estado' <> 'bloqueada' OR (SELECT count(*) FROM sesiones WHERE usuario_id = u) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P203: entró bloqueada %', r;
+  END IF;
+  UPDATE usuarios SET bloqueado_hasta = now() - interval '1 second' WHERE id = u;
+  IF proc_auth_entrar(u, true, pg_temp.tk(), NULL, '', now() + interval '1 day')->>'estado' <> 'ok' THEN
+    RAISE EXCEPTION 'FALLO P203: no entró al vencer el bloqueo';
+  END IF;
+  RAISE NOTICE 'OK P203: bloqueo tras 5 intentos';
+END $$;
+
+-- P204. proc_auth_recuperar: crea un enlace por cuenta y anula los anteriores; un correo sin cuenta
+--       devuelve NULL sin crear nada.
+DO $$ DECLARE c text := 'rec-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); r jsonb; n int; BEGIN
+  r := proc_auth_recuperar(upper(c), pg_temp.tk('r1'), now() + interval '1 hour');
+  IF r->>'correo' <> c OR r->>'nombre' <> 'Cuenta Prueba' THEN RAISE EXCEPTION 'FALLO P204: %', r; END IF;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('r2'), now() + interval '1 hour');
+  SELECT count(*) INTO n FROM tokens_verificacion WHERE usuario_id = u AND usado_en IS NULL;
+  IF n <> 1 OR NOT EXISTS (SELECT 1 FROM tokens_verificacion WHERE token_hash = pg_temp.tk('r2') AND usado_en IS NULL) THEN
+    RAISE EXCEPTION 'FALLO P204: % enlaces vigentes', n;
+  END IF;
+  SELECT count(*) INTO n FROM tokens_verificacion;
+  IF proc_auth_recuperar('nadie-' || gen_random_uuid() || '@prueba.mx', pg_temp.tk(), now() + interval '1 hour') IS NOT NULL
+     OR (SELECT count(*) FROM tokens_verificacion) <> n THEN
+    RAISE EXCEPTION 'FALLO P204: correo sin cuenta';
+  END IF;
+  RAISE NOTICE 'OK P204: proc_auth_recuperar';
+END $$;
+
+-- P205. proc_auth_restablecer: cambia el hash, quita el bloqueo, verifica el correo y cierra todas las
+--       sesiones; el enlace sirve una sola vez (NX011), el anulado y el vencido tampoco sirven (NX011)
+--       y un hash que no es Argon2id es NX010.
+DO $$ DECLARE c text := 'res-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); ok int := 0; BEGIN
+  UPDATE usuarios SET bloqueado_hasta = now() + interval '10 minutes', intentos_fallidos = 3 WHERE id = u;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('viejo'), now() + interval '1 hour');
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('nuevo'), now() + interval '1 hour');
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('nuevo'), 'en-claro'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('viejo'), pg_temp.hash_falso('b')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_restablecer(pg_temp.tk('nuevo'), pg_temp.hash_falso('b'));
+  IF (SELECT hash_contrasena FROM usuarios WHERE id = u) <> pg_temp.hash_falso('b')
+     OR (SELECT bloqueado_hasta FROM usuarios WHERE id = u) IS NOT NULL
+     OR (SELECT correo_verificado_en FROM usuarios WHERE id = u) IS NULL
+     OR EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u AND revocada_en IS NULL) THEN
+    RAISE EXCEPTION 'FALLO P205: estado tras restablecer';
+  END IF;
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('nuevo'), pg_temp.hash_falso('c')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('vencido'), now() - interval '1 minute');
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('vencido'), pg_temp.hash_falso('c')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_restablecer(pg_temp.tk('inventado'), pg_temp.hash_falso('c')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  IF ok <> 5 THEN RAISE EXCEPTION 'FALLO P205: % de 5 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P205: proc_auth_restablecer';
+END $$;
+
+-- P206. Verificar correo: el enlace confirma la cuenta una sola vez (NX011 después); pedirlo de nuevo
+--       anula el anterior; con el correo ya verificado no se crea enlace; un enlace de restablecer no
+--       sirve para verificar (NX011).
+DO $$ DECLARE c text := 'ver-' || gen_random_uuid() || '@prueba.mx'; u uuid := pg_temp.cuenta(c); r jsonb; ok int := 0; BEGIN
+  r := proc_auth_verificacion_solicitar(u, pg_temp.tk('v1'), now() + interval '1 day');
+  PERFORM proc_auth_verificacion_solicitar(u, pg_temp.tk('v2'), now() + interval '1 day');
+  IF (r->>'verificado')::boolean OR r->>'correo' <> c THEN RAISE EXCEPTION 'FALLO P206: %', r; END IF;
+  BEGIN PERFORM proc_auth_verificar_correo(pg_temp.tk('v1')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_recuperar(c, pg_temp.tk('rx'), now() + interval '1 hour');
+  BEGIN PERFORM proc_auth_verificar_correo(pg_temp.tk('rx')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  PERFORM proc_auth_verificar_correo(pg_temp.tk('v2'));
+  IF (SELECT correo_verificado_en FROM usuarios WHERE id = u) IS NULL THEN RAISE EXCEPTION 'FALLO P206: no verificó'; END IF;
+  BEGIN PERFORM proc_auth_verificar_correo(pg_temp.tk('v2')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  r := proc_auth_verificacion_solicitar(u, pg_temp.tk('v3'), now() + interval '1 day');
+  IF NOT (r->>'verificado')::boolean OR EXISTS (SELECT 1 FROM tokens_verificacion WHERE token_hash = pg_temp.tk('v3')) THEN
+    RAISE EXCEPTION 'FALLO P206: creó enlace estando verificado';
+  END IF;
+  BEGIN PERFORM proc_auth_verificacion_solicitar(gen_random_uuid(), pg_temp.tk(), now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P206: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P206: verificar correo';
+END $$;
+
+-- P207. proc_auth_cuenta, proc_auth_hash_actual y proc_auth_contrasena_cambiar: cambiar la contraseña
+--       conserva la sesión actual y cierra las demás; un hash que no es Argon2id es NX010.
+DO $$ DECLARE u uuid := pg_temp.cuenta(); actual uuid; r jsonb; ok int := 0; BEGIN
+  PERFORM proc_auth_entrar(u, true, pg_temp.tk('otra'), NULL, '', now() + interval '1 day');
+  SELECT id INTO actual FROM sesiones WHERE usuario_id = u ORDER BY creada_en LIMIT 1;
+  r := proc_auth_cuenta(u);
+  IF (r->>'correo_verificado')::boolean OR NOT (r->>'tiene_contrasena')::boolean OR (r->>'sesiones_activas')::int <> 2 THEN
+    RAISE EXCEPTION 'FALLO P207: cuenta %', r;
+  END IF;
+  IF proc_auth_hash_actual(u)->>'hash' <> pg_temp.hash_falso() THEN RAISE EXCEPTION 'FALLO P207: hash actual'; END IF;
+  BEGIN PERFORM proc_auth_contrasena_cambiar(u, actual, 'en-claro'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  r := proc_auth_contrasena_cambiar(u, actual, pg_temp.hash_falso('nueva'));
+  IF (r->>'sesiones_cerradas')::int <> 1 OR (SELECT revocada_en FROM sesiones WHERE id = actual) IS NOT NULL
+     OR proc_sesion_resolver(pg_temp.tk('otra')) IS NOT NULL OR proc_auth_hash_actual(u)->>'hash' <> pg_temp.hash_falso('nueva') THEN
+    RAISE EXCEPTION 'FALLO P207: %', r;
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P207: aceptó un hash inválido'; END IF;
+  RAISE NOTICE 'OK P207: cuenta y cambio de contraseña';
+END $$;
+
+-- P208. Sesiones: una sesión vencida o revocada ya no resuelve (la API responde 401).
+DO $$ DECLARE u uuid := pg_temp.cuenta(); s uuid; BEGIN
+  PERFORM proc_auth_entrar(u, true, pg_temp.tk('vence'), NULL, '', now() + interval '1 day');
+  IF proc_sesion_resolver(pg_temp.tk('vence')) IS NULL THEN RAISE EXCEPTION 'FALLO P208: no resolvió'; END IF;
+  UPDATE sesiones SET expira_en = now() - interval '1 second' WHERE token_hash = pg_temp.tk('vence');
+  IF proc_sesion_resolver(pg_temp.tk('vence')) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P208: resolvió vencida'; END IF;
+  PERFORM proc_auth_entrar(u, true, pg_temp.tk('revoca'), NULL, '', now() + interval '1 day');
+  SELECT id INTO s FROM sesiones WHERE token_hash = pg_temp.tk('revoca');
+  PERFORM proc_sesion_revocar(u, s);
+  IF proc_sesion_resolver(pg_temp.tk('revoca')) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P208: resolvió revocada'; END IF;
+  RAISE NOTICE 'OK P208: sesiones vencidas y revocadas';
+END $$;
