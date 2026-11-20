@@ -1,6 +1,6 @@
 # Nexo · Rendimiento de las consultas clave (Fase 5.4)
 
-> Generado por `pnpm db:volumen && pnpm db:explain` el 2026-11-19. No se edita a mano: se vuelve a generar.
+> Generado por `pnpm db:volumen && pnpm db:explain` el 2026-11-20. No se edita a mano: se vuelve a generar.
 
 **Criterio (`03`, 5.4):** ninguna de las 7 consultas de `02`, sección 13, hace un barrido secuencial sobre una tabla grande (aquí, de 5000 filas o más). Si alguna lo hace, se agrega un índice con una migración nueva.
 
@@ -8,13 +8,13 @@
 
 | Tabla | Filas (estimadas) | ¿Grande? |
 |---|---|---|
-| `conversacion_lecturas` | 411 | no |
-| `membresias` | 512 | no |
-| `mensajes` | 200,005 | sí |
+| `conversacion_lecturas` | 408 | no |
+| `membresias` | 510 | no |
+| `mensajes` | 200,003 | sí |
 | `sprints` | 54 | no |
 | `tarea_compartida` | 504 | no |
-| `tareas` | 20,012 | sí |
-| `usuarios` | 513 | no |
+| `tareas` | 20,011 | sí |
+| `usuarios` | 511 | no |
 | `whatsapp_mensajes` | 10,001 | sí |
 
 | Consulta | Resultado |
@@ -22,7 +22,7 @@
 | Q1 · Datos del Hill Chart (tareas del sprint activo con el color del responsable) | ✓ sin barridos sobre tablas grandes |
 | Q2 · Conteo del tablero por estado | ✓ sin barridos sobre tablas grandes |
 | Q3 · Mensajes no leídos de una persona | ✓ sin barridos sobre tablas grandes |
-| Q4 · Siguiente lote para el worker de WhatsApp | ✓ sin barridos sobre tablas grandes |
+| Q4 · Siguiente lote para el worker de WhatsApp | ✓ sin barridos sobre tablas grandes. Pendiente de la rama de WhatsApp: agregar `CREATE INDEX ix_wa_msj_pendientes ON whatsapp_mensajes (creado_en) WHERE estado = 'pendiente' AND seleccionado AND tipo_envio = 'instantaneo'` en su migración (0031+). |
 | Q5 · Semáforo de entregas del equipo | ✓ sin barridos sobre tablas grandes |
 | Q6 · Tareas visibles para un invitado | ✓ sin barridos sobre tablas grandes |
 | Q7 · Búsqueda de texto en el chat (CH-08) | ✓ sin barridos sobre tablas grandes |
@@ -40,51 +40,51 @@ SELECT t.codigo, t.titulo, t.estado, t.progreso, m.color_idx
 ```
 
 ```text
-Sort  (cost=523.03..523.98 rows=378 width=32) (actual time=1.747..1.807 rows=200.00 loops=1)
+Sort  (cost=521.73..522.68 rows=378 width=32) (actual time=1.231..1.275 rows=200.00 loops=1)
   Sort Key: t.codigo
   Sort Method: quicksort  Memory: 27kB
   Buffers: shared hit=222
-  ->  Hash Left Join  (cost=117.35..506.85 rows=378 width=32) (actual time=0.865..1.618 rows=200.00 loops=1)
+  ->  Hash Left Join  (cost=116.33..505.55 rows=378 width=32) (actual time=0.611..1.128 rows=200.00 loops=1)
         Hash Cond: (t.responsable_id = m.usuario_id)
         Buffers: shared hit=222
-        ->  Hash Join  (cost=104.37..492.38 rows=378 width=62) (actual time=0.802..1.347 rows=200.00 loops=1)
+        ->  Hash Join  (cost=104.37..492.10 rows=378 width=62) (actual time=0.570..0.944 rows=200.00 loops=1)
               Hash Cond: (t.sprint_id = s.id)
               Buffers: shared hit=213
-              ->  Bitmap Heap Scan on tareas t  (cost=102.06..488.98 rows=400 width=78) (actual time=0.666..0.994 rows=200.00 loops=1)
-                    Recheck Cond: ((equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid) AND (NOT archivada) AND (sprint_id IS NOT NULL))
+              ->  Bitmap Heap Scan on tareas t  (cost=102.06..488.70 rows=400 width=78) (actual time=0.487..0.710 rows=200.00 loops=1)
+                    Recheck Cond: ((equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid) AND (NOT archivada) AND (sprint_id IS NOT NULL))
                     Heap Blocks: exact=200
                     Buffers: shared hit=212
-                    ->  BitmapAnd  (cost=102.06..102.06 rows=200 width=0) (actual time=0.595..0.596 rows=0.00 loops=1)
+                    ->  BitmapAnd  (cost=102.06..102.06 rows=200 width=0) (actual time=0.442..0.444 rows=0.00 loops=1)
                           Buffers: shared hit=12
-                          ->  Bitmap Index Scan on ix_tareas_equipo_estado  (cost=0.00..7.29 rows=400 width=0) (actual time=0.046..0.046 rows=400.00 loops=1)
-                                Index Cond: (equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid)
+                          ->  Bitmap Index Scan on ix_tareas_equipo_estado  (cost=0.00..7.29 rows=400 width=0) (actual time=0.035..0.035 rows=400.00 loops=1)
+                                Index Cond: (equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid)
                                 Index Searches: 1
                                 Buffers: shared hit=2
-                          ->  Bitmap Index Scan on ix_tareas_sprint  (cost=0.00..94.32 rows=10007 width=0) (actual time=0.510..0.510 rows=10007.00 loops=1)
+                          ->  Bitmap Index Scan on ix_tareas_sprint  (cost=0.00..94.32 rows=10007 width=0) (actual time=0.383..0.383 rows=10007.00 loops=1)
                                 Index Searches: 1
                                 Buffers: shared hit=10
-              ->  Hash  (cost=1.68..1.68 rows=51 width=16) (actual time=0.124..0.126 rows=51.00 loops=1)
+              ->  Hash  (cost=1.68..1.68 rows=51 width=16) (actual time=0.077..0.078 rows=51.00 loops=1)
                     Buckets: 1024  Batches: 1  Memory Usage: 6kB
                     Buffers: shared hit=1
-                    ->  Seq Scan on sprints s  (cost=0.00..1.68 rows=51 width=16) (actual time=0.051..0.081 rows=51.00 loops=1)
+                    ->  Seq Scan on sprints s  (cost=0.00..1.68 rows=51 width=16) (actual time=0.033..0.054 rows=51.00 loops=1)
                           Filter: (estado = 'activo'::estado_sprint)
                           Rows Removed by Filter: 3
                           Buffers: shared hit=1
-        ->  Hash  (cost=12.86..12.86 rows=10 width=34) (actual time=0.056..0.057 rows=10.00 loops=1)
+        ->  Hash  (cost=11.84..11.84 rows=10 width=34) (actual time=0.036..0.038 rows=10.00 loops=1)
               Buckets: 1024  Batches: 1  Memory Usage: 5kB
               Buffers: shared hit=9
-              ->  Bitmap Heap Scan on membresias m  (cost=4.35..12.86 rows=10 width=34) (actual time=0.029..0.045 rows=10.00 loops=1)
-                    Recheck Cond: ((equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid) AND (estado = 'activa'::estado_membresia))
+              ->  Bitmap Heap Scan on membresias m  (cost=4.35..11.84 rows=10 width=34) (actual time=0.020..0.031 rows=10.00 loops=1)
+                    Recheck Cond: ((equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid) AND (estado = 'activa'::estado_membresia))
                     Heap Blocks: exact=7
                     Buffers: shared hit=9
-                    ->  Bitmap Index Scan on ux_membresia_activa_usuario  (cost=0.00..4.35 rows=10 width=0) (actual time=0.009..0.009 rows=10.00 loops=1)
-                          Index Cond: (equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid)
+                    ->  Bitmap Index Scan on ux_membresia_activa_usuario  (cost=0.00..4.35 rows=10 width=0) (actual time=0.006..0.006 rows=10.00 loops=1)
+                          Index Cond: (equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid)
                           Index Searches: 1
                           Buffers: shared hit=2
 Planning:
-  Buffers: shared hit=145
-Planning Time: 13.085 ms
-Execution Time: 1.969 ms
+  Buffers: shared hit=154
+Planning Time: 10.008 ms
+Execution Time: 1.396 ms
 ```
 
 ## Q2 · Conteo del tablero por estado
@@ -94,20 +94,20 @@ SELECT estado, count(*) FROM tareas WHERE equipo_id = $1 GROUP BY estado
 ```
 
 ```text
-HashAggregate  (cost=533.54..533.61 rows=7 width=12) (actual time=1.102..1.110 rows=7.00 loops=1)
+HashAggregate  (cost=532.91..532.98 rows=7 width=12) (actual time=1.243..1.248 rows=7.00 loops=1)
   Group Key: estado
   Batches: 1  Memory Usage: 32kB
-  Buffers: shared hit=404
-  ->  Bitmap Heap Scan on tareas  (cost=19.39..531.54 rows=400 width=4) (actual time=0.169..0.769 rows=400.00 loops=1)
-        Recheck Cond: (equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid)
+  Buffers: shared hit=405
+  ->  Bitmap Heap Scan on tareas  (cost=19.39..530.91 rows=400 width=4) (actual time=0.160..0.570 rows=400.00 loops=1)
+        Recheck Cond: (equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid)
         Heap Blocks: exact=400
-        Buffers: shared hit=404
-        ->  Bitmap Index Scan on ux_tarea_codigo_equipo  (cost=0.00..19.29 rows=400 width=0) (actual time=0.075..0.076 rows=400.00 loops=1)
-              Index Cond: (equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid)
+        Buffers: shared hit=405
+        ->  Bitmap Index Scan on ux_tarea_codigo_equipo  (cost=0.00..19.29 rows=400 width=0) (actual time=0.059..0.060 rows=400.00 loops=1)
+              Index Cond: (equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid)
               Index Searches: 1
-              Buffers: shared hit=4
-Planning Time: 0.335 ms
-Execution Time: 1.181 ms
+              Buffers: shared hit=5
+Planning Time: 0.725 ms
+Execution Time: 2.107 ms
 ```
 
 ## Q3 · Mensajes no leídos de una persona
@@ -121,28 +121,28 @@ SELECT count(*) AS no_leidos
 ```
 
 ```text
-Aggregate  (cost=2684.77..2684.78 rows=1 width=8) (actual time=16.740..16.744 rows=1.00 loops=1)
-  Buffers: shared hit=3551
-  ->  Nested Loop  (cost=61.82..2681.54 rows=1294 width=0) (actual time=1.346..14.663 rows=3445.00 loops=1)
-        Buffers: shared hit=3551
-        ->  Seq Scan on conversacion_lecturas l  (cost=0.00..9.14 rows=1 width=40) (actual time=0.057..0.092 rows=1.00 loops=1)
-              Filter: (usuario_id = 'c1eb2284-4627-4a6d-835b-6fa9cced11e2'::uuid)
-              Rows Removed by Filter: 410
+Aggregate  (cost=2713.94..2713.95 rows=1 width=8) (actual time=10.409..10.412 rows=1.00 loops=1)
+  Buffers: shared hit=3552
+  ->  Nested Loop  (cost=62.08..2710.68 rows=1304 width=0) (actual time=1.009..9.536 rows=3445.00 loops=1)
+        Buffers: shared hit=3552
+        ->  Seq Scan on conversacion_lecturas l  (cost=0.00..9.10 rows=1 width=40) (actual time=0.037..0.071 rows=1.00 loops=1)
+              Filter: (usuario_id = 'a3341804-df5e-4739-8b0f-95685cd4fd09'::uuid)
+              Rows Removed by Filter: 407
               Buffers: shared hit=4
-        ->  Bitmap Heap Scan on mensajes m  (cost=61.82..2659.36 rows=1304 width=40) (actual time=1.274..9.952 rows=3445.00 loops=1)
+        ->  Bitmap Heap Scan on mensajes m  (cost=62.08..2688.28 rows=1330 width=40) (actual time=0.968..5.515 rows=3445.00 loops=1)
               Recheck Cond: ((l.conversacion_id = conversacion_id) AND (seq > l.ultimo_leido_seq))
               Filter: (autor_id IS DISTINCT FROM l.usuario_id)
               Rows Removed by Filter: 492
-              Heap Blocks: exact=3510
-              Buffers: shared hit=3547
-              ->  Bitmap Index Scan on ix_mensajes_conv_seq  (cost=0.00..61.49 rows=1307 width=0) (actual time=0.532..0.532 rows=3937.00 loops=1)
+              Heap Blocks: exact=3511
+              Buffers: shared hit=3548
+              ->  Bitmap Index Scan on ix_mensajes_conv_seq  (cost=0.00..61.75 rows=1333 width=0) (actual time=0.393..0.393 rows=3937.00 loops=1)
                     Index Cond: ((conversacion_id = l.conversacion_id) AND (seq > l.ultimo_leido_seq))
                     Index Searches: 1
                     Buffers: shared hit=37
 Planning:
-  Buffers: shared hit=88
-Planning Time: 12.432 ms
-Execution Time: 16.803 ms
+  Buffers: shared hit=73
+Planning Time: 4.533 ms
+Execution Time: 10.457 ms
 ```
 
 ## Q4 · Siguiente lote para el worker de WhatsApp
@@ -155,27 +155,27 @@ SELECT id, tipo_evento, texto FROM whatsapp_mensajes
 ```
 
 ```text
-Limit  (cost=285.73..285.86 rows=10 width=58) (actual time=0.823..0.857 rows=10.00 loops=1)
-  Buffers: shared hit=112
-  ->  LockRows  (cost=285.73..288.24 rows=201 width=58) (actual time=0.819..0.844 rows=10.00 loops=1)
-        Buffers: shared hit=112
-        ->  Sort  (cost=285.73..286.23 rows=201 width=58) (actual time=0.803..0.810 rows=10.00 loops=1)
+Limit  (cost=285.73..285.86 rows=10 width=58) (actual time=0.643..0.665 rows=10.00 loops=1)
+  Buffers: shared hit=103
+  ->  LockRows  (cost=285.73..288.24 rows=201 width=58) (actual time=0.642..0.658 rows=10.00 loops=1)
+        Buffers: shared hit=103
+        ->  Sort  (cost=285.73..286.23 rows=201 width=58) (actual time=0.630..0.634 rows=10.00 loops=1)
               Sort Key: creado_en
               Sort Method: quicksort  Memory: 32kB
-              Buffers: shared hit=102
-              ->  Bitmap Heap Scan on whatsapp_mensajes  (cost=96.68..281.39 rows=201 width=58) (actual time=0.460..0.628 rows=201.00 loops=1)
+              Buffers: shared hit=93
+              ->  Bitmap Heap Scan on whatsapp_mensajes  (cost=96.68..281.39 rows=201 width=58) (actual time=0.393..0.509 rows=201.00 loops=1)
                     Recheck Cond: (estado = 'pendiente'::estado_mensaje_wa)
                     Filter: (seleccionado AND (tipo_envio = 'instantaneo'::tipo_envio_wa))
                     Heap Blocks: exact=9
-                    Buffers: shared hit=102
-                    ->  Bitmap Index Scan on ix_wa_msj_equipo_estado  (cost=0.00..96.62 rows=201 width=0) (actual time=0.408..0.409 rows=201.00 loops=1)
+                    Buffers: shared hit=93
+                    ->  Bitmap Index Scan on ix_wa_msj_equipo_estado  (cost=0.00..96.62 rows=201 width=0) (actual time=0.356..0.356 rows=201.00 loops=1)
                           Index Cond: (estado = 'pendiente'::estado_mensaje_wa)
-                          Index Searches: 21
-                          Buffers: shared hit=93
+                          Index Searches: 11
+                          Buffers: shared hit=84
 Planning:
-  Buffers: shared hit=44
-Planning Time: 3.736 ms
-Execution Time: 0.940 ms
+  Buffers: shared hit=53 read=1
+Planning Time: 3.387 ms
+Execution Time: 0.701 ms
 ```
 
 ## Q5 · Semáforo de entregas del equipo
@@ -185,22 +185,22 @@ SELECT semaforo, count(*) FROM v_tareas_semaforo WHERE equipo_id = $1 GROUP BY s
 ```
 
 ```text
-HashAggregate  (cost=541.54..550.12 rows=286 width=40) (actual time=1.270..1.275 rows=3.00 loops=1)
+HashAggregate  (cost=540.91..549.49 rows=286 width=40) (actual time=1.618..1.625 rows=3.00 loops=1)
   Group Key: CASE WHEN ((t.estado = 'completada'::estado_tarea) AND (t.resultado = 'con_retraso'::resultado_tarea)) THEN 'ambar'::text WHEN (t.estado = 'completada'::estado_tarea) THEN 'verde'::text WHEN (t.vence_en IS NULL) THEN NULL::text WHEN (t.vence_en < now()) THEN 'rojo'::text WHEN (t.vence_en < (now() + '48:00:00'::interval)) THEN 'ambar'::text ELSE 'verde'::text END
   Batches: 1  Memory Usage: 48kB
-  Buffers: shared hit=404
-  ->  Bitmap Heap Scan on tareas t  (cost=19.39..539.54 rows=400 width=32) (actual time=0.204..0.960 rows=400.00 loops=1)
-        Recheck Cond: (equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid)
+  Buffers: shared hit=405
+  ->  Bitmap Heap Scan on tareas t  (cost=19.39..538.91 rows=400 width=32) (actual time=0.180..1.236 rows=400.00 loops=1)
+        Recheck Cond: (equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid)
         Heap Blocks: exact=400
-        Buffers: shared hit=404
-        ->  Bitmap Index Scan on ux_tarea_codigo_equipo  (cost=0.00..19.29 rows=400 width=0) (actual time=0.072..0.072 rows=400.00 loops=1)
-              Index Cond: (equipo_id = '12d144a9-714d-4c2e-ba9b-248334ad985b'::uuid)
+        Buffers: shared hit=405
+        ->  Bitmap Index Scan on ux_tarea_codigo_equipo  (cost=0.00..19.29 rows=400 width=0) (actual time=0.062..0.062 rows=400.00 loops=1)
+              Index Cond: (equipo_id = 'ac85f718-74ba-4317-9218-a5451b1c0026'::uuid)
               Index Searches: 1
-              Buffers: shared hit=4
+              Buffers: shared hit=5
 Planning:
-  Buffers: shared hit=6
-Planning Time: 0.576 ms
-Execution Time: 1.357 ms
+  Buffers: shared hit=9
+Planning Time: 0.408 ms
+Execution Time: 1.688 ms
 ```
 
 ## Q6 · Tareas visibles para un invitado
@@ -213,32 +213,32 @@ SELECT t.codigo, t.titulo FROM tareas t
 ```
 
 ```text
-Sort  (cost=22.47..22.47 rows=1 width=24) (actual time=0.554..0.565 rows=5.00 loops=1)
+Sort  (cost=22.43..22.43 rows=1 width=24) (actual time=0.613..0.624 rows=5.00 loops=1)
   Sort Key: t.codigo
   Sort Method: quicksort  Memory: 17kB
   Buffers: shared hit=22
-  ->  Nested Loop  (cost=8.59..22.46 rows=1 width=24) (actual time=0.088..0.547 rows=5.00 loops=1)
+  ->  Nested Loop  (cost=8.59..22.42 rows=1 width=24) (actual time=0.099..0.606 rows=5.00 loops=1)
         Buffers: shared hit=22
-        ->  Hash Join  (cost=8.30..18.68 rows=1 width=16) (actual time=0.077..0.512 rows=5.00 loops=1)
+        ->  Hash Join  (cost=8.30..18.68 rows=1 width=16) (actual time=0.085..0.561 rows=5.00 loops=1)
               Hash Cond: (tc.membresia_id = m.id)
               Buffers: shared hit=7
-              ->  Seq Scan on tarea_compartida tc  (cost=0.00..9.04 rows=504 width=32) (actual time=0.041..0.256 rows=504.00 loops=1)
+              ->  Seq Scan on tarea_compartida tc  (cost=0.00..9.04 rows=504 width=32) (actual time=0.051..0.286 rows=504.00 loops=1)
                     Buffers: shared hit=4
-              ->  Hash  (cost=8.29..8.29 rows=1 width=16) (actual time=0.022..0.024 rows=1.00 loops=1)
+              ->  Hash  (cost=8.29..8.29 rows=1 width=16) (actual time=0.022..0.023 rows=1.00 loops=1)
                     Buckets: 1024  Batches: 1  Memory Usage: 5kB
                     Buffers: shared hit=3
                     ->  Index Scan using ix_membresias_usuario on membresias m  (cost=0.27..8.29 rows=1 width=16) (actual time=0.014..0.016 rows=1.00 loops=1)
-                          Index Cond: (usuario_id = '46a6d9e2-627f-4605-9604-ccd44148705d'::uuid)
+                          Index Cond: (usuario_id = '90b69d8e-499b-4c0c-87e9-8d0332b01036'::uuid)
                           Index Searches: 1
                           Buffers: shared hit=3
-        ->  Index Scan using tareas_pkey on tareas t  (cost=0.29..3.78 rows=1 width=40) (actual time=0.004..0.004 rows=1.00 loops=5)
+        ->  Index Scan using tareas_pkey on tareas t  (cost=0.29..3.74 rows=1 width=40) (actual time=0.006..0.006 rows=1.00 loops=5)
               Index Cond: (id = tc.tarea_id)
               Index Searches: 5
               Buffers: shared hit=15
 Planning:
   Buffers: shared hit=47
-Planning Time: 3.760 ms
-Execution Time: 0.629 ms
+Planning Time: 4.503 ms
+Execution Time: 0.692 ms
 ```
 
 ## Q7 · Búsqueda de texto en el chat (CH-08)
@@ -250,22 +250,22 @@ SELECT m.id, m.texto FROM mensajes m
 ```
 
 ```text
-Limit  (cost=7972.67..7972.74 rows=30 width=62) (actual time=85.158..85.221 rows=30.00 loops=1)
-  Buffers: shared hit=1973
-  ->  Sort  (cost=7972.67..7993.07 rows=8161 width=62) (actual time=85.155..85.172 rows=30.00 loops=1)
+Limit  (cost=7895.67..7895.75 rows=30 width=62) (actual time=94.407..94.458 rows=30.00 loops=1)
+  Buffers: shared hit=1976
+  ->  Sort  (cost=7895.67..7915.43 rows=7902 width=62) (actual time=94.404..94.423 rows=30.00 loops=1)
         Sort Key: seq DESC
         Sort Method: top-N heapsort  Memory: 25kB
-        Buffers: shared hit=1973
-        ->  Bitmap Heap Scan on mensajes m  (cost=2023.38..7731.64 rows=8161 width=62) (actual time=21.670..50.832 rows=40000.00 loops=1)
+        Buffers: shared hit=1976
+        ->  Bitmap Heap Scan on mensajes m  (cost=2022.01..7662.29 rows=7902 width=62) (actual time=15.433..50.449 rows=40000.00 loops=1)
               Recheck Cond: (to_tsvector('spanish'::regconfig, texto) @@ '''bloque'' & ''permis'''::tsquery)
-              Heap Blocks: exact=1496
-              Buffers: shared hit=1973
-              ->  Bitmap Index Scan on ix_mensajes_busqueda  (cost=0.00..2021.34 rows=8161 width=0) (actual time=21.245..21.246 rows=40000.00 loops=1)
+              Heap Blocks: exact=1498
+              Buffers: shared hit=1976
+              ->  Bitmap Index Scan on ix_mensajes_busqueda  (cost=0.00..2020.04 rows=7902 width=0) (actual time=15.139..15.140 rows=40000.00 loops=1)
                     Index Cond: (to_tsvector('spanish'::regconfig, texto) @@ '''bloque'' & ''permis'''::tsquery)
                     Index Searches: 1
-                    Buffers: shared hit=477
+                    Buffers: shared hit=478
 Planning:
-  Buffers: shared hit=12
-Planning Time: 0.637 ms
-Execution Time: 85.340 ms
+  Buffers: shared hit=25
+Planning Time: 0.514 ms
+Execution Time: 94.522 ms
 ```
