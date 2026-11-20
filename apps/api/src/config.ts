@@ -5,6 +5,9 @@ const booleano = z
   .default('false')
   .transform((v) => v === 'true');
 
+/** Variable opcional; vacía (`CLAVE=` en `.env.example`) cuenta como ausente. */
+const textoOpcional = z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional());
+
 /** Valores de `.env.example`: sirven en local y nunca deben llegar a producción (docs/09). */
 const VALOR_EJEMPLO_SESSION = /cambia-esto/i;
 const CLAVE_EJEMPLO_CEROS = /^0{64}$/;
@@ -31,6 +34,16 @@ const esquemaEntorno = z.object({
   CORREO_PROVEEDOR: z.enum(['consola', 'resend', 'ninguno']).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
   CORREO_REMITENTE: z.string().min(3).default('Nexo <no-responder@nexo.lol>'),
+  /**
+   * Fase 4 · WhatsApp (DEC-WA-1). `simulado`: ningún aviso sale del servidor (se marcan como
+   * enviados con un id «sim-…»). `real`: usa la API Cloud de Meta con las cuatro variables de abajo.
+   * Activar `real` envía mensajes de verdad: pide la decisión del equipo (docs/01, punto 14).
+   */
+  WHATSAPP_PROVIDER: z.enum(['simulado', 'real']).default('simulado'),
+  WHATSAPP_TOKEN: textoOpcional,
+  WHATSAPP_PHONE_ID: textoOpcional,
+  WHATSAPP_APP_SECRET: textoOpcional,
+  WHATSAPP_VERIFY_TOKEN: textoOpcional,
 });
 
 export type Config = z.infer<typeof esquemaEntorno>;
@@ -69,6 +82,16 @@ function problemasDeProduccion(entorno: Record<string, string | undefined>, c: C
   // Los correos llevan enlaces con token: nunca deben ir al registro de producción.
   if (c.CORREO_PROVEEDOR === 'consola') problemas.push('CORREO_PROVEEDOR=consola no se permite');
   if (c.CORREO_PROVEEDOR === 'resend' && !c.RESEND_API_KEY) problemas.push('falta RESEND_API_KEY');
+  if (c.WHATSAPP_PROVIDER === 'real') {
+    for (const k of [
+      'WHATSAPP_TOKEN',
+      'WHATSAPP_PHONE_ID',
+      'WHATSAPP_APP_SECRET',
+      'WHATSAPP_VERIFY_TOKEN',
+    ] as const) {
+      if (!c[k]) problemas.push(`falta ${k} (WHATSAPP_PROVIDER=real)`);
+    }
+  }
   return problemas;
 }
 

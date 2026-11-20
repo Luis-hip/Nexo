@@ -81,3 +81,12 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 3. **Tiempo real.** Socket.IO usa el mismo servicio y el mismo dominio (`api.nexo.lol`). En el plan gratuito la API duerme a los 15 minutos: el primer acceso tarda y el socket se reconecta solo.
 4. **Prueba de humo del login:** en `https://app.nexo.lol/registro` crear una cuenta (correo real de una persona del equipo), cerrar sesión y volver a entrar; si hay Resend, pedir «¿Olvidaste tu contraseña?» y usar el enlace.
 5. **Después, para WhatsApp:** sus migraciones van desde `0031`.
+
+## 10. Despliegue de WhatsApp (Fase 4.2 y 4.3)
+
+*Agregado el 2026-11-19 (DEC-WA-1).*
+
+1. **Migración `0031`.** Agrega columnas e índices a las tablas de WhatsApp y 20 procesos; marca como procesados los eventos que ya había, para que el despachador no mande avisos viejos. Comprobar en el registro de Render que aparece y que la API arranca.
+2. **Temporizador.** La API corre el ciclo de WhatsApp cada minuto (vencimientos, eventos, reportes, envíos). Con la API dormida no corre; al despertar se pone al día.
+3. **`WHATSAPP_PROVIDER=simulado`** (en `render.yaml`): los equipos pueden conectar el simulado y todo funciona, pero ningún mensaje sale a WhatsApp. **No** cambiarlo a `real` sin decisión del equipo: envía mensajes de verdad.
+4. **Para el envío real (cuando haya OBA):** poner a mano en Render `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET` y `WHATSAPP_VERIFY_TOKEN` (el servidor no arranca con `real` si falta alguna), cambiar a `real`, y en Meta for Developers suscribir el webhook a `https://api.nexo.lol/whatsapp/webhook` con el mismo token de verificación. La firma `X-Hub-Signature-256` se comprueba con `WHATSAPP_APP_SECRET`.

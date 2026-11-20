@@ -24,7 +24,7 @@ export function BurbujaWA({
       <div className="relative ml-auto w-fit max-w-[92%] rounded-[10px] rounded-tr-[2px] bg-[#d9fdd3] px-3 py-2 text-[14px] leading-snug text-[#111b21] shadow-sm">
         <p className="mb-0.5 text-[12px] font-semibold text-[#1f7a5a]">Nexo · avisos</p>
         <p className="break-words whitespace-pre-wrap">{texto}</p>
-        <p className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[#667781]">
+        <p className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[#54656f]">
           {hora ?? 'ahora'} <Check className="size-3" aria-hidden />
         </p>
       </div>

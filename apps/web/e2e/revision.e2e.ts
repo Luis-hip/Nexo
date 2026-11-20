@@ -41,10 +41,18 @@ const PANTALLAS: Record<string, [string, string][]> = {
     [`${E}/equipo`, 'ad-01-miembros'],
     ['/app/personal', 'per-01-inicio'],
     ['/ajustes/cuenta', 'pf-02-cuenta'],
+    // Fase 4.2 · WhatsApp (figuras 3–5 y 7–10 del artículo).
+    [`${E}/whatsapp`, 'wa-01-panel'],
+    [`${E}/whatsapp/cola`, 'wa-02-cola'],
+    [`${E}/whatsapp/historial`, 'wa-04-historial'],
+    [`${E}/whatsapp/reglas`, 'wa-05-reglas'],
+    [`${E}/whatsapp/personas`, 'wa-07-consentimiento'],
+    ['/ajustes/whatsapp', 'pf-05-whatsapp'],
   ],
   'carlos@nexo.mx': [
     [`${E}`, 'eq-01-resumen-integrante'],
     [`${E}/tareas/votacion`, 'eq-05-votacion-integrante'],
+    [`${E}/whatsapp/historial`, 'wa-04-historial-integrante'],
   ],
   'mariana.lozano@universidad.mx': [
     [`${E}`, 'in-01-resumen-invitada'],

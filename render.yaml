@@ -56,6 +56,11 @@ services:
         sync: false
       - key: CORREO_REMITENTE
         value: Nexo <no-responder@nexo.lol>
+      # Fase 4 · WhatsApp (DEC-WA-1). `simulado` no llama a Meta. `real` envía mensajes de verdad y
+      # exige WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_APP_SECRET y WHATSAPP_VERIFY_TOKEN
+      # (ponerlas a mano en Render): solo cuando el equipo lo decida y haya cuenta OBA.
+      - key: WHATSAPP_PROVIDER
+        value: simulado
 
 databases:
   - name: nexo-bd
