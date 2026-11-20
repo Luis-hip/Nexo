@@ -26,12 +26,7 @@ interface Sonda {
 }
 
 /** Acciones sin ruta en esta rama, con el motivo. La prueba exige que cada acción tenga sonda o motivo. */
-const SIN_RUTA: Partial<Record<Accion, string>> = {
-  configurar_whatsapp: 'WhatsApp (4.2) se construye en otra rama; se sumará al juntar las partes.',
-  enviar_cola_whatsapp: 'WhatsApp (4.2) se construye en otra rama; se sumará al juntar las partes.',
-  ver_historial_whatsapp:
-    'WhatsApp (4.2) se construye en otra rama; se sumará al juntar las partes.',
-};
+const SIN_RUTA: Partial<Record<Accion, string>> = {};
 
 /** En el espacio personal solo algunas acciones tienen ruta propia; las demás son de la interfaz. */
 const PERSONAL_SOLO_INTERFAZ: Partial<Record<Accion, string>> = {
@@ -315,6 +310,11 @@ describe.skipIf(!DATABASE_URL)('matriz de permisos completa contra la API (5.3)'
     ver_sprints: [{ metodo: 'GET', url: `${E}/sprints` }],
     configurar_equipo: [{ metodo: 'PATCH', url: `${E}/configuracion`, cuerpo: {} }],
     canal_invitados: [{ metodo: 'GET', url: `/chat/conversaciones/${obj.cInvitados}/mensajes` }],
+    configurar_whatsapp: [{ metodo: 'GET', url: `${E}/whatsapp` }],
+    enviar_cola_whatsapp: [
+      { metodo: 'POST', url: `${E}/whatsapp/cola/enviar`, cuerpo: { ids: ['no-es-uuid'] } },
+    ],
+    ver_historial_whatsapp: [{ metodo: 'GET', url: `${E}/whatsapp/historial` }],
     // Las dos que cambian la membresía van al final (orden de abajo).
     expulsar_miembros: [{ metodo: 'POST', url: `${E}/miembros/${obj.mExtra}/expulsar` }],
     salir_equipo: [{ metodo: 'POST', url: `${E}/salir` }],
@@ -411,6 +411,9 @@ describe.skipIf(!DATABASE_URL)('matriz de permisos completa contra la API (5.3)'
       `/chat/conversaciones/${obj.cInvitados}/mensajes`,
       `/chat/conversaciones/${obj.cEquipo}/miembros`,
       `/chat/mensajes/${obj.msg}/hilo`,
+      `${E}/whatsapp`,
+      `${E}/whatsapp/cola`,
+      `${E}/whatsapp/historial`,
     ];
     for (const url of lecturas) {
       const r = await e.app.inject({ method: 'GET', url, cookies: cookies.ajeno });

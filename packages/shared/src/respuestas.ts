@@ -766,3 +766,117 @@ export const esquemaCuentaAuth = z.object({
   tiene_contrasena: z.boolean(),
   sesiones_activas: z.number().int(),
 }) satisfies z.ZodType<CuentaAuth>;
+
+// =============================================================================================
+// Fase 4 · WhatsApp (4.2 y 4.3): respuestas de los procesos `proc_wa_*`
+// =============================================================================================
+import {
+  ESTADOS_CONEXION_WA,
+  ESTADOS_MENSAJE_WA,
+  MODOS_REGLA_WA,
+  PROVEEDORES_WA,
+  REGLAS_WA,
+  type AvisoParaEnviar,
+  type ColaWa,
+  type ConfiguracionWa,
+  type HistorialWa,
+  type MensajeWa,
+  type PanelWa,
+  type WhatsAppUsuario,
+} from './whatsapp';
+
+export const esquemaConfiguracionWa = z.object({
+  proveedor: z.enum(PROVEEDORES_WA),
+  estado: z.enum(ESTADOS_CONEXION_WA),
+  grupo_nombre: z.string().nullable(),
+  grupo_externo_id: z.string().nullable(),
+  enlace_invitacion: z.string().nullable(),
+  causa_error: z.string().nullable(),
+  ultimo_envio_en: fechaIso.nullable(),
+  reporte_frecuencia: z.enum(['diario', 'semanal']),
+  reporte_hora: z.string(),
+  reporte_dia: z.number().int(),
+  agrupar: z.boolean(),
+  silencio_desde: z.string().nullable(),
+  silencio_hasta: z.string().nullable(),
+  envio_automatico: z.boolean(),
+  ultimo_reporte_en: fechaIso.nullable(),
+  proximo_reporte: fechaIso.nullable(),
+}) satisfies z.ZodType<ConfiguracionWa>;
+
+export const esquemaMensajeWa = z.object({
+  id: z.string(),
+  tipo_evento: z.string(),
+  motivo: z.string(),
+  texto: z.string(),
+  tipo_envio: z.enum(['instantaneo', 'reporte']),
+  estado: z.enum(ESTADOS_MENSAJE_WA),
+  seleccionado: z.boolean(),
+  programado_para: fechaIso.nullable(),
+  enviado_en: fechaIso.nullable(),
+  entregado_en: fechaIso.nullable(),
+  leido_en: fechaIso.nullable(),
+  enviado_por: esquemaPersonaTarea.nullable(),
+  intentos: z.number().int(),
+  ultimo_error: z.string().nullable(),
+  reporte_id: z.string().nullable(),
+  creado_en: fechaIso,
+}) satisfies z.ZodType<MensajeWa>;
+
+export const esquemaPanelWa = z.object({
+  configuracion: esquemaConfiguracionWa,
+  reglas: z.array(z.object({ tipo_evento: z.enum(REGLAS_WA), modo: z.enum(MODOS_REGLA_WA) })),
+  resumen: z.object({
+    en_cola: z.number().int(),
+    para_reporte: z.number().int(),
+    enviados_hoy: z.number().int(),
+    fallidos: z.number().int(),
+  }),
+  personas: z.array(
+    esquemaPersonaTarea.extend({
+      rol,
+      consentimiento: z.boolean().nullable(),
+      en_grupo: z.boolean(),
+      tiene_numero: z.boolean(),
+    }),
+  ),
+}) satisfies z.ZodType<PanelWa>;
+
+export const esquemaColaWa = z.object({
+  instantaneos: z.array(esquemaMensajeWa),
+  para_reporte: z.array(esquemaMensajeWa),
+  proximo_reporte: fechaIso.nullable(),
+}) satisfies z.ZodType<ColaWa>;
+
+export const esquemaHistorialWaRespuesta = z.object({
+  items: z.array(esquemaMensajeWa),
+  hay_mas: z.boolean(),
+}) satisfies z.ZodType<HistorialWa>;
+
+export const esquemaAvisosParaEnviar = z.array(
+  z.object({
+    id: z.string(),
+    equipo_id: z.string(),
+    texto: z.string(),
+    proveedor: z.enum(PROVEEDORES_WA),
+    grupo_externo_id: z.string().nullable(),
+    destinatarios: z.array(z.string()),
+  }),
+) satisfies z.ZodType<AvisoParaEnviar[]>;
+
+export const esquemaWhatsAppUsuarioRespuesta = z.object({
+  numero: z.string().nullable(),
+  consentimiento: z.boolean(),
+  consentimiento_en: fechaIso.nullable(),
+  equipos: z.array(
+    z.object({
+      equipo_id: z.string(),
+      nombre: z.string(),
+      rol,
+      consentimiento: z.boolean().nullable(),
+      en_grupo: z.boolean(),
+      whatsapp_conectado: z.boolean(),
+      enlace_invitacion: z.string().nullable(),
+    }),
+  ),
+}) satisfies z.ZodType<WhatsAppUsuario>;
