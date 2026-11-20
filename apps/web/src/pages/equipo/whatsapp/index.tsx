@@ -24,6 +24,7 @@ import {
   UserCheck,
   UserX,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import {
@@ -732,6 +733,7 @@ function FormReglas({ panel: p }: { panel: PanelWa }) {
 export function ConectarWhatsApp() {
   const { equipo, base } = useEquipoActual();
   const acciones = useAccionesWa(equipo.id);
+  const qc = useQueryClient();
   const nav = useNavigate();
   const [paso, setPaso] = useState(1);
   const [grupo, setGrupo] = useState(`${equipo.nombre} · avisos`);
@@ -746,7 +748,10 @@ export function ConectarWhatsApp() {
     const invalido = primerError(esquemaConectarWa, datos);
     if (invalido) return setError(invalido);
     acciones.conectar.mutate(datos, {
-      onSuccess: () => {
+      onSuccess: async () => {
+        // Se espera el panel ya conectado: con el de la caché («sin configurar») el panel
+        // redirigiría de vuelta a este asistente.
+        await qc.refetchQueries({ queryKey: ['equipo', equipo.id, 'whatsapp', 'panel'] });
         toast('WhatsApp conectado. Ajusta qué se avisa en «Reglas».');
         nav(`${base}/whatsapp`);
       },
