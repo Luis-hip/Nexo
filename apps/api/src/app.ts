@@ -19,6 +19,7 @@ import { rutasPersonal } from './rutas/personal';
 import { rutasSprints } from './rutas/sprints';
 import { rutasTareasEquipo } from './rutas/tareasEquipo';
 import { rutasVistas } from './rutas/vistas';
+import { rutasWhatsApp } from './rutas/whatsapp';
 import { rutasYo } from './rutas/yo';
 import { registrarTiempoReal } from './tiempoReal';
 
@@ -82,6 +83,7 @@ export async function crearApp(
   await app.register(rutasVistas, { db });
   await app.register(rutasAjustes, { db });
   await app.register(rutasChat, { db });
+  await app.register(rutasWhatsApp, { db, config });
   await app.register(rutasAutenticacion, {
     db,
     config,

@@ -32,8 +32,8 @@ import {
 import { api, mensajeDeError } from '@/lib/api';
 import { claves, useGuardarPerfil, useGuardarPreferencias, useSalir, useYo } from '@/lib/consultas';
 import { useCambiarContrasena, useCuenta, useReenviarVerificacion } from '@/lib/consultasAuth';
+import { useAccionesWhatsAppYo, useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { toast } from '@/lib/toasts';
-import { Proximamente } from '../Proximamente';
 
 const SECCIONES = [
   ['perfil', 'Perfil'],
@@ -459,9 +459,105 @@ function Silencio({ a, onGuardar }: { a: AjustesUsuario; onGuardar: (c: GuardarA
   );
 }
 
-/** PF-05: el número y el consentimiento de WhatsApp llegan con la Fase 4. */
+/**
+ * PF-05: número de WhatsApp, consentimiento general y, por equipo, si acepta los avisos y las
+ * menciones (WA-07). Sin consentimiento, Nexo no menciona a la persona en ningún aviso.
+ */
 export function WhatsAppPersonal() {
-  return <Proximamente titulo="WhatsApp personal y consentimiento" fase={4} />;
+  const consulta = useWhatsAppYo();
+  const acciones = useAccionesWhatsAppYo();
+  const [numero, setNumero] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
+  return (
+    <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-05-WhatsApp">
+      <h2 className="font-semibold">WhatsApp</h2>
+      <EstadosDatos consulta={consulta} esqueleto={<EsqueletoTarjetas n={2} />}>
+        {(w) => {
+          const valor = numero ?? w.numero ?? '';
+          const guardarNumero = () => {
+            setError(undefined);
+            acciones.guardar.mutate(
+              { numero: valor.trim() },
+              {
+                onSuccess: () => {
+                  setNumero(null);
+                  toast(valor.trim() ? 'Número guardado.' : 'Número borrado.');
+                },
+                onError: (e) => setError(mensajeDeError(e)),
+              },
+            );
+          };
+          return (
+            <>
+              <Campo
+                etiqueta="Tu número de WhatsApp"
+                error={error}
+                ayuda="Con lada internacional, por ejemplo +5212221234567. Solo se usa para los avisos de tus equipos."
+              >
+                <Entrada
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={valor}
+                  maxLength={16}
+                  onChange={(e) => setNumero(e.target.value)}
+                />
+              </Campo>
+              <Boton
+                cargando={acciones.guardar.isPending}
+                disabled={numero === null}
+                onClick={guardarNumero}
+              >
+                Guardar número
+              </Boton>
+              <Interruptor
+                etiqueta="Acepto recibir avisos de Nexo por WhatsApp"
+                descripcion="Puedes retirarlo cuando quieras; al hacerlo, dejas de aparecer en los avisos de todos tus equipos."
+                checked={w.consentimiento}
+                disabled={!w.numero}
+                onChange={(v) =>
+                  acciones.guardar.mutate({ consentimiento: v }, { onError: avisar })
+                }
+              />
+              {w.equipos.length > 0 && (
+                <div className="border-t border-line pt-3">
+                  <h3 className="mb-1 text-sm font-semibold">Por equipo</h3>
+                  <p className="mb-2 text-xs text-muted">
+                    Si aceptas, los avisos del grupo pueden mencionarte (@tu nombre). Si no, salen
+                    sin tu nombre.
+                  </p>
+                  <ul className="divide-y divide-line">
+                    {w.equipos.map((eq) => (
+                      <li key={eq.equipo_id} className="py-1">
+                        <Interruptor
+                          etiqueta={eq.nombre}
+                          descripcion={
+                            !eq.whatsapp_conectado
+                              ? 'Este equipo aún no conecta WhatsApp.'
+                              : eq.enlace_invitacion
+                                ? `Únete al grupo: ${eq.enlace_invitacion}`
+                                : undefined
+                          }
+                          checked={eq.consentimiento === true}
+                          disabled={!w.consentimiento}
+                          onChange={(v) =>
+                            acciones.consentimiento.mutate(
+                              { equipoId: eq.equipo_id, acepta: v },
+                              { onError: avisar },
+                            )
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          );
+        }}
+      </EstadosDatos>
+    </Tarjeta>
+  );
 }
 
 /** PF-06: visibilidad del estado y primer día de la semana. Exportar o borrar datos: Fase 5. */

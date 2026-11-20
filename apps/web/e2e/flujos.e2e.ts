@@ -172,3 +172,39 @@ test('3 · chat en tiempo real entre dos navegadores', async () => {
   await paginaBeto.getByRole('textbox', { name: /Mensaje para/ }).press('Enter');
   await expect(paginaAna.getByText('¡Sí! A las 5.', { exact: true })).toBeVisible();
 });
+
+test('3b · aviso de WhatsApp simulado: conectar, encolar, enviar e historial', async () => {
+  const api = process.env.E2E_API_URL ?? 'http://localhost:3000';
+  const web = process.env.E2E_WEB_URL ?? 'http://localhost:5173';
+  // WA-06: Ana conecta WhatsApp (modo simulado) con el asistente.
+  await paginaAna.goto(`${urlEquipo}/whatsapp`);
+  await expect(paginaAna).toHaveURL(/\/whatsapp\/conectar$/);
+  await paginaAna.getByRole('button', { name: 'Continuar' }).click();
+  await paginaAna.getByRole('button', { name: 'Continuar' }).click();
+  await paginaAna.getByRole('button', { name: 'Conectar' }).click();
+  await expect(paginaAna.getByText('Conectado', { exact: true })).toBeVisible();
+
+  // Un evento del equipo (una reunión) con la regla «Al instante».
+  const equipoId = urlEquipo.split('/').pop();
+  const r = await paginaAna.request.post(`${api}/equipos/${equipoId}/reuniones`, {
+    data: { titulo: 'Demo con WhatsApp', inicio: new Date(Date.now() + 86_400_000).toISOString() },
+    headers: { origin: web },
+  });
+  expect(r.status()).toBe(201);
+  // El despachador corre cada minuto; aquí se corre una vez para no esperar.
+  expect(
+    (await paginaAna.request.post(`${api}/dev/whatsapp/ciclo`, { headers: { origin: web } })).ok(),
+  ).toBe(true);
+
+  // WA-02: el aviso está en la cola con su plantilla; Ana lo envía.
+  await paginaAna.goto(`${urlEquipo}/whatsapp/cola`);
+  await expect(paginaAna.getByText(/Reunión «Demo con WhatsApp» el/).first()).toBeVisible();
+  await paginaAna.getByRole('button', { name: /^Enviar 1 seleccionado$/ }).click();
+  await expect(paginaAna.getByText('La cola está al día')).toBeVisible();
+
+  // WA-04: Beto (integrante) lo ve en el historial como enviado por Ana.
+  await paginaBeto.goto(`${urlEquipo}/whatsapp`);
+  await expect(paginaBeto).toHaveURL(/\/whatsapp\/historial$/);
+  await expect(paginaBeto.getByText(/Reunión «Demo con WhatsApp» el/).first()).toBeVisible();
+  await expect(paginaBeto.getByText('Enviado por Ana Prueba').first()).toBeVisible();
+});

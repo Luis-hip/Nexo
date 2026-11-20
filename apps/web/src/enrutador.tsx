@@ -19,6 +19,7 @@ const sprints = () => import('./pages/equipo/sprints');
 const vistas = () => import('./pages/equipo/vistas');
 const ajustes = () => import('./pages/ajustes');
 const chat = () => import('./pages/equipo/chat');
+const whatsapp = () => import('./pages/equipo/whatsapp');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -261,7 +262,28 @@ const rutas: RouteObject[] = [
               { path: 'chat', lazy: diferida(chat, (m) => m.Chat) },
               { path: 'chat/tarea/:tareaId', lazy: diferida(chat, (m) => m.ChatDeTarea) },
               { path: 'chat/:conversacionId', lazy: diferida(chat, (m) => m.Chat) },
-              { path: 'whatsapp/*', element: proximamente('WhatsApp', 4) },
+              {
+                // Fase 4.2: WhatsApp (WA-01 a WA-08). El integrante solo ve el historial.
+                path: 'whatsapp',
+                lazy: async () => {
+                  const { WhatsAppLayout } = await whatsapp();
+                  return {
+                    element: (
+                      <Requiere permiso="ver_historial_whatsapp">
+                        <WhatsAppLayout />
+                      </Requiere>
+                    ),
+                  };
+                },
+                children: [
+                  { index: true, lazy: diferida(whatsapp, (m) => m.PanelWhatsApp) },
+                  { path: 'cola', lazy: diferida(whatsapp, (m) => m.ColaWhatsApp) },
+                  { path: 'historial', lazy: diferida(whatsapp, (m) => m.HistorialWhatsApp) },
+                  { path: 'reglas', lazy: diferida(whatsapp, (m) => m.ReglasWhatsApp) },
+                  { path: 'personas', lazy: diferida(whatsapp, (m) => m.PersonasWhatsApp) },
+                  { path: 'conectar', lazy: diferida(whatsapp, (m) => m.ConectarWhatsApp) },
+                ],
+              },
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],
           },

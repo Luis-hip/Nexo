@@ -4,7 +4,7 @@
 
 ## Estado general
 
-*Actualizado el 2026-11-18, al cerrar la Fase 3 y llevarla a `main`.*
+*Actualizado el 2026-11-19, al juntar la parte de WhatsApp de la Fase 4.*
 
 | Fase | Estado | Etiqueta | Dónde está |
 |---|---|---|---|
@@ -14,7 +14,8 @@
 | 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
 | 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
 | 3.5 · Despliegue | En curso (front y API en línea; faltan prueba de humo, copias y raíz) | — | — |
-| 4 · Chat y WhatsApp | **Siguiente** | — | — |
+| 4 · Chat y WhatsApp | Construida: chat en producción; WhatsApp simulado en `feat/fase-4-whatsapp` (envío real no, DEC-WA-1) | — (al cerrar) | `produccion` (chat) y `feat/fase-4-whatsapp` |
+| 5 · Autenticación, QA y permisos | Terminada y en producción | `fase-5` | `produccion` |
 
 **`produccion` ya tiene las Fases 2.5 y 3** (PR #16, 2026-11-18) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
@@ -213,12 +214,43 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 
 ### Pendiente o movido
 
-- [ ] **`pg-boss` y el despachador de eventos** (notificaciones de asignaciones, menciones y vencimientos; sustituir `trabajos/plazos.ts`; foto nocturna del burndown). No se hicieron aquí porque comparten diseño con la cola y el modo reporte de WhatsApp (4.2): decidir quién los hace antes de juntar las ramas. Mientras tanto, las menciones del chat ya notifican desde su proceso.
+- [x] **El despachador de eventos** (avisos de asignaciones, propuestas y vencimientos) se hizo con WhatsApp (ver abajo, DEC-WA-1), en el temporizador de la API y **sin `pg-boss`**. Siguen sin hacerse: sustituir `trabajos/plazos.ts` y la foto nocturna del burndown.
 - [ ] Adjuntar archivos en el chat (la tabla `archivos` tiene `mensaje_id`, pero `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes e indicador de «escribiendo…».
 - [ ] La insignia de no leídos de la barra se refresca cada 2 minutos fuera del chat; dentro del chat es en tiempo real.
 - [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
 - [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
 - [ ] Las decisiones del chat usan el prefijo `DEC-CHAT-` para no chocar con las de WhatsApp; renumerar al juntar si se prefiere.
+
+### Fase 4 · WhatsApp (4.2 y 4.3)
+
+**Estado:** construida en `feat/fase-4-whatsapp` (sale de `produccion` con el chat y la Fase 5). La rama `Dev_Isac` se juntó ahí (`5f5e9fa`): traía otra versión del chat, no WhatsApp, y se conservó la nuestra (DEC-WA-1).
+
+#### Hecho
+
+- **Base de datos.** Migración `0031_procesos_whatsapp.sql` con **20 procesos `proc_wa_*`** (en `docs/08`, «Fase 4 · WhatsApp»): despachador de eventos, vencimientos, reportes, envíos, resultado de entrega y webhook (sistema); panel, cola, historial, editar, descartar, reintentar, enviar, conectar, desconectar, configurar y reglas (líder); número, consentimiento general y por equipo (persona). Agrega columnas (`envio_automatico`, `ultimo_reporte_en`, `entregado_en`, `leido_en`, `reporte_id`) y los índices `ix_wa_msj_pendientes` (**Q4 ya no hace barrido: 7 de 7**) e `ix_wa_msj_proveedor_id`. El despachador también crea los avisos en la app que faltaban (asignación, propuesta nueva, vencimiento).
+- **API.** `rutas/whatsapp.ts`, `repositorios/whatsapp.ts`, `whatsapp/proveedor.ts` (`simulado`, `cloud_api_grupos`, `cloud_api_directo`) y `trabajos/whatsapp.ts` (ciclo cada minuto). Webhook `GET`/`POST /whatsapp/webhook` con firma HMAC-SHA256 e idempotencia. `WHATSAPP_PROVIDER=simulado` por defecto: **no se envía nada real**.
+- **Web.** `/app/e/:equipo/whatsapp`: WA-01 panel, WA-02 y WA-03 cola con vista previa tipo WhatsApp (editar, seleccionar, descartar, enviar), WA-04 historial (también para integrantes), WA-05 reglas y reporte, WA-06 conectar (asistente de 3 pasos; solo el simulado está activo), WA-07 consentimiento por persona y WA-08 pausa, error, reintentar y desconectar. **PF-05** en Ajustes → WhatsApp (número, consentimiento general y por equipo).
+- **Pruebas.** 20 SQL (**P150–P169**; `db:test:procesos` da **158 OK**), 10 de la API (`whatsapp.test.ts`: cola → enviar → historial, consentimiento, reporte a la hora, webhook con firma buena y mala), las 3 sondas de WhatsApp en `matriz.test.ts`, el flujo extremo a extremo «3b» (aviso simulado: conectar, enviar y verlo en el historial) y WA-01, 02, 04, 05, 07 y PF-05 en `revision.e2e.ts` (axe y 360 px). `procesos:verificar` cuenta **143** procesos.
+- **Integración con la API de Meta (imitada).** `apps/api/src/whatsapp/integracion.test.ts` corre el servidor con `WHATSAPP_PROVIDER=real` contra un servidor local que imita la API Cloud de Meta (`WHATSAPP_API_URL`; en producción solo se acepta `https://graph.facebook.com/…`): envío directo (una petición por persona con consentimiento, con token y cuerpo exactos), envío al grupo, error de Meta → fallido → reintento → enviado, estados «entregado», «leído» y «failed» por el webhook firmado (sin duplicar) y el modo simulado sin llamadas a Meta. 6 pruebas; la API queda en 191.
+- **Capturas** para el artículo en `docs/capturas/` (`wa-01` a `wa-07` y `pf-05`, escritorio y móvil).
+- **Verificado en el navegador** con la semilla: Valeria conecta el simulado, la cola muestra el vencimiento y la reunión con la burbuja, envía y aparecen en el historial; Carlos ve solo el historial.
+
+#### Criterio de la Fase 4
+
+- [x] Dos navegadores intercambian mensajes en tiempo real; el invitado no recibe los del equipo (`chat.test.ts`, flujo E2E 3).
+- [x] Un evento de tarea genera el aviso con la plantilla correcta; el líder lo envía y sale en el historial como enviado (P151, P157, `whatsapp.test.ts`, E2E «3b»).
+- [x] Sin consentimiento no se menciona a la persona (P152, `whatsapp.test.ts`).
+- [x] Un reporte programado se genera y se envía a la hora (P161, P162, `whatsapp.test.ts`).
+- [x] Envío real: **nota explícita de por qué no se hizo** (DEC-WA-1: falta la cuenta OBA; el proveedor real y el webhook están construidos y probados sin cuenta).
+- [ ] CI en verde y tag `fase-4`: tras el push y los PR.
+
+#### Pendiente
+
+- [ ] **Envío real (4.3):** verificación de la empresa, OBA y número real (Fase 0.7); después poner `WHATSAPP_PROVIDER=real` y las cuatro variables en Render y probar con el grupo de prueba. Es decisión del equipo.
+- [ ] **FALT-03 y FALT-04** (unirse al grupo y aprobar solicitudes): necesitan la API de grupos con cuenta real. Mientras, el enlace de invitación se ve en Ajustes → WhatsApp.
+- [ ] Verificar el número por código (`whatsapp_usuario.verificado` existe, no hay flujo) y la decisión D-01.
+- [ ] La API duerme en el plan gratuito de Render: los reportes pueden salir tarde (al despertar).
+- [ ] Desplegar: la `0031` marca como procesados los eventos viejos para no mandar avisos atrasados.
 
 ## Fase 5 · Autenticación, QA y permisos
 
@@ -240,15 +272,23 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [x] Registrar, entrar, salir y recuperar contraseña con una cuenta real (local, pruebas automáticas y extremo a extremo; en producción, tras el despliegue).
 - [x] `DEV_LOGIN_ENABLED=false` en producción y el servidor lo exige.
 - [x] La prueba de la matriz completa pasa (`matriz.test.ts`).
-- [ ] Las 7 consultas pasan la revisión de `EXPLAIN`: 6 de 7 en PostgreSQL 16; Q4 espera su índice en la rama de WhatsApp.
+- [x] Las 7 consultas pasan la revisión de `EXPLAIN`: Q4 la cubre desde la `0031` el índice `ix_wa_msj_pendientes` (rama de WhatsApp).
 - [x] Los 3 flujos extremo a extremo pasan (en la CI desde este PR).
-- [ ] CI en verde en `produccion` y tag `fase-5`.
+- [x] CI en verde en `produccion` (PR #23 → #24 → #25 → #26).
+- [x] Tag `fase-5` (en `0c02066`).
+
+### Despliegue (2026-11-19)
+
+- `produccion` en `0c02066` (PR #26). **Vercel** publicó el front solo; **Render no desplegó por su cuenta** (igual que con el PR #22): se lanzó a mano con *Manual Deploy → Deploy latest commit* y quedó *Live* en 1 min 14 s.
+- Comprobado en producción: `/auth/cuenta` responde 401 (antes 404), `/auth/entrar` con una cuenta inexistente responde 401 con el mensaje genérico (llega a la BD: la `0030` está aplicada), `/dev/usuarios` da 404 (no hay acceso de desarrollo) y Socket.IO responde.
+- **Prueba de humo:** una persona del equipo creó una cuenta en `app.nexo.lol/registro`; la sesión abre y Ajustes → Cuenta muestra el correo «Sin verificar» y 1 sesión. Sin Resend no llega el correo de verificación (esperado).
+- El aviso «Sin conexión» que se vio en el navegador de pruebas viene de `navigator.onLine = false` de ese navegador, no de la app.
 
 ### Pendiente
 
 - [ ] **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
-- [ ] **Avisar a quien hace WhatsApp** que renumere sus migraciones desde `0031` (DEC-AUTH-2), que agregue en una de ellas el índice `ix_wa_msj_pendientes` para Q4 (y quite `pendiente` de Q4 en `explain.ts`), y que sume a `matriz.test.ts` las sondas de `configurar_whatsapp`, `enviar_cola_whatsapp` y `ver_historial_whatsapp`.
+- [x] (Hecho en `feat/fase-4-whatsapp`: `0031`, índice, `explain.ts` y sondas.) **Avisar a quien hace WhatsApp** que renumere sus migraciones desde `0031` (DEC-AUTH-2), que agregue en una de ellas el índice `ix_wa_msj_pendientes` para Q4 (y quite `pendiente` de Q4 en `explain.ts`), y que sume a `matriz.test.ts` las sondas de `configurar_whatsapp`, `enviar_cola_whatsapp` y `ver_historial_whatsapp`.
 - [ ] Revisar DEC-AUTH-1 (el registro sí dice si un correo ya tiene cuenta).
 - [ ] 2FA (AUTH-07), cambio de correo e inicio con Google: fase posterior.
-- [ ] Capturas de WhatsApp para el artículo, al juntar esa rama.
+- [x] Capturas de WhatsApp para el artículo (`docs/capturas/wa-*` y `pf-05-*`).
 - [ ] Revisión visual por una persona: la automática cubre contraste, desbordamiento y estructura, no el aspecto.

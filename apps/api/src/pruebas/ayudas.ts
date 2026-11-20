@@ -42,8 +42,14 @@ export interface Entorno {
   cerrar: () => Promise<void>;
 }
 
-export async function crearEntorno(): Promise<Entorno> {
-  const config = cargarConfig({ DATABASE_URL, NODE_ENV: 'test', DEV_LOGIN_ENABLED: 'true' });
+/** `extra`: variables de entorno adicionales para la prueba (p. ej. los secretos del webhook). */
+export async function crearEntorno(extra: Record<string, string> = {}): Promise<Entorno> {
+  const config = cargarConfig({
+    DATABASE_URL,
+    NODE_ENV: 'test',
+    DEV_LOGIN_ENABLED: 'true',
+    ...extra,
+  });
   const db = crearBaseDatos(config.DATABASE_URL);
   const correo = correoEnMemoria();
   const app = await crearApp(config, db, { correo });

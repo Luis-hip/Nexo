@@ -1964,3 +1964,320 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_
 - **Pruebas:** P207; `autenticacion.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_contrasena_cambiar($1, $2, $3)`
 - **Historial:** 2026-11-19 · creación · `0030`.
+
+---
+
+## Fase 4 · WhatsApp
+
+Procesos de WhatsApp (`03`, tareas 4.2 y 4.3; DEC-WA-1 en `decisiones.md`). Migración `0031_procesos_whatsapp.sql` (WhatsApp numera desde `0031` porque el chat y la autenticación se desplegaron antes, DEC-AUTH-2). Pruebas `P150`–`P169` en `pruebas_procesos.sql`, `apps/api/src/rutas/whatsapp.test.ts` y el flujo extremo a extremo «3b» de `apps/web/e2e/flujos.e2e.ts`.
+
+**Esquema (solo agrega):** `whatsapp_configuracion.envio_automatico` y `.ultimo_reporte_en`; `whatsapp_mensajes.entregado_en`, `.leido_en` y `.reporte_id`; índices `ix_wa_msj_pendientes` (Q4 de `02` §13) e `ix_wa_msj_proveedor_id` (estados del webhook; idea de la rama de Isac). La migración marca como procesados los eventos anteriores: el despachador empieza desde ahí.
+
+**Ciclo de un aviso.** Evento de dominio → `proc_wa_procesar_eventos` (según `whatsapp_reglas`: «instantáneo» a la cola, «reporte» al próximo resumen, «apagado» nada) → el líder revisa y envía (`proc_wa_enviar`) o el envío automático (`proc_wa_por_enviar`) → `enviando` → `proc_wa_envio_resultado` → `enviado` | `fallido`. Los reportes los arma `proc_wa_reportes` a la hora fijada. Los procesos de sistema (sin actor) los corre cada minuto el temporizador de la API (`trabajos/whatsapp.ts`).
+
+**Consentimiento (WA-07).** `fn_wa_mencion` solo nombra («@Nombre») a quien tiene `membresias.consentimiento_wa = true`; sin consentimiento el texto no la nombra. El envío directo solo llega a quien tiene número, consentimiento general y del equipo.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_wa_procesar_eventos` | WhatsApp · sistema | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_vencimientos` | WhatsApp · sistema | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_reportes` | WhatsApp · sistema | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_por_enviar` | WhatsApp · sistema | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_envio_resultado` | WhatsApp · sistema | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_webhook_registrar` | WhatsApp · sistema (4.3) | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_panel` | WhatsApp (lectura) | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_cola` | WhatsApp (lectura) | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_historial` | WhatsApp (lectura) | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_mensaje_editar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_descartar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_reintentar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_enviar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_conectar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_desconectar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_configurar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_regla_guardar` | WhatsApp | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_usuario` | WhatsApp · persona (lectura) | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_usuario_guardar` | WhatsApp · persona | `0031_procesos_whatsapp.sql` | Vigente |
+| `proc_wa_consentimiento` | WhatsApp · persona | `0031_procesos_whatsapp.sql` | Vigente |
+
+Auxiliares nuevos (solo el dueño): `fn_wa_regla_de` (evento → regla: reuniones → `reunion`; `tarea.por_vencer` → `urgente`; asignada o rechazada → `asignacion`; aceptada por votación o creada → `aceptada`; propuesta o rechazada por votación → `triaje`; completada, cambio de estado, inicio y cierre de sprint → `actualizacion`), `fn_wa_mencion`, `fn_wa_cuando`, `fn_wa_texto` (plantillas), `fn_wa_notificar_evento`, `fn_wa_en_silencio`, `fn_wa_proximo_reporte`, `fn_wa_mensaje_json`, `fn_wa_para_enviar`, `fn_wa_config_json`, `fn_wa_exigir_config`. Sin códigos de error nuevos.
+
+### proc_wa_procesar_eventos
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** despachador de eventos (outbox, DEC-022): avisos en la app que faltaban y cola de WhatsApp.
+- **Parámetros:** `p_limite int` (opcional, 200; hasta 1000).
+- **Retorno:** `jsonb` `{ procesados, encolados, notificados }`.
+- **Reglas y validaciones:** toma eventos sin procesar en orden con `FOR UPDATE SKIP LOCKED`. Notifica en la app: asignación (al responsable, preferencia `tarea_asignada`), propuesta nueva (a los integrantes, `propuesta_nueva`) y por vencer (al responsable). Si el equipo tiene WhatsApp (no `sin_configurar`) y la regla del evento es `instantaneo` o `reporte`, inserta el aviso con el texto de `fn_wa_texto`. Un evento con error no frena a los demás: se reintenta hasta 5 veces.
+- **Errores:** ninguno (cada fallo queda en `eventos_dominio.ultimo_error`).
+- **Tablas que toca:** lectura `whatsapp_configuracion`, `whatsapp_reglas`, `tareas`, `reuniones`, `sprints`, `membresias`, `preferencias_notificacion`; escritura `eventos_dominio`, `whatsapp_mensajes`, `notificaciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `procesarEventos()`; `trabajos/whatsapp.ts` (cada minuto) y `POST /dev/whatsapp/ciclo` (solo desarrollo).
+- **Pruebas:** P151, P152, P153, P154; `whatsapp.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_procesar_eventos(200)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_vencimientos
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** regla «urgente»: registrar `tarea.por_vencer` de las tareas que vencen en menos de 24 h.
+- **Parámetros:** ninguno.
+- **Retorno:** `jsonb` `{ registrados }`.
+- **Reglas y validaciones:** tareas de equipo abiertas (no completadas, rechazadas, retiradas ni en propuesta), sin archivar; una vez por tarea y fecha de entrega (si la fecha cambia, vuelve a avisar).
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `tareas`; escritura `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.por_vencer` («T-03 «…» vence en menos de 24 h»).
+- **Lo llama:** `repositorios/whatsapp.ts` → `vencimientos()`; `trabajos/whatsapp.ts`.
+- **Pruebas:** P154.
+- **Ejemplo de llamada:** `select proc_wa_vencimientos()`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_reportes
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** modo reporte: a la hora fijada, juntar lo pendiente del reporte en un resumen.
+- **Parámetros:** `p_ahora timestamptz` (opcional, `now()`).
+- **Retorno:** `jsonb` `{ generados }`.
+- **Reglas y validaciones:** por equipo conectado o en pausa, cuando ya pasó su próximo reporte (`fn_wa_proximo_reporte`: diario a la hora, o semanal el día y la hora, en la zona del equipo). Crea un aviso `programado` («📋 Resumen de …» con hasta 8 líneas y «…y N más») y marca los incluidos como `cancelado` con `reporte_id`. Sin pendientes no hay resumen, pero la hora cuenta como cumplida.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `whatsapp_configuracion`, `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `reportes()`; `trabajos/whatsapp.ts`.
+- **Pruebas:** P161; `whatsapp.test.ts` («un reporte programado se genera y se envía a la hora»).
+- **Ejemplo de llamada:** `select proc_wa_reportes(now())`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_por_enviar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** lo que el sistema envía solo: reportes programados que ya tocan y, con envío automático, los instantáneos seleccionados.
+- **Parámetros:** `p_limite int` (opcional, 50; hasta 200).
+- **Retorno:** `jsonb` `AvisoParaEnviar[]` (`id`, `equipo_id`, `texto`, `proveedor`, `grupo_externo_id`, `destinatarios[]`).
+- **Reglas y validaciones:** solo equipos `conectado` (no en pausa ni con error) y fuera de sus horas de silencio; los deja `enviando` y suma un intento (`FOR UPDATE SKIP LOCKED`).
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `whatsapp_configuracion`, `whatsapp_usuario`, `membresias`, `equipos`; escritura `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `porEnviar()`; `trabajos/whatsapp.ts`.
+- **Pruebas:** P162.
+- **Ejemplo de llamada:** `select proc_wa_por_enviar(50)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_envio_resultado
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** registrar el resultado de la entrega de un aviso `enviando`.
+- **Parámetros:** `p_mensaje_id uuid`. `p_ok boolean`. `p_proveedor_id text` (id de Meta o «sim-…»). `p_error text`.
+- **Retorno:** `jsonb` `MensajeWa`.
+- **Reglas y validaciones:** `enviado` (con `enviado_en` e id del proveedor) o `fallido` (con el error, hasta 300 caracteres). Al enviar, actualiza `ultimo_envio_en` y limpia `causa_error`.
+- **Errores:** `NX007` · el aviso no se estaba enviando.
+- **Tablas que toca:** escritura `whatsapp_mensajes`, `whatsapp_configuracion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `resultadoEnvio()`; `whatsapp/proveedor.ts` → `entregar()`.
+- **Pruebas:** P157.
+- **Ejemplo de llamada:** `select proc_wa_envio_resultado($1, true, 'sim-…', null)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_webhook_registrar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** 4.3: guardar un evento del webhook de Meta una sola vez y aplicar los estados de entrega.
+- **Parámetros:** `p_evento_id text` (único). `p_tipo text`. `p_carga jsonb` (el `value` del cambio de Meta).
+- **Retorno:** `jsonb` `{ nuevo, actualizados }`.
+- **Reglas y validaciones:** idempotente por `proveedor_evento_id`. Para cada `statuses[]`: `sent`/`delivered`/`read` dejan el aviso enviado y fijan `entregado_en`/`leido_en`; `failed` lo deja `fallido` con el título del error. La API verifica antes la firma HMAC (`X-Hub-Signature-256`).
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `whatsapp_webhook_eventos`, `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `registrarWebhook()`; `POST /whatsapp/webhook`.
+- **Pruebas:** P168; `whatsapp.test.ts` (firma buena y mala).
+- **Ejemplo de llamada:** `select proc_wa_webhook_registrar('…', 'statuses', '{"statuses": […]}')`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_panel
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-01: panel del líder.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`.
+- **Retorno:** `jsonb` `PanelWa`: `configuracion` (con `proximo_reporte`), `reglas[6]`, `resumen { en_cola, para_reporte, enviados_hoy, fallidos }` y `personas[]` (consentimiento, en grupo, tiene número).
+- **Reglas y validaciones:** solo el líder (matriz: `configurar_whatsapp`).
+- **Errores:** `NX005` · no es el líder. `NX006` · no es del equipo.
+- **Tablas que toca:** lectura `whatsapp_configuracion`, `whatsapp_reglas`, `whatsapp_mensajes`, `membresias`, `whatsapp_usuario`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/whatsapp.ts` → `panel()`; `GET /equipos/:equipoId/whatsapp`.
+- **Pruebas:** P155; `whatsapp.test.ts`; `matriz.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_panel($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_cola
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-02: la cola.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`.
+- **Retorno:** `jsonb` `{ instantaneos[], para_reporte[], proximo_reporte }`.
+- **Reglas y validaciones:** solo el líder (`enviar_cola_whatsapp`); instantáneos pendientes o enviándose, y lo que espera al reporte.
+- **Errores:** `NX005`, `NX006`.
+- **Tablas que toca:** lectura `whatsapp_mensajes`, `whatsapp_configuracion`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/whatsapp.ts` → `cola()`; `GET /equipos/:equipoId/whatsapp/cola`.
+- **Pruebas:** P155; `whatsapp.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_cola($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_historial
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-04: historial (enviados, fallidos y descartados).
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_estado text` (opcional: `enviado`, `fallido`, `cancelado`). `p_antes timestamptz` (cursor). `p_limite int` (30; hasta 100).
+- **Retorno:** `jsonb` `{ items: MensajeWa[], hay_mas }`, del más reciente al más antiguo.
+- **Reglas y validaciones:** líder e integrantes (`ver_historial_whatsapp`); los avisos incluidos en un reporte no salen sueltos.
+- **Errores:** `NX005` · invitado. `NX006` · no es del equipo. `NX010` · filtro inválido.
+- **Tablas que toca:** lectura `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/whatsapp.ts` → `historial()`; `GET /equipos/:equipoId/whatsapp/historial`.
+- **Pruebas:** P160; `whatsapp.test.ts`; flujo E2E «3b».
+- **Ejemplo de llamada:** `select proc_wa_historial($1, $2, 'enviado', null, 30)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_mensaje_editar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-02: corregir el texto o (de)seleccionar un aviso pendiente.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid`. `p_cambios jsonb` · `{ texto?, seleccionado? }`.
+- **Retorno:** `jsonb` `MensajeWa`.
+- **Reglas y validaciones:** solo el líder del equipo del aviso; solo avisos `pendiente`; texto de 1 a 400.
+- **Errores:** `NX005`, `NX006` · aviso inexistente. `NX007` · ya no está pendiente. `NX010` · texto inválido.
+- **Tablas que toca:** escritura `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `editarMensaje()`; `PATCH /whatsapp/mensajes/:id`.
+- **Pruebas:** P156; `whatsapp.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_mensaje_editar($1, $2, '{"texto": "…"}')`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_descartar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-02: descartar avisos pendientes.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_ids uuid[]`.
+- **Retorno:** `jsonb` `{ descartados }`.
+- **Reglas y validaciones:** solo el líder; quedan `cancelado` («Descartado por el líder»).
+- **Errores:** `NX005`, `NX006`.
+- **Tablas que toca:** escritura `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `descartar()`; `POST /equipos/:equipoId/whatsapp/cola/descartar`.
+- **Pruebas:** P159.
+- **Ejemplo de llamada:** `select proc_wa_descartar($1, $2, ARRAY[$3]::uuid[])`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_reintentar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-08: devolver a la cola lo que falló.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_ids uuid[]` (NULL = todos los fallidos).
+- **Retorno:** `jsonb` `{ reintentados }`.
+- **Reglas y validaciones:** solo el líder; vuelven como instantáneos seleccionados.
+- **Errores:** `NX005`, `NX006`.
+- **Tablas que toca:** escritura `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `reintentar()`; `POST /equipos/:equipoId/whatsapp/cola/reintentar`.
+- **Pruebas:** P159.
+- **Ejemplo de llamada:** `select proc_wa_reintentar($1, $2, null)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_enviar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-02: el líder envía la cola.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_ids uuid[]` (NULL = los seleccionados).
+- **Retorno:** `jsonb` `AvisoParaEnviar[]`; la API los entrega con el proveedor y registra cada resultado.
+- **Reglas y validaciones:** solo el líder (`enviar_cola_whatsapp`); equipo activo; WhatsApp conectado (no en pausa ni con error). Los deja `enviando` con `enviado_por`.
+- **Errores:** `NX005`, `NX006`, `NX009` · archivado. `NX007` · sin configurar, en pausa o con error.
+- **Tablas que toca:** lectura `whatsapp_configuracion`, `whatsapp_usuario`, `membresias`; escritura `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `enviar()`; `POST /equipos/:equipoId/whatsapp/cola/enviar`.
+- **Pruebas:** P157, P158, P169; `whatsapp.test.ts`; flujo E2E «3b».
+- **Ejemplo de llamada:** `select proc_wa_enviar($1, $2, null)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_conectar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-06: conectar WhatsApp.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_datos jsonb` · `{ proveedor?, grupo_nombre, grupo_externo_id?, enlace_invitacion? }`.
+- **Retorno:** `jsonb` `ConfiguracionWa`.
+- **Reglas y validaciones:** solo el líder; equipo activo; nombre de 2 a 100; `cloud_api_grupos` exige el id del grupo. Si no hay reglas crea las de siempre (reuniones y vencimientos al instante; lo demás al reporte); si ya hay, no las toca. La API rechaza (409) un proveedor real si el servidor no tiene cuenta de Meta.
+- **Errores:** `NX005`, `NX006`, `NX009`, `NX010`.
+- **Tablas que toca:** escritura `whatsapp_configuracion`, `whatsapp_reglas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.whatsapp_conectado`.
+- **Lo llama:** `repositorios/whatsapp.ts` → `conectar()`; `POST /equipos/:equipoId/whatsapp/conectar`.
+- **Pruebas:** P150; `whatsapp.test.ts`; flujo E2E «3b».
+- **Ejemplo de llamada:** `select proc_wa_conectar($1, $2, '{"grupo_nombre": "Equipo · avisos"}')`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_desconectar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-08: desconectar WhatsApp.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`.
+- **Retorno:** `jsonb` `ConfiguracionWa`.
+- **Reglas y validaciones:** solo el líder; cancela lo pendiente y lo programado; el historial se conserva.
+- **Errores:** `NX005`, `NX006`, `NX007` · ya estaba sin configurar.
+- **Tablas que toca:** escritura `whatsapp_configuracion`, `whatsapp_mensajes`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.whatsapp_desconectado`.
+- **Lo llama:** `repositorios/whatsapp.ts` → `desconectar()`; `POST /equipos/:equipoId/whatsapp/desconectar`.
+- **Pruebas:** P165.
+- **Ejemplo de llamada:** `select proc_wa_desconectar($1, $2)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_configurar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-05 y WA-08: pausar o reanudar, reporte, agrupar, horas de silencio, envío automático y enlace de invitación.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_cambios jsonb` (solo lo que cambia).
+- **Retorno:** `jsonb` `ConfiguracionWa`.
+- **Reglas y validaciones:** solo el líder; WhatsApp configurado; `estado` solo `conectado` o `pausado` (reanudar limpia el error); silencio completo; hora y día válidos.
+- **Errores:** `NX005`, `NX006`, `NX007` · sin configurar. `NX010` · valor inválido.
+- **Tablas que toca:** escritura `whatsapp_configuracion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `configurar()`; `PATCH /equipos/:equipoId/whatsapp/configuracion`.
+- **Pruebas:** P158, P164; `whatsapp.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_configurar($1, $2, '{"estado": "pausado"}')`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_regla_guardar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-05: modo de una regla.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_tipo text` (una de las 6). `p_modo text` (`instantaneo`, `reporte`, `apagado`).
+- **Retorno:** `jsonb` `{ tipo_evento, modo }`.
+- **Reglas y validaciones:** solo el líder.
+- **Errores:** `NX005`, `NX006`, `NX010` · regla o modo inexistente.
+- **Tablas que toca:** escritura `whatsapp_reglas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `guardarRegla()`; `PUT /equipos/:equipoId/whatsapp/reglas/:tipo`.
+- **Pruebas:** P163.
+- **Ejemplo de llamada:** `select proc_wa_regla_guardar($1, $2, 'triaje', 'instantaneo')`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_usuario
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** PF-05: número, consentimiento general y, por equipo, consentimiento y enlace de invitación.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `WhatsAppUsuario`.
+- **Reglas y validaciones:** solo los datos del actor; el enlace del grupo solo se ve con consentimiento en ese equipo.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `whatsapp_usuario`, `membresias`, `equipos`, `whatsapp_configuracion`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/whatsapp.ts` → `usuario()`; `GET /yo/whatsapp`.
+- **Pruebas:** P166.
+- **Ejemplo de llamada:** `select proc_wa_usuario($1)`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_usuario_guardar
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** PF-05: guardar el número (E.164) y el consentimiento general.
+- **Parámetros:** `p_actor_id uuid`. `p_cambios jsonb` · `{ numero?, consentimiento? }` (número vacío = borrarlo).
+- **Retorno:** `jsonb` `WhatsAppUsuario`.
+- **Reglas y validaciones:** número `+` lada y 8 a 15 dígitos, único; cambiar el número quita la verificación. Consentimiento sin número no. Retirar el consentimiento general (o borrar el número) lo retira en todos los equipos.
+- **Errores:** `NX010` · número inválido o sin número. `NX012` · número de otra cuenta.
+- **Tablas que toca:** escritura `whatsapp_usuario`, `membresias`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `guardarUsuario()`; `PATCH /yo/whatsapp`.
+- **Pruebas:** P166; `whatsapp.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_usuario_guardar($1, '{"numero": "+5212221234567", "consentimiento": true}')`
+- **Historial:** 2026-11-19 · creación · `0031`.
+
+### proc_wa_consentimiento
+- **Migración:** `0031_procesos_whatsapp.sql`
+- **Propósito:** WA-07 y PF-05: aceptar o rechazar los avisos y menciones de un equipo.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_acepta boolean`.
+- **Retorno:** `jsonb` `WhatsAppUsuario`.
+- **Reglas y validaciones:** líder o integrante del equipo; aceptar exige número y consentimiento general vigentes.
+- **Errores:** `NX005` · invitado o acceso caducado. `NX006` · no es del equipo. `NX010` · sin número o sin consentimiento general.
+- **Tablas que toca:** escritura `membresias`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `consentimiento()`; `PUT /equipos/:equipoId/whatsapp/consentimiento`.
+- **Pruebas:** P167; `whatsapp.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_consentimiento($1, $2, true)`
+- **Historial:** 2026-11-19 · creación · `0031`.
