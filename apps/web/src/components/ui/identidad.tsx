@@ -24,6 +24,7 @@ import {
   type TareaConPlazo,
 } from '@/lib/tareas';
 import { Insignia, type Tono } from './basicos';
+import { urlApi } from '@/lib/api';
 import { cx } from './cx';
 
 /** Persona a mostrar: nombre, índice de color (color_idx de su membresía) y avatar opcional. */
@@ -73,7 +74,7 @@ export function Avatar({
       {persona ? (
         persona.avatarUrl ? (
           <img
-            src={persona.avatarUrl}
+            src={persona.avatarUrl.startsWith('/') ? urlApi(persona.avatarUrl) : persona.avatarUrl}
             alt=""
             className="size-full rounded-full object-cover"
             style={

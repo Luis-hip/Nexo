@@ -1,5 +1,6 @@
 import {
   EVENTOS_CHAT,
+  type EscribiendoChat,
   MENSAJES_POR_PAGINA,
   type ConversacionChat,
   type EnviarMensaje,
@@ -22,7 +23,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { api, urlApi } from './api';
 
@@ -127,6 +128,11 @@ export function useAccionesChat(equipoId: string) {
           cuerpo: datos,
         }),
       onSettled: (_r, _e, v) => refrescar(v.conversacionId),
+    }),
+    editar: useMutation({
+      mutationFn: ({ mensaje, texto }: { mensaje: MensajeChat; texto: string }) =>
+        api<MensajeChat>(`/chat/mensajes/${mensaje.id}`, { metodo: 'PATCH', cuerpo: { texto } }),
+      onSettled: (_r, _e, v) => refrescar(v.mensaje.conversacion_id),
     }),
     eliminar: useMutation({
       mutationFn: (m: MensajeChat) =>
@@ -241,6 +247,40 @@ export function useTiempoRealChat(activo: boolean) {
       s.off('connect', alConectar);
     };
   }, [activo, qc]);
+}
+
+let ultimoAviso = 0;
+
+/** Avisa a la conversación que estoy escribiendo (como mucho cada 2 s; no se guarda). */
+export function avisarEscribiendo(conversacionId: string) {
+  if (Date.now() - ultimoAviso < 2000) return;
+  ultimoAviso = Date.now();
+  conexion().emit(EVENTOS_CHAT.escribiendo, { conversacion_id: conversacionId });
+}
+
+/** Nombres de quienes escriben ahora en la conversación (se borran a los 4 s sin avisos). */
+export function useEscribiendo(conversacionId: string): string[] {
+  const [quienes, setQuienes] = useState<Record<string, { nombre: string; hasta: number }>>({});
+  useEffect(() => {
+    const s = conexion();
+    const alEscribir = (e: EscribiendoChat) => {
+      if (e.conversacion_id !== conversacionId) return;
+      setQuienes((q) => ({ ...q, [e.usuario_id]: { nombre: e.nombre, hasta: Date.now() + 4000 } }));
+    };
+    s.on(EVENTOS_CHAT.escribiendo, alEscribir);
+    const limpiar = setInterval(() => {
+      setQuienes((q) => {
+        const vivos = Object.entries(q).filter(([, v]) => v.hasta > Date.now());
+        return vivos.length === Object.keys(q).length ? q : Object.fromEntries(vivos);
+      });
+    }, 1000);
+    return () => {
+      s.off(EVENTOS_CHAT.escribiendo, alEscribir);
+      clearInterval(limpiar);
+      setQuienes({});
+    };
+  }, [conversacionId]);
+  return Object.values(quienes).map((v) => v.nombre);
 }
 
 /** Cierra la conexión (al cerrar sesión). */

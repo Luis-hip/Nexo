@@ -19,6 +19,7 @@ import { rutasPersonal } from './rutas/personal';
 import { rutasSprints } from './rutas/sprints';
 import { rutasTareasEquipo } from './rutas/tareasEquipo';
 import { rutasVistas } from './rutas/vistas';
+import { rutasPendientes } from './rutas/pendientes';
 import { rutasWhatsApp } from './rutas/whatsapp';
 import { rutasYo } from './rutas/yo';
 import { registrarTiempoReal } from './tiempoReal';
@@ -84,11 +85,9 @@ export async function crearApp(
   await app.register(rutasAjustes, { db });
   await app.register(rutasChat, { db });
   await app.register(rutasWhatsApp, { db, config });
-  await app.register(rutasAutenticacion, {
-    db,
-    config,
-    correo: opciones.correo ?? crearCorreo(config, app.log),
-  });
+  const correo = opciones.correo ?? crearCorreo(config, app.log);
+  await app.register(rutasPendientes, { db, config, correo });
+  await app.register(rutasAutenticacion, { db, config, correo });
 
   if (config.DEV_LOGIN_ENABLED) {
     await app.register(rutasDev, { db, produccion: config.NODE_ENV === 'production' });

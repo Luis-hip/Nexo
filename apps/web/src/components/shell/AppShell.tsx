@@ -51,6 +51,7 @@ import { Logo } from './Logo';
 import { navegacion, pie, type ItemNav } from './navegacion';
 import { Tour } from './Tour';
 import { useNoLeidosChat } from '@/lib/consultasChat';
+import { PedirAlLider } from '@/components/equipo/Solicitudes';
 import { useNotificaciones } from '@/lib/consultasVistas';
 
 function useEnLinea() {
@@ -341,6 +342,7 @@ function Shell({ yo }: { yo: Yo }) {
                       : `en ${Math.ceil(diasInvitado)} días`}
                   </strong>
                   . Si necesitas más tiempo, pídeselo al líder.
+                  {equipoId && <PedirAlLider equipoId={equipoId} />}
                 </span>
               </Banner>
             )}

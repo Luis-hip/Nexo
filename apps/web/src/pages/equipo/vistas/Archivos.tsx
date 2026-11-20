@@ -148,3 +148,98 @@ export function Archivos() {
     </div>
   );
 }
+
+/**
+ * EQ-06 + EQ-19: adjuntos de una tarea, dentro de su detalle (DEC-037). Mismas reglas que la
+ * página de archivos: 5 MB, tipos permitidos y el permiso `adjuntar_archivos`.
+ */
+export function ArchivosTarea({ tareaId }: { tareaId: string }) {
+  const { equipo, puede } = useEquipoActual();
+  const verArchivos = puede('ver_archivos').permitido;
+  const consulta = useArchivos(equipo.id, tareaId, verArchivos);
+  const { subirArchivo } = useAccionesVistas(equipo.id);
+  const entrada = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string>();
+  const puedeSubir = puede('adjuntar_archivos').permitido && equipo.estado === 'activo';
+  if (!verArchivos) return null;
+
+  const subir = async (lista: FileList | null) => {
+    setError(undefined);
+    for (const f of [...(lista ?? [])]) {
+      if (!(MIME_PERMITIDOS as readonly string[]).includes(f.type)) {
+        setError(`«${f.name}»: ese tipo de archivo no está permitido.`);
+        continue;
+      }
+      if (f.size > MAX_BYTES_ARCHIVO) {
+        setError(`«${f.name}» pesa ${tamanoLegible(f.size)}: el máximo es 5 MB.`);
+        continue;
+      }
+      try {
+        const contenido_base64 = await leerBase64(f);
+        await subirArchivo.mutateAsync({
+          nombre: f.name,
+          mime: f.type,
+          contenido_base64,
+          tarea_id: tareaId,
+        });
+        toast(`«${f.name}» adjuntado a la tarea.`);
+      } catch (e) {
+        setError(mensajeDeError(e));
+      }
+    }
+    if (entrada.current) entrada.current.value = '';
+  };
+
+  const lista = consulta.data ?? [];
+  return (
+    <section aria-labelledby="det-archivos" data-name="NX/EQ-06-Archivos-de-la-tarea">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h4 id="det-archivos" className="text-sm font-semibold">
+          Archivos <span className="text-muted tabular">({lista.length})</span>
+        </h4>
+        {puedeSubir && (
+          <>
+            <input
+              ref={entrada}
+              type="file"
+              multiple
+              className="sr-only"
+              accept={MIME_PERMITIDOS.join(',')}
+              onChange={(e) => void subir(e.target.files)}
+              aria-label="Elegir archivos para adjuntar a la tarea"
+            />
+            <Boton
+              tamano="sm"
+              icono={<Upload className="size-4" />}
+              cargando={subirArchivo.isPending}
+              onClick={() => entrada.current?.click()}
+            >
+              Adjuntar
+            </Boton>
+          </>
+        )}
+      </div>
+      {error && <Banner tono="danger">{error}</Banner>}
+      {lista.length === 0 ? (
+        <p className="text-sm text-muted">Sin archivos adjuntos.</p>
+      ) : (
+        <ul className="divide-y divide-line rounded-[10px] border border-line">
+          {lista.map((a) => (
+            <li key={a.id} className="flex items-center gap-2 px-3 py-2">
+              <FileText className="size-4 shrink-0 text-muted" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-sm">{a.nombre}</span>
+              <span className="text-xs text-muted tabular">{tamanoLegible(a.tamano_bytes)}</span>
+              <a
+                href={urlApi(`/equipos/${equipo.id}/archivos/${a.id}/descarga`)}
+                className="grid size-8 place-items-center rounded-[8px] hover:bg-surface"
+                aria-label={`Descargar ${a.nombre}`}
+              >
+                <Download className="size-4" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

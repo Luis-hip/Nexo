@@ -200,4 +200,13 @@ export const EVENTOS_CHAT = {
   reaccion: 'chat:reaccion',
   lectura: 'chat:lectura',
   conversacionNueva: 'chat:conversacion_nueva',
+  /** Cliente → servidor y servidor → sala: alguien está escribiendo (no se guarda). */
+  escribiendo: 'chat:escribiendo',
 } as const;
+
+/** Lo que recibe la sala cuando alguien escribe. */
+export interface EscribiendoChat {
+  conversacion_id: string;
+  usuario_id: string;
+  nombre: string;
+}
