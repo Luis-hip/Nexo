@@ -1,4 +1,4 @@
-import { mensajeEquipoLleno } from '@nexo/shared';
+import { ERRORES_BD, mensajeEquipoLleno } from '@nexo/shared';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 import type { Ejecutor } from '../db/conexion';
@@ -63,8 +63,16 @@ export function traducirErrorDeProceso(error: unknown): never {
   }
   if (e.code === 'NX001') {
     // El tope lo hace cumplir un disparador (0001); el texto para la persona vive en shared.
-    const max = (detalles as { max_miembros?: number } | undefined)?.max_miembros ?? 0;
-    throw new ErrorNexo(409, 'equipo_lleno', mensajeEquipoLleno(max));
+    // Si el proceso no agregó el detalle, el número sale del mensaje del disparador
+    // («LIMITE_MIEMBROS: el equipo ya tiene 8 miembros activos»).
+    const max =
+      (detalles as { max_miembros?: number } | undefined)?.max_miembros ??
+      Number(/ya tiene (\d+) miembros/.exec(e.message ?? '')?.[1] ?? NaN);
+    throw new ErrorNexo(
+      409,
+      'equipo_lleno',
+      Number.isFinite(max) && max > 0 ? mensajeEquipoLleno(max) : ERRORES_BD.NX001,
+    );
   }
   // El HINT trae el código de la API (p. ej. `tarea_no_encontrada`); el MESSAGE, el texto en español.
   throw new ErrorNexo(

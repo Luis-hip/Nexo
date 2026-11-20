@@ -95,6 +95,24 @@ describe.skipIf(!DATABASE_URL)('chat', () => {
     await expect(conectado(s)).rejects.toThrow('no_autenticado');
   });
 
+  it('«escribiendo…»: llega a quien está en la conversación, no a la invitada ni a uno mismo', async () => {
+    const [sC, sD, sM] = await Promise.all([abrir(carlos), abrir(daniela), abrir(mariana)]);
+    const enDaniela = esperar<{ conversacion_id: string; nombre: string }>(sD, 'chat:escribiendo');
+    const enMariana = esperar(sM, 'chat:escribiendo', 600);
+    const enCarlos = esperar(sC, 'chat:escribiendo', 600);
+    sC.emit('chat:escribiendo', { conversacion_id: canalEquipo });
+    expect(await enDaniela).toMatchObject({
+      conversacion_id: canalEquipo,
+      nombre: expect.stringContaining('Carlos'),
+    });
+    expect(await enMariana).toBeNull();
+    expect(await enCarlos).toBeNull();
+    // Mariana no está en la sala del equipo: su aviso no llega a nadie.
+    const otraVez = esperar(sD, 'chat:escribiendo', 600);
+    sM.emit('chat:escribiendo', { conversacion_id: canalEquipo });
+    expect(await otraVez).toBeNull();
+  });
+
   it('el invitado solo ve el canal de Invitados y recibe 404 en el del equipo', async () => {
     const lista: ConversacionChat[] = (await e.pedir(mariana, 'GET', `${base}/conversaciones`))
       .cuerpo;

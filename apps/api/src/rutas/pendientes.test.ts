@@ -117,6 +117,14 @@ describe.skipIf(!DATABASE_URL)('pendientes tras la Fase 5', () => {
     expect(r.cuerpo).toMatchObject({ estado: 'aprobada' });
     const mias: SolicitudInvitado[] = (await e.pedir(mariana, 'GET', `${E}/solicitudes`)).cuerpo;
     expect(mias.find((x) => x.id === s.cuerpo.id)?.estado).toBe('aprobada');
+    // Ser integrante con el equipo lleno (8): 409 con el tope correcto, y la solicitud sigue pendiente.
+    const c = await e.pedir(mariana, 'POST', `${E}/solicitudes`, { tipo: 'conversion' });
+    const lleno = await e.pedir(valeria, 'POST', `${E}/solicitudes/${c.cuerpo.id}`, {
+      aprobar: true,
+    });
+    expect(lleno.estado).toBe(409);
+    expect(lleno.cuerpo.mensaje).toBe('El equipo ya tiene 8 miembros.');
+    await e.pedir(valeria, 'POST', `${E}/solicitudes/${c.cuerpo.id}`, { aprobar: false });
   });
 
   it('AD-02: la líder manda por correo el enlace de una invitación; el integrante no puede', async () => {
