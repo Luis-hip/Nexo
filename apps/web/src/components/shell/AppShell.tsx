@@ -50,7 +50,7 @@ import { AccionesCtx, perfilEn, SesionCtx, type AccionesGlobales } from './conte
 import { Logo } from './Logo';
 import { navegacion, pie, type ItemNav } from './navegacion';
 import { Tour } from './Tour';
-import { useNoLeidosChat } from '@/lib/consultasChat';
+import { useNoLeidosChat, useTiempoRealChat } from '@/lib/consultasChat';
 import { PedirAlLider } from '@/components/equipo/Solicitudes';
 import { useNotificaciones } from '@/lib/consultasVistas';
 
@@ -116,6 +116,9 @@ function Shell({ yo }: { yo: Yo }) {
   const enLinea = useEnLinea();
   const equipoId = equipo ?? null;
   const perfil = perfilEn(yo, equipoId) ?? 'personal';
+  // Socket del chat en todo el equipo (no solo en el chat): la insignia de no leídos se
+  // actualiza al momento en cualquier pantalla (DEC-037).
+  useTiempoRealChat(equipoId !== null);
   const n = navegacion(perfil, equipoId);
   const [masAbierto, setMasAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState(false);
