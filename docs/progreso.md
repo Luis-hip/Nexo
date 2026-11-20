@@ -67,8 +67,8 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 - [ ] Revisión **visual** por una persona (claro/oscuro y móvil): la verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
 - [x] PR `Dev_Luis` → `dev` con CI en verde y tag `fase-1`. Hecho: el tag existe y la Fase 1 llegó a `dev` y `main` junto con la Fase 2.
 - [x] Rutas que mostraban «Próximamente»: crear o unirse a un equipo y `/app/e/:equipo/*` (Fase 2), reportes personales, notificaciones y `/ajustes/*` (Fase 3) y las invitaciones (Fase 2) ya funcionan. **Siguen en «Próximamente»:** registro, recuperar contraseña, verificar correo y 2FA (Fase 5) y WhatsApp personal (Fase 4).
-- [ ] En el calendario personal solo hay entregas de tareas; las reuniones del equipo ya están en el calendario del equipo (Fase 3), pero **no** en el personal (PER-04): queda para una fase posterior. *(El Hill Chart ya se arrastra: Fase 3.1.)*
-- [ ] El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil. La API de archivos (EQ-19, Fase 3) ya existe; falta enlazarla en esas dos pantallas.
+- [x] (Hecho 2026-11-20, P-02.) En el calendario personal solo hay entregas de tareas; las reuniones del equipo ya están en el calendario del equipo (Fase 3), pero **no** en el personal (PER-04): queda para una fase posterior. *(El Hill Chart ya se arrastra: Fase 3.1.)*
+- [x] (2026-11-20, P-09: foto de perfil hecha en el onboarding y en Ajustes; el adjunto del contacto queda en fase posterior, DEC-037.) El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil. La API de archivos (EQ-19, Fase 3) ya existe; falta enlazarla en esas dos pantallas.
 - Nota: el aviso de cookies guarda la elección en el navegador; no hay analítica instalada.
 
 ## Fase 2 · Equipos, tablero y estados
@@ -92,7 +92,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 - [ ] Revisión **visual** por una persona (claro/oscuro y móvil): solo se tomó una captura del tablero (tema oscuro, escritorio estrecho). El arrastre con el **ratón** no se pudo reproducir con la herramienta de pruebas (suelta de golpe); el arrastre con teclado sí se verificó.
 - [ ] Prueba de «mover en dos navegadores a la vez» a nivel de interfaz: está probada en la API (200 y 409) y la web muestra el aviso, pero no se probó con dos navegadores reales.
 - [x] Salir y expulsar: hechos en la Fase 3, tarea 3.5 «Liderazgo» (DEC-032).
-- [ ] Invitar por correo (necesita el envío de correos, Fase 5) y **solicitudes del invitado** para ampliar su acceso o ser integrante (la tabla `solicitudes_invitado` existe, pero no hay proceso ni pantalla; no estaba en 3.1–3.7). Chat y WhatsApp: Fase 4. Ver DEC-023.
+- [x] (Hecho 2026-11-20, P-04 y P-05.) Invitar por correo (necesita el envío de correos, Fase 5) y **solicitudes del invitado** para ampliar su acceso o ser integrante (la tabla `solicitudes_invitado` existe, pero no hay proceso ni pantalla; no estaba en 3.1–3.7). Chat y WhatsApp: Fase 4. Ver DEC-023.
 - [x] Sin sprint activo no había planeación: los sprints llegaron en la Fase 3.3 (DEC-031).
 
 ## Fase 2.5 · Cambios de alcance
@@ -215,8 +215,8 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 ### Pendiente o movido
 
 - [x] **El despachador de eventos** (avisos de asignaciones, propuestas y vencimientos) se hizo con WhatsApp (ver abajo, DEC-WA-1), en el temporizador de la API y **sin `pg-boss`**. Siguen sin hacerse: sustituir `trabajos/plazos.ts` y la foto nocturna del burndown.
-- [ ] Adjuntar archivos en el chat (la tabla `archivos` tiene `mensaje_id`, pero `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes e indicador de «escribiendo…».
-- [ ] La insignia de no leídos de la barra se refresca cada 2 minutos fuera del chat; dentro del chat es en tiempo real.
+- [x] (2026-11-20, P-07.) Editar mensajes e indicador de «escribiendo…» hechos. Adjuntar archivos en el chat queda en fase posterior (los archivos se adjuntan a la tarea, P-03).
+- [x] (2026-11-20, P-10.) La insignia de no leídos es en tiempo real en todo el equipo (antes, cada 2 minutos fuera del chat).
 - [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
 - [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
 - [x] Las decisiones del chat usan el prefijo `DEC-CHAT-` y las de WhatsApp `DEC-WA-`: se conservan así (no se renumera, para no romper referencias).
@@ -249,7 +249,7 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [~] **Envío a grupos (4.3 con API de grupos):** verificación de la empresa, OBA y número real. Ignorado hasta nuevo aviso (DEC-WA-2).
 - [ ] **Envío real con el número de pruebas** (mensajes directos, DEC-WA-2): ver «Pendientes tras la Fase 5».
 - [~] **FALT-03 y FALT-04** (unirse al grupo y aprobar solicitudes): necesitan la API de grupos con OBA. Ignorado hasta nuevo aviso; mientras, el enlace de invitación se ve en Ajustes → WhatsApp.
-- [ ] Verificar el número por código (`whatsapp_usuario.verificado_en` existe, no hay flujo). D-01 ya resuelta (DEC-WA-2).
+- [~] Verificar el número por código (`whatsapp_usuario.verificado_en` existe, no hay flujo): ignorado hasta nuevo aviso (P-11). D-01 ya resuelta (DEC-WA-2).
 - [ ] La API duerme en el plan gratuito de Render: los reportes pueden salir tarde (al despertar).
 - [x] Desplegado el 2026-11-19 (Render, *Manual Deploy* de `de2f9a1`): la `0031` se aplicó y marcó como procesados los eventos viejos; `/yo/whatsapp` responde 401 sin sesión y el webhook rechaza peticiones sin firma.
 
@@ -300,17 +300,17 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 
 | # | Pendiente | Origen | Tipo | Cómo se aborda | Estado |
 |---|---|---|---|---|---|
-| P-01 | Exportar y eliminar mis datos (FALT-09, PF-06) | `03` 9.2, Fase 5 | código | Procesos sobre `exportaciones_datos`: pedir exportación (JSON con todo lo de la persona) y borrar la cuenta con confirmación por contraseña; Ajustes → Privacidad | Pendiente |
-| P-02 | Reuniones del equipo en el calendario personal (PER-04) | Fase 1 | código | `proc_personal_calendario` suma las reuniones de los equipos activos de la persona | Pendiente |
-| P-03 | Adjuntar archivos desde el detalle de la tarea (EQ-06 / EQ-19) | Fase 3 | código | La API ya acepta `tarea_id`; falta la sección «Archivos» del detalle | Pendiente |
-| P-04 | Invitar por correo (AD-02) | Fase 2 | código | Al crear una invitación, opcionalmente enviarla por correo con el servicio de la Fase 5 | Pendiente |
-| P-05 | Solicitudes del invitado (DEC-023) | Fase 2 | código | Procesos sobre `solicitudes_invitado`: el invitado pide ampliar acceso o ser integrante; el líder aprueba o rechaza | Pendiente |
-| P-06 | Foto diaria del burndown | Fase 3 → 4 | código | El temporizador de la API guarda una instantánea diaria del sprint activo | Pendiente |
-| P-07 | Chat: editar mensajes e indicador «escribiendo…» | Fase 4 | código | Proceso para editar el propio mensaje; evento de socket «escribiendo» por sala | Pendiente |
-| P-08 | Envío real con el número de pruebas (DEC-WA-2) | Fase 4.3 | código + persona | Plantilla fuera de la ventana de 24 h y `wa:probar`; la prueba real necesita el token y el id del número en `apps/api/.env` | Pendiente |
-| P-09 | Adjunto en contacto y foto de perfil en el onboarding | Fase 1 | código | Reutilizar la API de archivos | Pendiente |
-| P-10 | Insignia de no leídos del chat en tiempo real fuera del chat | Fase 4 | código | Escuchar el socket del equipo en la barra lateral | Pendiente |
-| P-11 | Verificar el número de WhatsApp por código | Fase 4 | ignorado | Requiere enviar el código por WhatsApp real: se retoma con P-08 en producción | [~] |
+| P-01 | Exportar y eliminar mis datos (FALT-09, PF-06) | `03` 9.2, Fase 5 | código | `proc_datos_exportar` y `proc_cuenta_eliminar`; Ajustes → Privacidad descarga el JSON y elimina la cuenta con contraseña y «ELIMINAR» | Hecho (2026-11-20) |
+| P-02 | Reuniones del equipo en el calendario personal (PER-04) | Fase 1 | código | `proc_personal_agenda`; las reuniones salen en el mes y en el día elegido, con enlace al equipo | Hecho (2026-11-20) |
+| P-03 | Adjuntar archivos desde el detalle de la tarea (EQ-06 / EQ-19) | Fase 3 | código | Sección «Archivos» con «Adjuntar» en el detalle (mismas reglas: 5 MB y tipos permitidos) | Hecho (2026-11-20) |
+| P-04 | Invitar por correo (AD-02) | Fase 2 | código | «Enviar por correo» en cada invitación pendiente (`POST …/invitaciones/:id/enviar`); en producción sale cuando haya Resend (P-18) | Hecho (2026-11-20) |
+| P-05 | Solicitudes del invitado (DEC-023) | Fase 2 | código | `proc_solicitud_invitado_*`: botones en el banner del invitado; «Solicitudes de invitados» en Miembros con aprobar (7, 14 o 30 días) o rechazar | Hecho (2026-11-20) |
+| P-06 | Foto diaria del burndown | Fase 3 → 4 | código | `proc_sprint_fotos_diarias` en el temporizador de `trabajos/plazos.ts` | Hecho (2026-11-20) |
+| P-07 | Chat: editar mensajes e indicador «escribiendo…» | Fase 4 | código | `proc_chat_editar` («(editado)») y «X está escribiendo…» por Socket.IO solo a la sala | Hecho (2026-11-20) |
+| P-08 | Envío real con el número de pruebas (DEC-WA-2) | Fase 4.3 | código + persona | Plantilla fuera de la ventana de 24 h (DEC-WA-2) y `pnpm --filter @nexo/api wa:probar +52…`; la prueba real necesita el token y el id del número de Meta en `apps/api/.env` y un destinatario dado de alta en Meta | Código hecho; falta la prueba real (persona) |
+| P-09 | Adjunto en contacto y foto de perfil en el onboarding | Fase 1 | código | Foto de perfil en el onboarding y en Ajustes → Perfil (`proc_usuario_foto_*`). El formulario público de contacto **no** admite adjuntos: `contacto_mensajes` no tiene dónde guardarlos y abrir la subida a visitantes sin sesión es riesgo de abuso (DEC-037) | Foto hecha; adjunto del contacto a fase posterior |
+| P-10 | Insignia de no leídos del chat en tiempo real fuera del chat | Fase 4 | código | El socket del chat escucha en todo el equipo; la insignia cambia al momento | Hecho (2026-11-20) |
+| P-11 | Verificar el número de WhatsApp por código | Fase 4 | ignorado | Requiere mandar el código por WhatsApp real con un número verificado; con el de pruebas solo llega a destinatarios ya dados de alta | [~] |
 | P-12 | Verificación del negocio, OBA, grupos, FALT-03/04 | 0.7 / 4.3 | ignorado | DEC-WA-2 | [~] |
 | P-13 | Repositorio privado y licencia; *secret scanning* y *push protection* | Fases 0 y 2.5 | persona | Decisión de Luis | Abierto |
 | P-14 | Tablero de proyecto e *issues* en GitHub | Fase 0 | persona | Decisión del equipo (el seguimiento real vive en `progreso.md`) | Abierto |
@@ -320,4 +320,12 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 | P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | persona | Sin ella no hay correos en producción (P-04 depende de esto en producción) | Abierto |
 | P-19 | Copias de seguridad, raíz `nexo.lol`, plan de pago antes del 2026-12-18 y *Auto-Deploy* de Render | Fase 3.5 | persona | Paneles de Render y Porkbun | Abierto |
 | P-20 | 2FA, cambio de correo e inicio con Google | Fase 5 | — | Fuera de alcance («solo si hay tiempo», `03` 5.1): fase posterior | Fase posterior |
+
+### Resultado del trabajo en `Dev_Luis` (2026-11-20)
+
+- **Código:** migración `0032_procesos_pendientes.sql` (11 procesos, todos en `docs/08`, «Pendientes tras la Fase 5»), rutas en `apps/api/src/rutas/pendientes.ts`, WhatsApp con plantilla fuera de la ventana de 24 h y `wa:probar`, y las pantallas de P-01 a P-10. DEC-037.
+- **Corrección encontrada al probar:** al aprobar que un invitado sea integrante con el equipo lleno, el aviso decía «El equipo ya tiene 0 miembros». La API ahora toma el tope del mensaje de la BD (también arregla convertir invitados desde el menú de Miembros).
+- **Pruebas:** SQL 11 + **168** (P210–P219 nuevas); `procesos:verificar` **153**; API **200** (`pendientes.test.ts` 7, `chat.test.ts` con «escribiendo…» e `integracion.test.ts` de WhatsApp 7, con la plantilla); web 100; `shared` 197; extremo a extremo **8/8**; lint, tipos, formato y build en verde.
+- **Verificado en el navegador:** reuniones en el calendario personal (Carlos), editar un mensaje («(editado)»), exportar mis datos, foto de perfil en Perfil y en la cabecera, solicitudes de Mariana en Miembros (aprobar con el equipo lleno da «El equipo ya tiene 8 miembros.»), botones del banner del invitado, archivo adjunto en T-02 y la insignia del chat que sube de 1 a 2 en el Resumen sin recargar.
+- **WhatsApp:** el flujo completo (evento → cola → envío → historial → estados del webhook firmado) está probado en simulado y contra una API de Meta imitada, incluida la plantilla de la ventana de 24 h. **No se envió ningún mensaje a WhatsApp real**: en `apps/api/.env` no hay token ni id del número de pruebas (P-08).
 

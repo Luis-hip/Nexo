@@ -440,3 +440,17 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Ventana de 24 horas:** Meta solo acepta texto libre si la persona escribió al número en las últimas 24 h; fuera de esa ventana hay que usar una plantilla aprobada. Nexo intenta el texto y, si Meta responde que está fuera de la ventana, manda la plantilla configurada (`WHATSAPP_PLANTILLA`, por defecto `hello_world`, que viene aprobada en toda WABA de prueba).
 - **Producción sigue en `simulado`** hasta que el equipo ponga el token y el id del número en Render (docs/operacion.md §10). Las pruebas reales se hacen en local con `pnpm --filter @nexo/api wa:probar`.
 
+## DEC-037 · Pendientes tras la Fase 5
+
+**Fecha:** 2026-11-20 · **Fuente:** auditoría de `03` (Fases 0 a 5) en `progreso.md`, «Pendientes tras la Fase 5» · **Detalle:** `08_Procesos_BD.md`, sección del mismo nombre.
+
+- **Agenda personal (PER-04):** solo reuniones de equipos donde la persona es líder o integrante; el invitado no ve reuniones (como en EQ-14).
+- **Exportar mis datos (FALT-09):** JSON inmediato (sin cola), con todo lo de la persona y nunca secretos; queda registro en `exportaciones_datos`.
+- **Eliminar la cuenta (FALT-09):** contraseña y la palabra «ELIMINAR». Quien lidera un equipo con más personas primero transfiere; un equipo donde solo estaba esa persona se archiva. La cuenta se **anonimiza** («Cuenta eliminada») en vez de borrarse, para no romper lo que aportó a los equipos (autoría de tareas, mensajes y actividad).
+- **Solicitudes del invitado (DEC-023):** una pendiente por tipo; aprobar reutiliza AD-05 (`proc_invitado_gestionar`), así el tope de miembros (NX001) se respeta igual.
+- **Invitar por correo (AD-02):** la invitación sigue siendo el enlace o el código; el correo solo lo manda (no se guarda la dirección). En producción depende de Resend.
+- **Foto diaria del burndown:** en el temporizador de la API (`trabajos/plazos.ts`), no en `pg-boss` (DEC-WA-1).
+- **Chat:** editar solo quien escribió (el líder puede eliminar, no editar, mensajes ajenos). «Escribiendo…» no se guarda: el servidor lo reenvía solo a la sala si la conexión ya está en ella, y como mucho cada 2 s. El socket del chat escucha en todo el equipo para que la insignia de no leídos sea en tiempo real.
+- **Foto de perfil:** archivo personal en PostgreSQL (como DEC-033), PNG, JPEG o WebP hasta 1 MB, servido solo con sesión.
+- **Adjunto del formulario de contacto: no se hace.** `contacto_mensajes` no tiene dónde guardarlo y abrir la subida de archivos a visitantes sin sesión es un riesgo de abuso. Queda como fase posterior.
+
