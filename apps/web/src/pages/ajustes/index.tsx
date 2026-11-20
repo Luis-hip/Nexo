@@ -15,6 +15,7 @@ import {
   Boton,
   Campo,
   Casilla,
+  Contrasena,
   Encabezado,
   Entrada,
   EsqueletoTarjetas,
@@ -30,6 +31,7 @@ import {
 } from '@/components/ui';
 import { api, mensajeDeError } from '@/lib/api';
 import { claves, useGuardarPerfil, useGuardarPreferencias, useSalir, useYo } from '@/lib/consultas';
+import { useCambiarContrasena, useCuenta, useReenviarVerificacion } from '@/lib/consultasAuth';
 import { toast } from '@/lib/toasts';
 import { Proximamente } from '../Proximamente';
 
@@ -151,27 +153,109 @@ export function Perfil() {
 /** PF-02: datos de la cuenta y cerrar sesión. Contraseña y verificación en dos pasos: Fase 5. */
 export function Cuenta() {
   const { data: yo } = useYo();
+  const cuenta = useCuenta();
+  const reenviar = useReenviarVerificacion();
   const salir = useSalir();
   const nav = useNavigate();
+  const c = cuenta.data;
   return (
-    <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-02-Cuenta">
-      <h2 className="font-semibold">Cuenta</h2>
-      <dl className="grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
-        <dt className="text-muted">Correo</dt>
-        <dd>{yo?.usuario.correo}</dd>
-        <dt className="text-muted">Acceso</dt>
-        <dd>Acceso de desarrollo (sin contraseña)</dd>
-      </dl>
+    <div className="space-y-4">
+      <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-02-Cuenta">
+        <h2 className="font-semibold">Cuenta</h2>
+        <dl className="grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
+          <dt className="text-muted">Correo</dt>
+          <dd>{yo?.usuario.correo}</dd>
+          <dt className="text-muted">Estado</dt>
+          <dd>{c ? (c.correo_verificado ? 'Verificado' : 'Sin verificar') : '…'}</dd>
+          <dt className="text-muted">Sesiones abiertas</dt>
+          <dd className="tabular">{c?.sesiones_activas ?? '…'}</dd>
+        </dl>
+        {c && !c.correo_verificado && (
+          <Banner
+            tono="warn"
+            accion={
+              <Boton
+                tamano="sm"
+                cargando={reenviar.isPending}
+                onClick={() =>
+                  reenviar.mutate(undefined, {
+                    onSuccess: () => toast('Te enviamos el enlace. Revisa tu correo.'),
+                    onError: avisar,
+                  })
+                }
+              >
+                Enviar enlace
+              </Boton>
+            }
+          >
+            Confirma tu correo para poder recuperar tu cuenta si olvidas la contraseña.
+          </Banner>
+        )}
+        <Boton
+          icono={<LogOut className="size-4" />}
+          cargando={salir.isPending}
+          onClick={() => salir.mutate(undefined, { onSettled: () => nav('/entrar?salio=1') })}
+        >
+          Cerrar sesión
+        </Boton>
+      </Tarjeta>
+      {c?.tiene_contrasena && <CambiarContrasena />}
       <Banner tono="info">
-        El registro con contraseña, el cambio de correo y la verificación en dos pasos llegan en la
-        Fase 5.
+        El cambio de correo y la verificación en dos pasos quedan para una fase posterior.
       </Banner>
+    </div>
+  );
+}
+
+/** PF-02: cambiar la contraseña con la actual; se cierran las demás sesiones. */
+function CambiarContrasena() {
+  const cambiar = useCambiarContrasena();
+  const [actual, setActual] = useState('');
+  const [nueva, setNueva] = useState('');
+  const [error, setError] = useState('');
+  const guardar = () => {
+    if (nueva.length < 8) return setError('La contraseña nueva debe tener al menos 8 caracteres.');
+    setError('');
+    cambiar.mutate(
+      { actual, nueva },
+      {
+        onSuccess: (r) => {
+          setActual('');
+          setNueva('');
+          toast(
+            r.sesiones_cerradas > 0
+              ? `Contraseña cambiada. Cerramos ${r.sesiones_cerradas} sesión(es) en otros dispositivos.`
+              : 'Contraseña cambiada.',
+          );
+        },
+        onError: (e) => setError(mensajeDeError(e)),
+      },
+    );
+  };
+  return (
+    <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-02-Contrasena">
+      <h2 className="font-semibold">Contraseña</h2>
+      <Campo etiqueta="Contraseña actual">
+        <Contrasena
+          autoComplete="current-password"
+          value={actual}
+          onChange={(e) => setActual(e.target.value)}
+        />
+      </Campo>
+      <Campo etiqueta="Contraseña nueva" error={error} ayuda="Al menos 8 caracteres.">
+        <Contrasena
+          autoComplete="new-password"
+          value={nueva}
+          onChange={(e) => setNueva(e.target.value)}
+        />
+      </Campo>
       <Boton
-        icono={<LogOut className="size-4" />}
-        cargando={salir.isPending}
-        onClick={() => salir.mutate(undefined, { onSettled: () => nav('/entrar') })}
+        variante="primario"
+        cargando={cambiar.isPending}
+        disabled={!actual || !nueva}
+        onClick={guardar}
       >
-        Cerrar sesión
+        Cambiar contraseña
       </Boton>
     </Tarjeta>
   );

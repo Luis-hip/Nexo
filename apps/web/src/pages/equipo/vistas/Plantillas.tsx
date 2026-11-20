@@ -1,4 +1,4 @@
-import type { Plantilla, TipoPlantilla } from '@nexo/shared';
+import { esquemaCrearPlantilla, type Plantilla, type TipoPlantilla } from '@nexo/shared';
 import { LayoutTemplate, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -21,6 +21,7 @@ import {
 import { mensajeDeError } from '@/lib/api';
 import { useAccionesVistas, usePlantillas } from '@/lib/consultasVistas';
 import { toast } from '@/lib/toasts';
+import { primerError } from '@/lib/validacion';
 import { useEquipoActual } from '../contexto';
 
 const TIPO: Record<TipoPlantilla, string> = {
@@ -151,16 +152,17 @@ function NuevaPlantilla({ onCerrar }: { onCerrar: () => void }) {
     .filter(Boolean);
   const guardar = () => {
     setError(undefined);
-    crearPlantilla.mutate(
-      { nombre: nombre.trim(), tipo, descripcion: descripcion.trim(), elementos },
-      {
-        onSuccess: () => {
-          toast('Plantilla creada.');
-          onCerrar();
-        },
-        onError: (e) => setError(mensajeDeError(e)),
+    const datos = { nombre: nombre.trim(), tipo, descripcion: descripcion.trim(), elementos };
+    // Mismo esquema que la API (5.2).
+    const invalido = primerError(esquemaCrearPlantilla, datos);
+    if (invalido) return setError(invalido);
+    crearPlantilla.mutate(datos, {
+      onSuccess: () => {
+        toast('Plantilla creada.');
+        onCerrar();
       },
-    );
+      onError: (e) => setError(mensajeDeError(e)),
+    });
   };
   return (
     <Modal

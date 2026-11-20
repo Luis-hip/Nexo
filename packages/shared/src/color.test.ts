@@ -62,3 +62,22 @@ describe('color por miembro (docs/01 5.4, Fase 3.2)', () => {
     expect(oklchDeHex('#ffffff').c).toBeLessThan(0.001);
   });
 });
+
+describe('contraste de las iniciales sobre el color del integrante (5.4)', () => {
+  it('los 8 colores en los dos temas llegan a 4.5:1 con el texto elegido', async () => {
+    const {
+      contrasteWcag,
+      luminanciaHex,
+      luminanciaOklch,
+      oklchDeIntegrante,
+      textoSobreIntegrante,
+    } = await import('./color');
+    for (const tema of ['claro', 'oscuro'] as const) {
+      for (let i = 0; i < 8; i++) {
+        const fondo = luminanciaOklch(oklchDeIntegrante(i, tema));
+        const texto = luminanciaHex(textoSobreIntegrante(i, tema));
+        expect(contrasteWcag(fondo, texto), `${tema} ${i}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+});

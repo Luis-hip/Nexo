@@ -116,4 +116,11 @@ INSERT INTO whatsapp_reglas (equipo_id, tipo_evento, modo) VALUES
 INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, motivo, texto, tipo_envio) VALUES
  ('10000000-0000-4000-8000-000000000001','urgente','Vence en menos de 24 h','⏰ «Cola de WhatsApp» vence mañana. Responsable: Emilio Cruz.','instantaneo');
 
+-- Fase 5 · Autenticación (solo desarrollo y CI; la semilla nunca se carga en producción).
+-- Todas las personas de la semilla entran con la contraseña «Nexo-2026» (hash Argon2id) y su
+-- correo figura como verificado. El acceso de desarrollo sigue funcionando igual.
+UPDATE usuarios
+   SET hash_contrasena = '$argon2id$v=19$m=19456,t=2,p=1$Cw8r3Tj9TSy8X+MRDy4PUw$+OOw6Cn6NfUAVGP9rvENTgpIyWBlqJFRb47Bv9EsTTI',
+       correo_verificado_en = now();
+
 COMMIT;

@@ -16,6 +16,8 @@
     "procesos:verificar": "tsx scripts/verificar-procesos-doc.ts",
     "db:reset": "tsx --env-file-if-exists=.env scripts/reiniciar.ts",
     "db:rol-app": "tsx scripts/habilitar-rol-app.ts",
+    "db:volumen": "tsx --env-file-if-exists=.env scripts/volumen.ts",
+    "db:explain": "tsx --env-file-if-exists=.env scripts/explain.ts",
     "db:tipos": "kysely-codegen --dialect postgres --exclude-pattern pgmigrations --out-file src/db/tipos.ts"
   },
   "dependencies": {
@@ -23,10 +25,12 @@
     "@fastify/cors": "^11.4.1",
     "@fastify/rate-limit": "^11.2.2",
     "@nexo/shared": "workspace:*",
+    "@node-rs/argon2": "^2.2.2",
     "fastify": "^5.12.8",
     "fractional-indexing": "^4.0.0",
     "kysely": "^0.29.9",
     "pg": "^8.23.1",
+    "socket.io": "^4.8.4",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
@@ -35,6 +39,7 @@
     "@types/pg": "^8.23.1",
     "kysely-codegen": "^0.20.0",
     "node-pg-migrate": "^9.0.0",
+    "socket.io-client": "^4.8.4",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
   }

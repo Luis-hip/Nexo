@@ -84,6 +84,8 @@ export function Avatar({
           />
         ) : (
           <span
+            // Decorativas: el nombre completo ya va en el texto oculto de abajo.
+            aria-hidden
             className="grid size-full place-items-center rounded-full font-semibold"
             style={{
               background: color,

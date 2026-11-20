@@ -154,7 +154,12 @@ function Contenido({ r }: { r: ReporteEquipo }) {
           )}
         </Tarjeta>
       </div>
-      <Tarjeta as="section" className="overflow-x-auto p-4 sm:p-5" aria-labelledby="rep-personas">
+      <Tarjeta
+        as="section"
+        className="overflow-x-auto p-4 sm:p-5"
+        aria-labelledby="rep-personas"
+        tabIndex={0}
+      >
         <h2 id="rep-personas" className="mb-3 font-semibold">
           Por persona
         </h2>

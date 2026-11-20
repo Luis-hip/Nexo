@@ -22,6 +22,15 @@ const esquemaEntorno = z.object({
   APP_URL: z.url().default('http://localhost:5173'),
   API_URL: z.url().default('http://localhost:3000'),
   DEV_LOGIN_ENABLED: booleano,
+  /**
+   * Fase 5 · correos de la autenticación (verificar correo, restablecer contraseña).
+   * `consola`: los escribe en el registro (solo desarrollo y pruebas: llevan enlaces con token).
+   * `resend`: los envía con Resend (necesita RESEND_API_KEY). `ninguno`: no envía nada.
+   * Sin valor: `consola` fuera de producción; en producción `resend` si hay clave y si no `ninguno`.
+   */
+  CORREO_PROVEEDOR: z.enum(['consola', 'resend', 'ninguno']).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  CORREO_REMITENTE: z.string().min(3).default('Nexo <no-responder@nexo.lol>'),
 });
 
 export type Config = z.infer<typeof esquemaEntorno>;
@@ -57,6 +66,9 @@ function problemasDeProduccion(entorno: Record<string, string | undefined>, c: C
   if (URL_BD_EJEMPLO.test(c.DATABASE_URL)) {
     problemas.push('DATABASE_URL es la de .env.example');
   }
+  // Los correos llevan enlaces con token: nunca deben ir al registro de producción.
+  if (c.CORREO_PROVEEDOR === 'consola') problemas.push('CORREO_PROVEEDOR=consola no se permite');
+  if (c.CORREO_PROVEEDOR === 'resend' && !c.RESEND_API_KEY) problemas.push('falta RESEND_API_KEY');
   return problemas;
 }
 

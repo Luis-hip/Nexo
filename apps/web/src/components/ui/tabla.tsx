@@ -33,6 +33,8 @@ export function Tabla<T>({
   return (
     <div
       data-cmp="cmp/datos/tabla"
+      // Con desplazamiento horizontal, el teclado debe poder enfocarla para desplazarla (WCAG 2.1.1).
+      tabIndex={0}
       className={cx('overflow-x-auto rounded-[12px] border border-line bg-raised', className)}
     >
       <table className="w-full min-w-max border-collapse text-left text-sm">
