@@ -24,6 +24,10 @@ describe('configuración de WhatsApp en producción', () => {
       /WHATSAPP_TOKEN/,
     );
     expect(cargarConfig({ ...produccion, WHATSAPP_TOKEN: '' }).WHATSAPP_TOKEN).toBeUndefined();
+    // El token de Meta solo viaja a Meta: en producción no se acepta otra URL.
+    expect(() =>
+      cargarConfig({ ...produccion, WHATSAPP_API_URL: 'http://127.0.0.1:9999/v21.0' }),
+    ).toThrow(/WHATSAPP_API_URL/);
   });
   it('la firma del webhook es el HMAC-SHA256 del cuerpo crudo', () => {
     const cuerpo = Buffer.from('{"a":1}');
