@@ -70,10 +70,7 @@ const CONSULTAS: Consulta[] = [
  ORDER BY creado_en
  FOR UPDATE SKIP LOCKED LIMIT 10`,
     params: () => [],
-    // La cola de WhatsApp (4.2) se construye en otra rama; esta no toca `whatsapp_*`. En PostgreSQL 16
-    // hace Seq Scan: el índice parcial va con esa rama (migración 0031+), DEC-AUTH-3.
-    pendiente:
-      "Pendiente de la rama de WhatsApp: agregar `CREATE INDEX ix_wa_msj_pendientes ON whatsapp_mensajes (creado_en) WHERE estado = 'pendiente' AND seleccionado AND tipo_envio = 'instantaneo'` en su migración (0031+).",
+    // Desde la 0031 la cubre el índice parcial `ix_wa_msj_pendientes` (DEC-WA-1).
   },
   {
     id: 'Q5',

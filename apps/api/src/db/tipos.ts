@@ -630,6 +630,7 @@ export interface WhatsappConfiguracion {
   agrupar: Generated<boolean>;
   causa_error: string | null;
   enlace_invitacion: string | null;
+  envio_automatico: Generated<boolean>;
   equipo_id: string;
   estado: Generated<EstadoWhatsapp>;
   grupo_externo_id: string | null;
@@ -641,10 +642,12 @@ export interface WhatsappConfiguracion {
   silencio_desde: string | null;
   silencio_hasta: string | null;
   ultimo_envio_en: Timestamp | null;
+  ultimo_reporte_en: Timestamp | null;
 }
 
 export interface WhatsappMensajes {
   creado_en: Generated<Timestamp>;
+  entregado_en: Timestamp | null;
   enviado_en: Timestamp | null;
   enviado_por: string | null;
   equipo_id: string;
@@ -652,9 +655,11 @@ export interface WhatsappMensajes {
   evento_id: Int8 | null;
   id: Generated<string>;
   intentos: Generated<number>;
+  leido_en: Timestamp | null;
   motivo: Generated<string>;
   programado_para: Timestamp | null;
   proveedor_mensaje_id: string | null;
+  reporte_id: string | null;
   seleccionado: Generated<boolean>;
   texto: string;
   tipo_envio: TipoEnvioWa;

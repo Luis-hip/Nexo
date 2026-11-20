@@ -138,7 +138,8 @@ export function navegacion(perfil: Perfil, equipoId: string | null): Navegacion 
       etiqueta: 'WhatsApp',
       ruta: `${b}/whatsapp`,
       icono: MessageSquareShare,
-      permiso: 'configurar_whatsapp',
+      // El integrante entra al historial (WA-04); el panel es del líder.
+      permiso: 'ver_historial_whatsapp',
       grupo: 'Gestión',
     },
     {

@@ -2445,3 +2445,395 @@ DO $$ DECLARE u uuid := pg_temp.cuenta(); s uuid; BEGIN
   IF proc_sesion_resolver(pg_temp.tk('revoca')) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P208: resolvió revocada'; END IF;
   RAISE NOTICE 'OK P208: sesiones vencidas y revocadas';
 END $$;
+
+-- =============================================================================================
+-- Fase 4 · WhatsApp (0031, DEC-WA-1). Pruebas P150 a P199 (reservadas para WhatsApp).
+-- =============================================================================================
+
+-- Las pruebas anteriores dejaron eventos sin procesar; el despachador empieza desde aquí.
+UPDATE eventos_dominio SET procesado_en = now() WHERE procesado_en IS NULL;
+
+-- Conecta WhatsApp (simulado) en un equipo y devuelve su id.
+CREATE FUNCTION pg_temp.wa_conectar(p_equipo uuid) RETURNS uuid AS $$
+BEGIN
+  PERFORM proc_wa_conectar(pg_temp.lider(p_equipo), p_equipo, '{"grupo_nombre": "Grupo de prueba"}');
+  RETURN p_equipo;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.wa_procesar() RETURNS jsonb AS $$ SELECT proc_wa_procesar_eventos(1000); $$ LANGUAGE sql;
+
+-- Último aviso del equipo por tipo de regla.
+CREATE FUNCTION pg_temp.wa_ultimo(p_equipo uuid, p_regla text) RETURNS whatsapp_mensajes AS $$
+  SELECT * FROM whatsapp_mensajes WHERE equipo_id = p_equipo AND tipo_evento = p_regla
+   ORDER BY evento_id DESC NULLS LAST, creado_en DESC LIMIT 1;
+$$ LANGUAGE sql;
+
+-- P150. proc_wa_conectar: el líder conecta (simulado) y quedan las reglas de siempre; volver a
+--       conectar no las duplica; integrante NX005, nombre inválido NX010 y grupo real sin id NX010.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r jsonb; ok int := 0; BEGIN
+  r := proc_wa_conectar(pg_temp.lider(e), e, '{"grupo_nombre": "Equipo · avisos"}');
+  IF r->>'estado' <> 'conectado' OR r->>'proveedor' <> 'simulado' OR r->>'grupo_nombre' <> 'Equipo · avisos'
+     OR (SELECT count(*) FROM whatsapp_reglas WHERE equipo_id = e) <> 6
+     OR (SELECT modo FROM whatsapp_reglas WHERE equipo_id = e AND tipo_evento = 'reunion') <> 'instantaneo' THEN
+    RAISE EXCEPTION 'FALLO P150: %', r;
+  END IF;
+  PERFORM proc_wa_regla_guardar(pg_temp.lider(e), e, 'reunion', 'apagado');
+  PERFORM proc_wa_conectar(pg_temp.lider(e), e, '{"grupo_nombre": "Otra vez"}');
+  IF (SELECT count(*) FROM whatsapp_reglas WHERE equipo_id = e) <> 6
+     OR (SELECT modo FROM whatsapp_reglas WHERE equipo_id = e AND tipo_evento = 'reunion') <> 'apagado' THEN
+    RAISE EXCEPTION 'FALLO P150: reconectar cambió las reglas';
+  END IF;
+  BEGIN PERFORM proc_wa_conectar(pg_temp.integrante(e, 1), e, '{"grupo_nombre": "X grupo"}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_conectar(pg_temp.lider(e), e, '{"grupo_nombre": "X"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_conectar(pg_temp.lider(e), e, '{"grupo_nombre": "Real", "proveedor": "cloud_api_grupos"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_conectar(pg_temp.lider(e), e, '{"grupo_nombre": "Real", "proveedor": "otro"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P150: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P150: proc_wa_conectar';
+END $$;
+
+-- P151. proc_wa_procesar_eventos: un evento con regla «instantáneo» queda en la cola, uno con
+--       «reporte» espera al reporte, uno con la regla apagada no genera nada; todos quedan procesados.
+--       Un equipo sin WhatsApp no genera avisos.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); sin uuid := pg_temp.equipo_con(1); r jsonb; m whatsapp_mensajes; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.integrante(e, 1), '{"titulo": "Daily"}');
+  PERFORM pg_temp.proponer(e, 'Pantalla de reglas');
+  PERFORM proc_wa_regla_guardar(pg_temp.lider(e), e, 'actualizacion', 'apagado');
+  PERFORM pg_temp.reunion(sin, pg_temp.lider(sin), '{"titulo": "No se avisa"}');
+  r := pg_temp.wa_procesar();
+  m := pg_temp.wa_ultimo(e, 'reunion');
+  IF m.tipo_envio <> 'instantaneo' OR m.estado <> 'pendiente' OR m.texto NOT LIKE '📅 Reunión «Daily» el %' OR m.motivo <> 'reunion.creada' THEN
+    RAISE EXCEPTION 'FALLO P151: reunión %', to_jsonb(m);
+  END IF;
+  m := pg_temp.wa_ultimo(e, 'triaje');
+  IF m.tipo_envio <> 'reporte' OR m.texto NOT LIKE '🗳️ Nueva propuesta en votación: «Pantalla de reglas»%' THEN
+    RAISE EXCEPTION 'FALLO P151: propuesta %', to_jsonb(m);
+  END IF;
+  IF EXISTS (SELECT 1 FROM whatsapp_mensajes WHERE equipo_id = sin) OR EXISTS (SELECT 1 FROM eventos_dominio WHERE procesado_en IS NULL) THEN
+    RAISE EXCEPTION 'FALLO P151: avisó sin WhatsApp o quedaron eventos sin procesar';
+  END IF;
+  IF (r->>'encolados')::int <> 2 THEN RAISE EXCEPTION 'FALLO P151: %', r; END IF;
+  RAISE NOTICE 'OK P151: proc_wa_procesar_eventos';
+END $$;
+
+-- P152. Consentimiento (WA-07): sin consentimiento la persona no se menciona; con él, «@Nombre».
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); i1 uuid := pg_temp.integrante(e, 1);
+  t uuid := pg_temp.aceptada(e, 1, 'Documentar la API'); m whatsapp_mensajes; BEGIN
+  PERFORM proc_wa_regla_guardar(pg_temp.lider(e), e, 'asignacion', 'instantaneo');
+  PERFORM pg_temp.wa_procesar();
+  PERFORM fn_registrar_evento(e, pg_temp.lider(e), 'tarea.asignada', 'tarea', t, jsonb_build_object('responsable_id', i1), 'prueba');
+  PERFORM pg_temp.wa_procesar();
+  m := pg_temp.wa_ultimo(e, 'asignacion');
+  IF m.texto LIKE '%@%' OR m.texto LIKE '%Integrante%' OR m.texto NOT LIKE '%ya tiene responsable.' THEN
+    RAISE EXCEPTION 'FALLO P152: sin consentimiento %', m.texto;
+  END IF;
+  UPDATE membresias SET consentimiento_wa = true WHERE equipo_id = e AND usuario_id = i1;
+  PERFORM fn_registrar_evento(e, pg_temp.lider(e), 'tarea.asignada', 'tarea', t, jsonb_build_object('responsable_id', i1), 'prueba');
+  PERFORM pg_temp.wa_procesar();
+  m := pg_temp.wa_ultimo(e, 'asignacion');
+  IF m.texto NOT LIKE '%ahora es de @Integrante.' THEN RAISE EXCEPTION 'FALLO P152: con consentimiento %', m.texto; END IF;
+  RAISE NOTICE 'OK P152: sin consentimiento no se menciona';
+END $$;
+
+-- P153. El despachador crea los avisos dentro de la app que faltaban: a quien le asignan una tarea y
+--       a los integrantes cuando hay una propuesta nueva (respetando «propuesta_nueva» apagado).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2);
+  t uuid := pg_temp.aceptada(e, 1, 'Con responsable'); BEGIN
+  PERFORM pg_temp.wa_procesar();
+  DELETE FROM notificaciones WHERE equipo_id = e;
+  INSERT INTO preferencias_notificacion (usuario_id, evento, por_app) VALUES (i2, 'propuesta_nueva', false);
+  PERFORM fn_registrar_evento(e, pg_temp.lider(e), 'tarea.asignada', 'tarea', t, '{}'::jsonb, 'prueba');
+  PERFORM pg_temp.proponer(e, 'Otra propuesta');
+  PERFORM pg_temp.wa_procesar();
+  IF (SELECT count(*) FROM notificaciones WHERE usuario_id = i1 AND equipo_id = e AND accion_tipo = 'aceptar_tarea') <> 1
+     OR (SELECT count(*) FROM notificaciones WHERE usuario_id = i1 AND equipo_id = e AND titulo LIKE 'Nueva propuesta%') <> 1
+     OR (SELECT count(*) FROM notificaciones WHERE usuario_id = i2 AND equipo_id = e) <> 0
+     OR (SELECT count(*) FROM notificaciones WHERE usuario_id = pg_temp.lider(e) AND equipo_id = e) <> 0 THEN
+    RAISE EXCEPTION 'FALLO P153: %', (SELECT jsonb_agg(to_jsonb(n)) FROM notificaciones n WHERE equipo_id = e);
+  END IF;
+  RAISE NOTICE 'OK P153: notificaciones del despachador';
+END $$;
+
+-- P154. proc_wa_vencimientos: una tarea abierta que vence en menos de 24 h genera «tarea.por_vencer»
+--       una sola vez (por fecha de entrega) y su aviso «urgente» va al instante.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); t uuid := pg_temp.aceptada(e, 1, 'Entrega final'); r jsonb; m whatsapp_mensajes; BEGIN
+  PERFORM pg_temp.wa_procesar();
+  UPDATE tareas SET vence_en = now() + interval '5 hours' WHERE id = t;
+  r := proc_wa_vencimientos();
+  IF (SELECT count(*) FROM eventos_dominio WHERE objeto_id = t AND tipo = 'tarea.por_vencer') <> 1 THEN RAISE EXCEPTION 'FALLO P154: %', r; END IF;
+  PERFORM proc_wa_vencimientos();
+  IF (SELECT count(*) FROM eventos_dominio WHERE objeto_id = t AND tipo = 'tarea.por_vencer') <> 1 THEN RAISE EXCEPTION 'FALLO P154: repitió'; END IF;
+  PERFORM pg_temp.wa_procesar();
+  m := pg_temp.wa_ultimo(e, 'urgente');
+  IF m.tipo_envio <> 'instantaneo' OR m.texto NOT LIKE '⏰ «Entrega final» vence %' THEN RAISE EXCEPTION 'FALLO P154: %', to_jsonb(m); END IF;
+  UPDATE tareas SET vence_en = now() + interval '6 hours' WHERE id = t;
+  PERFORM proc_wa_vencimientos();
+  IF (SELECT count(*) FROM eventos_dominio WHERE objeto_id = t AND tipo = 'tarea.por_vencer') <> 2 THEN RAISE EXCEPTION 'FALLO P154: nueva fecha'; END IF;
+  RAISE NOTICE 'OK P154: proc_wa_vencimientos';
+END $$;
+
+-- P155. proc_wa_panel y proc_wa_cola: el líder ve configuración, reglas, conteos y consentimiento;
+--       la cola separa instantáneos y lo del reporte. El integrante recibe NX005 y un ajeno NX006.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); p jsonb; c jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e));
+  PERFORM pg_temp.proponer(e);
+  PERFORM pg_temp.wa_procesar();
+  p := proc_wa_panel(pg_temp.lider(e), e);
+  IF (p->'resumen'->>'en_cola')::int <> 1 OR (p->'resumen'->>'para_reporte')::int <> 1 OR jsonb_array_length(p->'reglas') <> 6
+     OR jsonb_array_length(p->'personas') <> 3 OR p->'configuracion'->>'proximo_reporte' IS NULL THEN
+    RAISE EXCEPTION 'FALLO P155: panel %', p;
+  END IF;
+  c := proc_wa_cola(pg_temp.lider(e), e);
+  IF jsonb_array_length(c->'instantaneos') <> 1 OR jsonb_array_length(c->'para_reporte') <> 1 THEN RAISE EXCEPTION 'FALLO P155: cola %', c; END IF;
+  BEGIN PERFORM proc_wa_panel(pg_temp.integrante(e, 1), e); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_cola(pg_temp.integrante(e, 1), e); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_cola(pg_temp.usuario(), e); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P155: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P155: proc_wa_panel y proc_wa_cola';
+END $$;
+
+-- P156. proc_wa_mensaje_editar: el líder corrige el texto y lo quita de la selección; más de 400
+--       caracteres es NX010, un integrante NX005 y un aviso ya enviado NX007.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); m whatsapp_mensajes; r jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e)); PERFORM pg_temp.wa_procesar();
+  m := pg_temp.wa_ultimo(e, 'reunion');
+  r := proc_wa_mensaje_editar(pg_temp.lider(e), m.id, '{"texto": "  Reunión mañana  ", "seleccionado": false}');
+  IF r->>'texto' <> 'Reunión mañana' OR (r->>'seleccionado')::boolean THEN RAISE EXCEPTION 'FALLO P156: %', r; END IF;
+  BEGIN PERFORM proc_wa_mensaje_editar(pg_temp.lider(e), m.id, jsonb_build_object('texto', repeat('a', 401))); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_mensaje_editar(pg_temp.integrante(e, 1), m.id, '{"texto": "x"}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_mensaje_editar(pg_temp.lider(e), gen_random_uuid(), '{"texto": "x"}'); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  UPDATE whatsapp_mensajes SET estado = 'enviado', enviado_en = now() WHERE id = m.id;
+  BEGIN PERFORM proc_wa_mensaje_editar(pg_temp.lider(e), m.id, '{"texto": "x"}'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P156: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P156: proc_wa_mensaje_editar';
+END $$;
+
+-- P157. proc_wa_enviar y proc_wa_envio_resultado: el líder envía solo los seleccionados (quedan
+--       «enviando» con quién los mandó); el resultado los deja «enviado» con el id del proveedor o
+--       «fallido» con el error; registrar un resultado de algo que no se envía es NX007.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); a whatsapp_mensajes; b whatsapp_mensajes; v jsonb; r jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), '{"titulo": "Uno"}');
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), '{"titulo": "Dos"}');
+  PERFORM pg_temp.wa_procesar();
+  SELECT * INTO a FROM whatsapp_mensajes WHERE equipo_id = e AND texto LIKE '%«Uno»%';
+  SELECT * INTO b FROM whatsapp_mensajes WHERE equipo_id = e AND texto LIKE '%«Dos»%';
+  PERFORM proc_wa_mensaje_editar(pg_temp.lider(e), b.id, '{"seleccionado": false}');
+  BEGIN PERFORM proc_wa_enviar(pg_temp.integrante(e, 1), e, NULL); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF jsonb_array_length(v) <> 1 OR v->0->>'id' <> a.id::text OR v->0->>'proveedor' <> 'simulado'
+     OR (SELECT estado FROM whatsapp_mensajes WHERE id = a.id) <> 'enviando'
+     OR (SELECT enviado_por FROM whatsapp_mensajes WHERE id = a.id) <> pg_temp.lider(e)
+     OR (SELECT estado FROM whatsapp_mensajes WHERE id = b.id) <> 'pendiente' THEN
+    RAISE EXCEPTION 'FALLO P157: %', v;
+  END IF;
+  r := proc_wa_envio_resultado(a.id, true, 'sim-123', NULL);
+  IF r->>'estado' <> 'enviado' OR r->>'enviado_en' IS NULL OR (SELECT proveedor_mensaje_id FROM whatsapp_mensajes WHERE id = a.id) <> 'sim-123' THEN
+    RAISE EXCEPTION 'FALLO P157: resultado %', r;
+  END IF;
+  BEGIN PERFORM proc_wa_envio_resultado(a.id, true, 'x', NULL); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  v := proc_wa_enviar(pg_temp.lider(e), e, ARRAY[b.id]);
+  r := proc_wa_envio_resultado(b.id, false, NULL, 'Sin red');
+  IF r->>'estado' <> 'fallido' OR r->>'ultimo_error' <> 'Sin red' THEN RAISE EXCEPTION 'FALLO P157: fallido %', r; END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P157: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P157: proc_wa_enviar y proc_wa_envio_resultado';
+END $$;
+
+-- P158. WA-08: en pausa no se envía (NX007) hasta reanudar; sin WhatsApp tampoco (NX007).
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); sin uuid := pg_temp.equipo_con(1); r jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e)); PERFORM pg_temp.wa_procesar();
+  r := proc_wa_configurar(pg_temp.lider(e), e, '{"estado": "pausado"}');
+  IF r->>'estado' <> 'pausado' THEN RAISE EXCEPTION 'FALLO P158: %', r; END IF;
+  BEGIN PERFORM proc_wa_enviar(pg_temp.lider(e), e, NULL); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_enviar(pg_temp.lider(sin), sin, NULL); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"estado": "conectado"}');
+  IF jsonb_array_length(proc_wa_enviar(pg_temp.lider(e), e, NULL)) <> 1 THEN RAISE EXCEPTION 'FALLO P158: no envió al reanudar'; END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P158: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P158: pausa y sin configurar';
+END $$;
+
+-- P159. proc_wa_descartar y proc_wa_reintentar: descartar cancela lo pendiente; reintentar devuelve a
+--       la cola lo que falló.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); m whatsapp_mensajes; r jsonb; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e)); PERFORM pg_temp.wa_procesar();
+  m := pg_temp.wa_ultimo(e, 'reunion');
+  r := proc_wa_descartar(pg_temp.lider(e), e, ARRAY[m.id]);
+  IF (r->>'descartados')::int <> 1 OR (SELECT estado FROM whatsapp_mensajes WHERE id = m.id) <> 'cancelado' THEN RAISE EXCEPTION 'FALLO P159: %', r; END IF;
+  UPDATE whatsapp_mensajes SET estado = 'fallido', ultimo_error = 'x' WHERE id = m.id;
+  r := proc_wa_reintentar(pg_temp.lider(e), e, NULL);
+  IF (r->>'reintentados')::int <> 1 OR (SELECT estado FROM whatsapp_mensajes WHERE id = m.id) <> 'pendiente' THEN RAISE EXCEPTION 'FALLO P159: reintentar %', r; END IF;
+  RAISE NOTICE 'OK P159: proc_wa_descartar y proc_wa_reintentar';
+END $$;
+
+-- P160. proc_wa_historial: líder e integrante ven enviados, fallidos y cancelados (no lo pendiente);
+--       se filtra por estado; el invitado no lo ve (NX005) y un filtro inválido es NX010.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); m whatsapp_mensajes; h jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), '{"titulo": "A"}');
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), '{"titulo": "B"}');
+  PERFORM pg_temp.wa_procesar();
+  SELECT * INTO m FROM whatsapp_mensajes WHERE equipo_id = e AND texto LIKE '%«A»%';
+  PERFORM proc_wa_enviar(pg_temp.lider(e), e, ARRAY[m.id]);
+  PERFORM proc_wa_envio_resultado(m.id, true, 'sim-a', NULL);
+  h := proc_wa_historial(pg_temp.integrante(e, 1), e);
+  IF jsonb_array_length(h->'items') <> 1 OR h->'items'->0->>'estado' <> 'enviado' OR (h->>'hay_mas')::boolean THEN RAISE EXCEPTION 'FALLO P160: %', h; END IF;
+  IF jsonb_array_length(proc_wa_historial(pg_temp.lider(e), e, 'fallido')->'items') <> 0 THEN RAISE EXCEPTION 'FALLO P160: filtro'; END IF;
+  BEGIN PERFORM proc_wa_historial(pg_temp.invitado(e), e); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_historial(pg_temp.lider(e), e, 'pendiente'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P160: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P160: proc_wa_historial';
+END $$;
+
+-- P161. proc_wa_reportes: a la hora fijada junta lo pendiente del reporte en un resumen «programado»
+--       (los incluidos quedan cancelados y ligados al resumen); en la misma hora no genera otro y sin
+--       pendientes no hay resumen.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); r jsonb; m whatsapp_mensajes; v_hora timestamptz; BEGIN
+  PERFORM pg_temp.proponer(e, 'Primera'); PERFORM pg_temp.proponer(e, 'Segunda');
+  PERFORM pg_temp.wa_procesar();
+  UPDATE whatsapp_configuracion SET reporte_frecuencia = 'diario', reporte_hora = '00:00', ultimo_reporte_en = now() - interval '2 days' WHERE equipo_id = e;
+  r := proc_wa_reportes(now());
+  m := pg_temp.wa_ultimo(e, 'reporte');
+  IF (r->>'generados')::int < 1 OR m.estado <> 'programado' OR m.tipo_envio <> 'reporte'
+     OR m.texto NOT LIKE '📋 Resumen de Equipo de prueba%«Primera»%«Segunda»%' THEN
+    RAISE EXCEPTION 'FALLO P161: %', to_jsonb(m);
+  END IF;
+  IF (SELECT count(*) FROM whatsapp_mensajes WHERE equipo_id = e AND reporte_id = m.id AND estado = 'cancelado') <> 2 THEN
+    RAISE EXCEPTION 'FALLO P161: incluidos';
+  END IF;
+  PERFORM proc_wa_reportes(now());
+  IF (SELECT count(*) FROM whatsapp_mensajes WHERE equipo_id = e AND tipo_evento = 'reporte') <> 1 THEN RAISE EXCEPTION 'FALLO P161: repitió'; END IF;
+  UPDATE whatsapp_configuracion SET ultimo_reporte_en = now() - interval '2 days' WHERE equipo_id = e;
+  PERFORM proc_wa_reportes(now());
+  IF (SELECT count(*) FROM whatsapp_mensajes WHERE equipo_id = e AND tipo_evento = 'reporte') <> 1 THEN RAISE EXCEPTION 'FALLO P161: reporte vacío'; END IF;
+  RAISE NOTICE 'OK P161: proc_wa_reportes';
+END $$;
+
+-- P162. proc_wa_por_enviar: toma los reportes programados que ya tocan y, con envío automático, los
+--       instantáneos seleccionados; nada de equipos en pausa ni en horas de silencio.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); p uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1));
+  v jsonb; BEGIN
+  INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, texto, tipo_envio, estado, programado_para)
+  VALUES (e, 'reporte', 'Resumen', 'reporte', 'programado', now() - interval '1 minute'),
+         (e, 'reporte', 'Futuro', 'reporte', 'programado', now() + interval '1 hour'),
+         (p, 'reporte', 'En pausa', 'reporte', 'programado', now() - interval '1 minute');
+  INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, texto, tipo_envio) VALUES (e, 'reunion', 'Al instante', 'instantaneo');
+  PERFORM proc_wa_configurar(pg_temp.lider(p), p, '{"estado": "pausado"}');
+  v := proc_wa_por_enviar(50);
+  IF v::text NOT LIKE '%Resumen%' OR v::text LIKE '%Futuro%' OR v::text LIKE '%En pausa%' OR v::text LIKE '%Al instante%' THEN
+    RAISE EXCEPTION 'FALLO P162: %', v;
+  END IF;
+  PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"envio_automatico": true}');
+  v := proc_wa_por_enviar(50);
+  IF v::text NOT LIKE '%Al instante%' THEN RAISE EXCEPTION 'FALLO P162: automático %', v; END IF;
+  INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, texto, tipo_envio) VALUES (e, 'reunion', 'En silencio', 'instantaneo');
+  UPDATE whatsapp_configuracion SET silencio_desde = '00:00', silencio_hasta = '23:59:59' WHERE equipo_id = e;
+  IF proc_wa_por_enviar(50)::text LIKE '%En silencio%' THEN RAISE EXCEPTION 'FALLO P162: envió en silencio'; END IF;
+  RAISE NOTICE 'OK P162: proc_wa_por_enviar';
+END $$;
+
+-- P163. proc_wa_regla_guardar: el líder cambia el modo de una regla; regla o modo inexistentes son
+--       NX010 y el integrante NX005.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); ok int := 0; BEGIN
+  PERFORM proc_wa_regla_guardar(pg_temp.lider(e), e, 'triaje', 'instantaneo');
+  IF (SELECT modo FROM whatsapp_reglas WHERE equipo_id = e AND tipo_evento = 'triaje') <> 'instantaneo' THEN RAISE EXCEPTION 'FALLO P163'; END IF;
+  BEGIN PERFORM proc_wa_regla_guardar(pg_temp.lider(e), e, 'otra', 'instantaneo'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_regla_guardar(pg_temp.lider(e), e, 'triaje', 'a veces'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_regla_guardar(pg_temp.integrante(e, 1), e, 'triaje', 'apagado'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P163: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P163: proc_wa_regla_guardar';
+END $$;
+
+-- P164. proc_wa_configurar: guarda reporte semanal, silencio y envío automático; silencio incompleto,
+--       hora inválida o un estado distinto de pausar/reanudar son NX010.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); r jsonb; ok int := 0; BEGIN
+  r := proc_wa_configurar(pg_temp.lider(e), e, '{"reporte_frecuencia": "semanal", "reporte_dia": 1, "reporte_hora": "09:30",
+    "silencio_desde": "22:00", "silencio_hasta": "07:00", "envio_automatico": true}');
+  IF r->>'reporte_frecuencia' <> 'semanal' OR r->>'reporte_hora' <> '09:30' OR r->>'silencio_desde' <> '22:00'
+     OR NOT (r->>'envio_automatico')::boolean OR r->>'proximo_reporte' IS NULL THEN
+    RAISE EXCEPTION 'FALLO P164: %', r;
+  END IF;
+  BEGIN PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"silencio_desde": "22:00"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"reporte_hora": "25:00"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"estado": "error"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"reporte_dia": 9}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 4 THEN RAISE EXCEPTION 'FALLO P164: % de 4 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P164: proc_wa_configurar';
+END $$;
+
+-- P165. proc_wa_desconectar: la cola pendiente se cancela y el historial se conserva; desconectar
+--       otra vez es NX007.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); r jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e)); PERFORM pg_temp.wa_procesar();
+  r := proc_wa_desconectar(pg_temp.lider(e), e);
+  IF r->>'estado' <> 'sin_configurar' OR EXISTS (SELECT 1 FROM whatsapp_mensajes WHERE equipo_id = e AND estado = 'pendiente') THEN
+    RAISE EXCEPTION 'FALLO P165: %', r;
+  END IF;
+  BEGIN PERFORM proc_wa_desconectar(pg_temp.lider(e), e); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P165: desconectó dos veces'; END IF;
+  RAISE NOTICE 'OK P165: proc_wa_desconectar';
+END $$;
+
+-- P166. proc_wa_usuario y proc_wa_usuario_guardar: número en E.164 (si no, NX010), consentimiento
+--       general (sin número, NX010), un número ya usado por otra cuenta es NX012 y retirar el
+--       consentimiento general lo retira en los equipos.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); i1 uuid := pg_temp.integrante(e, 1); otro uuid := pg_temp.usuario(); r jsonb; ok int := 0; BEGIN
+  BEGIN PERFORM proc_wa_usuario_guardar(i1, '{"consentimiento": true}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_wa_usuario_guardar(i1, '{"numero": "2221234567"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  r := proc_wa_usuario_guardar(i1, '{"numero": "+5212221234567", "consentimiento": true}');
+  IF r->>'numero' <> '+5212221234567' OR NOT (r->>'consentimiento')::boolean OR jsonb_array_length(r->'equipos') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P166: %', r;
+  END IF;
+  BEGIN PERFORM proc_wa_usuario_guardar(otro, '{"numero": "+5212221234567"}'); EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  PERFORM proc_wa_consentimiento(i1, e, true);
+  r := proc_wa_usuario_guardar(i1, '{"consentimiento": false}');
+  IF (r->>'consentimiento')::boolean OR (SELECT consentimiento_wa FROM membresias WHERE equipo_id = e AND usuario_id = i1 AND estado = 'activa') THEN
+    RAISE EXCEPTION 'FALLO P166: retirar %', r;
+  END IF;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P166: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P166: proc_wa_usuario y proc_wa_usuario_guardar';
+END $$;
+
+-- P167. proc_wa_consentimiento: aceptar exige número y consentimiento general (NX010); con ellos la
+--       persona queda «@mencionable» en ese equipo; el invitado no participa (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); i1 uuid := pg_temp.integrante(e, 1); ok int := 0; BEGIN
+  BEGIN PERFORM proc_wa_consentimiento(i1, e, true); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_wa_usuario_guardar(i1, jsonb_build_object('numero', '+52' || (5500000000 + floor(random() * 99999999))::bigint, 'consentimiento', true));
+  PERFORM proc_wa_consentimiento(i1, e, true);
+  IF fn_wa_mencion(e, i1) <> '@Integrante' THEN RAISE EXCEPTION 'FALLO P167: %', fn_wa_mencion(e, i1); END IF;
+  PERFORM proc_wa_consentimiento(i1, e, false);
+  IF fn_wa_mencion(e, i1) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P167: sigue mencionable'; END IF;
+  BEGIN PERFORM proc_wa_consentimiento(pg_temp.invitado(e), e, true); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P167: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P167: proc_wa_consentimiento';
+END $$;
+
+-- P168. proc_wa_webhook_registrar: guarda cada evento de Meta una sola vez y aplica los estados de
+--       entrega (entregado, leído) y los fallos al mensaje con ese id de proveedor.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); a uuid; b uuid; r jsonb; BEGIN
+  INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, texto, tipo_envio, estado, enviado_en, proveedor_mensaje_id)
+  VALUES (e, 'reunion', 'A', 'instantaneo', 'enviado', now(), 'wamid.A') RETURNING id INTO a;
+  INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, texto, tipo_envio, estado, enviado_en, proveedor_mensaje_id)
+  VALUES (e, 'reunion', 'B', 'instantaneo', 'enviado', now(), 'wamid.B') RETURNING id INTO b;
+  r := proc_wa_webhook_registrar('evt-1', 'statuses', '{"statuses": [{"id": "wamid.A", "status": "delivered"}, {"id": "wamid.A", "status": "read"},
+    {"id": "wamid.B", "status": "failed", "errors": [{"title": "Número no válido"}]}]}');
+  IF NOT (r->>'nuevo')::boolean OR (r->>'actualizados')::int <> 3
+     OR (SELECT entregado_en IS NULL OR leido_en IS NULL FROM whatsapp_mensajes WHERE id = a)
+     OR (SELECT estado FROM whatsapp_mensajes WHERE id = b) <> 'fallido'
+     OR (SELECT ultimo_error FROM whatsapp_mensajes WHERE id = b) <> 'Número no válido' THEN
+    RAISE EXCEPTION 'FALLO P168: %', r;
+  END IF;
+  r := proc_wa_webhook_registrar('evt-1', 'statuses', '{"statuses": []}');
+  IF (r->>'nuevo')::boolean OR (SELECT count(*) FROM whatsapp_webhook_eventos WHERE proveedor_evento_id = 'evt-1') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P168: repetido %', r;
+  END IF;
+  RAISE NOTICE 'OK P168: proc_wa_webhook_registrar';
+END $$;
+
+-- P169. Envío directo (cloud_api_directo): los destinatarios son solo quienes tienen número y
+--       consentimiento general y del equipo.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); v jsonb; BEGIN
+  PERFORM proc_wa_usuario_guardar(i1, '{"numero": "+5215511112222", "consentimiento": true}');
+  PERFORM proc_wa_consentimiento(i1, e, true);
+  PERFORM proc_wa_usuario_guardar(i2, '{"numero": "+5215533334444"}');
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e)); PERFORM pg_temp.wa_procesar();
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF v->0->'destinatarios' <> '["+5215511112222"]'::jsonb THEN RAISE EXCEPTION 'FALLO P169: %', v->0->'destinatarios'; END IF;
+  RAISE NOTICE 'OK P169: destinatarios con consentimiento';
+END $$;
