@@ -75,6 +75,7 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 
 *Agregado el 2026-11-19 (DEC-AUTH-2).* El despliegue sigue siendo automático al llegar a `produccion` (Render y Vercel); estas son las diferencias:
 
+0. **Render no despliega solo** al llegar a `produccion` (pasó con los PR #22 y #26): entrar a `nexo-api` → *Manual Deploy* → *Deploy latest commit*. Pendiente: revisar en Render el *Auto-Deploy* del servicio.
 1. **Migraciones.** Render aplica al arrancar `0014`–`0016` (chat) y `0030` (autenticación). Ninguna cambia tablas; cada una termina con `fn_conceder_procesos()`, así que `nexo_app` recibe los procesos nuevos sin pasos a mano. Comprobar en el registro de Render que aparecen las cuatro y que la API arranca.
 2. **Variables nuevas en Render (`nexo-api`):** `RESEND_API_KEY` (opcional; sin ella no se envían correos: se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo) y `CORREO_REMITENTE` (ya en `render.yaml`). **No** poner `CORREO_PROVEEDOR=consola`: el servidor no arranca en producción con ese valor.
 3. **Tiempo real.** Socket.IO usa el mismo servicio y el mismo dominio (`api.nexo.lol`). En el plan gratuito la API duerme a los 15 minutos: el primer acceso tarda y el socket se reconecta solo.

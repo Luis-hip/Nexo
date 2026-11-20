@@ -242,7 +242,15 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [x] La prueba de la matriz completa pasa (`matriz.test.ts`).
 - [ ] Las 7 consultas pasan la revisión de `EXPLAIN`: 6 de 7 en PostgreSQL 16; Q4 espera su índice en la rama de WhatsApp.
 - [x] Los 3 flujos extremo a extremo pasan (en la CI desde este PR).
-- [ ] CI en verde en `produccion` y tag `fase-5`.
+- [x] CI en verde en `produccion` (PR #23 → #24 → #25 → #26).
+- [ ] Tag `fase-5`.
+
+### Despliegue (2026-11-19)
+
+- `produccion` en `0c02066` (PR #26). **Vercel** publicó el front solo; **Render no desplegó por su cuenta** (igual que con el PR #22): se lanzó a mano con *Manual Deploy → Deploy latest commit* y quedó *Live* en 1 min 14 s.
+- Comprobado en producción: `/auth/cuenta` responde 401 (antes 404), `/auth/entrar` con una cuenta inexistente responde 401 con el mensaje genérico (llega a la BD: la `0030` está aplicada), `/dev/usuarios` da 404 (no hay acceso de desarrollo) y Socket.IO responde.
+- **Prueba de humo:** una persona del equipo creó una cuenta en `app.nexo.lol/registro`; la sesión abre y Ajustes → Cuenta muestra el correo «Sin verificar» y 1 sesión. Sin Resend no llega el correo de verificación (esperado).
+- El aviso «Sin conexión» que se vio en el navegador de pruebas viene de `navigator.onLine = false` de ese navegador, no de la app.
 
 ### Pendiente
 
