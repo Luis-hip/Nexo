@@ -15,6 +15,7 @@ Nexo es una aplicación web de trabajo colaborativo tipo tablero, con una aporta
 | 7 | `08_Procesos_BD.md` | Toques datos: **todo acceso a datos es un proceso `proc_*`** | Regla, convenciones, catálogo de errores y un apartado por proceso |
 | 8 | `09_Seguridad_y_Secretos.md` | Toques secretos, variables de entorno, registros o despliegue | Política de secretos, rotación y respuesta a filtraciones |
 | 9 | `10_Plan_de_Despliegue.md` | Prepares la **Fase 3.5** (no despliegues antes) | Vercel + Render + dominio propio |
+| 10 | `11_Plan_Spike_WhatsApp_1a1.md` | Trabajes en WhatsApp directo (1 a 1) | Entregas por persona, formatos, ventana de 24 h, verificación del número |
 
 Archivos SQL: `01_esquema.sql`, `02_semilla.sql`, `03_pruebas.sql` (se copian tal cual al repositorio en la Fase 0).
 

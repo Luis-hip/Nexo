@@ -357,3 +357,15 @@ Según `03`, Fase 6. Plan:
 | F6-6 | Resumen de lo que quedó fuera | código | Sección final en este archivo |
 | F6-7 | Tag `v1.0` | — | Con la CI en verde en `produccion` y F6-1 a F6-6 cerrados |
 
+## Mejoras pendientes (acordadas el 2026-11-21)
+
+Se harán después del spike de WhatsApp 1 a 1 (`docs/11_Plan_Spike_WhatsApp_1a1.md`):
+
+- [ ] **Token permanente de WhatsApp y webhook en producción**, para que los avisos reales salgan desde `app.nexo.lol` (usuario del sistema en Business Manager; `WHATSAPP_PROVIDER=real` y las variables en Render; webhook a `https://api.nexo.lol/whatsapp/webhook`).
+- [ ] **Adjuntos en el chat** (la tabla `archivos` ya tiene `mensaje_id`).
+- [ ] **2FA o entrar con Google** (AUTH-07; tablas `credenciales_2fa` y `codigos_respaldo_2fa` y `usuarios.google_sub` ya existen).
+
+## Spike: WhatsApp 1 a 1 (en curso)
+
+Plan: `docs/11_Plan_Spike_WhatsApp_1a1.md`. Se trabaja en `Dev_Luis`.
+
