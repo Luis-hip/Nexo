@@ -3282,3 +3282,80 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(1); v uuid := pg_temp.usuario('Vera V
   RAISE NOTICE 'OK P234: consentimiento al unirse con número verificado';
 END $$;
 
+
+-- P235. 2FA · activar: iniciar guarda el secreto sin confirmar; confirmar activa y guarda 10 códigos
+--       de respaldo; con la 2FA activa no se puede iniciar otra vez (NX007); la cuenta lo refleja.
+DO $$ DECLARE u uuid := pg_temp.usuario('Ana Dos Pasos'); e jsonb; ok int := 0; BEGIN
+  e := proc_2fa_iniciar(u, 'cifrado-prueba');
+  IF (e->>'activa')::boolean OR fn_2fa_activa(u) THEN RAISE EXCEPTION 'FALLO P235: activa antes de confirmar'; END IF;
+  BEGIN PERFORM proc_2fa_confirmar(u, 100, ARRAY['a','b']); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  e := proc_2fa_confirmar(u, 100, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  IF NOT (e->>'activa')::boolean OR (e->>'codigos_restantes')::int <> 10 THEN RAISE EXCEPTION 'FALLO P235: %', e; END IF;
+  BEGIN PERFORM proc_2fa_iniciar(u, 'otro'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF NOT (proc_auth_cuenta(u)->>'dos_pasos')::boolean THEN RAISE EXCEPTION 'FALLO P235: cuenta sin dos_pasos'; END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P235: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P235: activar la verificación en dos pasos';
+END $$;
+
+-- P236. 2FA · inicio de sesión: con la 2FA activa, la contraseña correcta devuelve «2fa» y un desafío,
+--       sin sesión; el segundo paso con un código válido crea la sesión y borra el desafío.
+DO $$ DECLARE u uuid := pg_temp.usuario('Beto Dos Pasos'); r jsonb; d jsonb; BEGIN
+  UPDATE usuarios SET hash_contrasena = '$argon2id$prueba' WHERE id = u;
+  PERFORM proc_2fa_iniciar(u, 'cifrado');
+  PERFORM proc_2fa_confirmar(u, 100, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  r := proc_auth_entrar(u, true, sha256('desafio-P236'), '127.0.0.1', 'prueba', now() + interval '1 day');
+  IF r->>'estado' <> '2fa' OR EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u) THEN RAISE EXCEPTION 'FALLO P236: %', r; END IF;
+  d := proc_2fa_desafio(sha256('desafio-P236'));
+  IF d->>'usuario_id' <> u::text OR d->>'secreto_cifrado' <> 'cifrado' OR (d->>'ultimo_paso')::bigint <> 100 THEN
+    RAISE EXCEPTION 'FALLO P236: desafío %', d;
+  END IF;
+  r := proc_2fa_completar(sha256('desafio-P236'), 101, NULL, sha256('sesion-P236'), '127.0.0.1', 'prueba', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR NOT EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u AND token_hash = sha256('sesion-P236'))
+     OR EXISTS (SELECT 1 FROM desafios_2fa WHERE usuario_id = u) THEN
+    RAISE EXCEPTION 'FALLO P236: %', r;
+  END IF;
+  RAISE NOTICE 'OK P236: contraseña + segundo paso';
+END $$;
+
+-- P237. 2FA · un código no sirve dos veces (paso igual o anterior), el código de respaldo es de un
+--       solo uso, y al quinto fallo el desafío se borra («agotado»).
+DO $$ DECLARE u uuid := pg_temp.usuario('Caro Dos Pasos'); r jsonb; i int; ok int := 0; BEGIN
+  PERFORM proc_2fa_iniciar(u, 'cifrado');
+  PERFORM proc_2fa_confirmar(u, 200, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  PERFORM fn_2fa_crear_desafio(u, sha256('desafio-P237a'), 'contrasena');
+  r := proc_2fa_completar(sha256('desafio-P237a'), 200, NULL, sha256('s1'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'fallo' THEN RAISE EXCEPTION 'FALLO P237: paso repetido %', r; END IF;
+  r := proc_2fa_completar(sha256('desafio-P237a'), NULL, 'h3', sha256('s2'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' THEN RAISE EXCEPTION 'FALLO P237: respaldo %', r; END IF;
+  PERFORM fn_2fa_crear_desafio(u, sha256('desafio-P237b'), 'contrasena');
+  FOR i IN 1..5 LOOP
+    r := proc_2fa_completar(sha256('desafio-P237b'), NULL, 'h3', sha256('s3'), '', '', now() + interval '1 day');
+  END LOOP;
+  IF r->>'estado' <> 'agotado' OR EXISTS (SELECT 1 FROM desafios_2fa WHERE token_hash = sha256('desafio-P237b')) THEN
+    RAISE EXCEPTION 'FALLO P237: agotado %', r;
+  END IF;
+  BEGIN PERFORM proc_2fa_desafio(sha256('desafio-P237b')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P237: desafío borrado seguía vivo'; END IF;
+  RAISE NOTICE 'OK P237: sin reutilizar códigos y tope de intentos';
+END $$;
+
+-- P238. 2FA · desactivar y regenerar respaldo piden un factor válido (NX010 si no); al desactivar se
+--       borran secreto, códigos y desafíos.
+DO $$ DECLARE u uuid := pg_temp.usuario('Dani Dos Pasos'); e jsonb; ok int := 0; BEGIN
+  PERFORM proc_2fa_iniciar(u, 'cifrado');
+  PERFORM proc_2fa_confirmar(u, 300, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  BEGIN PERFORM proc_2fa_respaldo_regenerar(u, 300, NULL, ARRAY(SELECT 'n' || g FROM generate_series(1, 10) g));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  e := proc_2fa_respaldo_regenerar(u, 301, NULL, ARRAY(SELECT 'n' || g FROM generate_series(1, 10) g));
+  IF (e->>'codigos_restantes')::int <> 10 OR EXISTS (SELECT 1 FROM codigos_respaldo_2fa WHERE usuario_id = u AND hash_codigo = 'h1') THEN
+    RAISE EXCEPTION 'FALLO P238: regenerar %', e;
+  END IF;
+  BEGIN PERFORM proc_2fa_desactivar(u, NULL, 'no-existe'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  e := proc_2fa_desactivar(u, NULL, 'n1');
+  IF (e->>'activa')::boolean OR EXISTS (SELECT 1 FROM credenciales_2fa WHERE usuario_id = u)
+     OR EXISTS (SELECT 1 FROM codigos_respaldo_2fa WHERE usuario_id = u) THEN
+    RAISE EXCEPTION 'FALLO P238: desactivar %', e;
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P238: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P238: desactivar y regenerar con segundo factor';
+END $$;

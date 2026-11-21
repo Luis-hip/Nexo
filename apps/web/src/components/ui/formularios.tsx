@@ -2,6 +2,7 @@ import {
   forwardRef,
   useId,
   useRef,
+  useLayoutEffect,
   useState,
   type InputHTMLAttributes,
   type ReactNode,
@@ -351,11 +352,18 @@ export function Codigo6({
   etiqueta?: string;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
+  // Valor al día aunque lleguen varios dígitos antes de volver a pintar (tecleo muy rápido).
+  const actual = useRef(valor);
+  useLayoutEffect(() => {
+    actual.current = valor;
+  }, [valor]);
   const digitos = valor.padEnd(6, ' ').slice(0, 6).split('');
   const set = (i: number, d: string) => {
-    const arr = valor.padEnd(6, ' ').split('');
+    const arr = actual.current.padEnd(6, ' ').split('');
     arr[i] = d || ' ';
-    onChange(arr.join('').replace(/\s+$/, ''));
+    const nuevo = arr.join('').replace(/\s+$/, '');
+    actual.current = nuevo;
+    onChange(nuevo);
   };
   return (
     <div
@@ -372,7 +380,8 @@ export function Codigo6({
           autoComplete={i === 0 ? 'one-time-code' : 'off'}
           aria-label={`Dígito ${i + 1}`}
           aria-invalid={error || undefined}
-          maxLength={1}
+          // La primera casilla acepta los 6 dígitos de golpe (autocompletado del sistema).
+          maxLength={i === 0 ? 6 : 1}
           value={d.trim()}
           onPaste={(e) => {
             const t = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
@@ -388,7 +397,16 @@ export function Codigo6({
             if (e.key === 'ArrowRight') refs.current[i + 1]?.focus();
           }}
           onChange={(e) => {
-            const v = e.target.value.replace(/\D/g, '').slice(-1);
+            const todos = e.target.value.replace(/\D/g, '');
+            // Autocompletado (one-time-code) o gestor de contraseñas: llegan varios dígitos juntos.
+            if (todos.length > 1 && i === 0) {
+              const t = todos.slice(0, 6);
+              actual.current = t;
+              onChange(t);
+              refs.current[Math.min(5, t.length)]?.focus();
+              return;
+            }
+            const v = todos.slice(-1);
             set(i, v);
             if (v) refs.current[i + 1]?.focus();
           }}

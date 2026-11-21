@@ -35,6 +35,7 @@ import { useCambiarContrasena, useCuenta, useReenviarVerificacion } from '@/lib/
 import { useAccionesWhatsAppYo, useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { FotoPerfil } from '@/components/perfil/FotoPerfil';
 import { toast } from '@/lib/toasts';
+import { DosPasosAjustes } from '@/components/auth/DosPasos';
 import { DirectoPersonal } from '@/components/whatsapp/Directo';
 import { RegistroWhatsApp } from '@/components/whatsapp/Registro';
 
@@ -201,9 +202,7 @@ export function Cuenta() {
         </Boton>
       </Tarjeta>
       {c?.tiene_contrasena && <CambiarContrasena />}
-      <Banner tono="info">
-        El cambio de correo y la verificación en dos pasos quedan para una fase posterior.
-      </Banner>
+      <DosPasosAjustes />
     </div>
   );
 }

@@ -185,7 +185,19 @@ export interface ConversacionLecturas {
 
 export interface Credenciales2fa {
   confirmado_en: Timestamp | null;
+  creado_en: Generated<Timestamp>;
   secreto_cifrado: string;
+  ultimo_paso: Generated<Int8>;
+  usuario_id: string;
+}
+
+export interface Desafios2fa {
+  creado_en: Generated<Timestamp>;
+  expira_en: Timestamp;
+  id: Generated<string>;
+  intentos: Generated<number>;
+  metodo: string;
+  token_hash: Buffer;
   usuario_id: string;
 }
 
@@ -737,6 +749,7 @@ export interface DB {
   conversacion_lecturas: ConversacionLecturas;
   conversaciones: Conversaciones;
   credenciales_2fa: Credenciales2fa;
+  desafios_2fa: Desafios2fa;
   eleccion_candidatos: EleccionCandidatos;
   eleccion_votos: EleccionVotos;
   elecciones: Elecciones;

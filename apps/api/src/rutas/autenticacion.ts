@@ -1,5 +1,7 @@
 import {
   esquemaCambiarContrasena,
+  esquemaCodigoDosPasos,
+  esquemaSegundoPaso,
   esquemaEntrar,
   esquemaRecuperar,
   esquemaRegistro,
@@ -11,7 +13,9 @@ import {
 import { hash, verify } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import QRCode from 'qrcode';
 import { exigirSesion } from '../autenticacion';
+import { cifrar, descifrar } from '../cifrado';
 import type { Config } from '../config';
 import type { Correo } from '../correo';
 import type { BaseDatos } from '../db/conexion';
@@ -19,6 +23,7 @@ import { ErrorNexo } from '../errores';
 import * as repo from '../repositorios/autenticacion';
 import { COOKIE_SESION, DURACION_SESION_MS, crearTokenSesion, hashToken } from '../sesiones';
 import { validar } from '../validacion';
+import { codigosRespaldo, generarSecreto, hashRespaldo, pasoValido, uriOtpauth } from '../totp';
 
 interface Opciones {
   db: BaseDatos;
@@ -122,11 +127,115 @@ export const rutasAutenticacion: FastifyPluginAsync<Opciones> = async (
     if (!cred) throw new ErrorNexo(401, 'credenciales_invalidas', MENSAJE_CREDENCIALES);
     const { token, datos: sesion } = nuevaSesion(req);
     const r = await repo.entrar(db, cred.usuario_id, correcta, sesion);
+    if (r.estado === '2fa') {
+      // AUTH-07: sin sesión todavía. El token pasa a ser el del desafío del segundo paso.
+      return { dos_pasos: true, desafio: token };
+    }
     if (r.estado !== 'ok' || !r.usuario) {
       throw new ErrorNexo(401, 'credenciales_invalidas', MENSAJE_CREDENCIALES);
     }
     ponerCookie(res, token, sesion.expiraEn);
     return { usuario: r.usuario };
+  });
+
+  // --- AUTH-07 · Verificación en dos pasos (docs/13, 1.2) -------------------------------------
+
+  /** Convierte el código escrito en lo que decide la BD: un paso TOTP válido o el hash de respaldo. */
+  const factor = (secretoCifrado: string, codigo: string) =>
+    /^\d{6}$/.test(codigo)
+      ? { paso: pasoValido(descifrar(config, secretoCifrado), codigo), respaldo: null }
+      : { paso: null, respaldo: hashRespaldo(codigo) };
+
+  // Segundo paso del inicio de sesión (contraseña o Google).
+  app.post('/auth/2fa', limite(10), async (req, res) => {
+    const { desafio, codigo } = validar(esquemaSegundoPaso, req.body);
+    const tokenHash = hashToken(desafio);
+    const d = await repo.desafio2fa(db, tokenHash);
+    const f = factor(d.secreto_cifrado, codigo);
+    const { token, datos: sesion } = nuevaSesion(req);
+    // Un código de 6 dígitos que no cuadra se registra como fallo (cuenta para el tope de 5).
+    const r = await repo.completar2fa(
+      db,
+      tokenHash,
+      f.paso ?? (f.respaldo ? null : -1),
+      f.respaldo,
+      sesion,
+    );
+    if (r.estado === 'ok' && r.usuario) {
+      ponerCookie(res, token, sesion.expiraEn);
+      return { usuario: r.usuario };
+    }
+    if (r.estado === 'agotado') {
+      throw new ErrorNexo(401, 'desafio_agotado', 'Demasiados intentos. Vuelve a iniciar sesión.');
+    }
+    throw new ErrorNexo(
+      401,
+      'codigo_incorrecto',
+      `El código no es correcto. Te quedan ${r.intentos_restantes ?? 0} intentos.`,
+    );
+  });
+
+  app.get('/auth/2fa', async (req) => repo.estado2fa(db, exigirSesion(req).usuario.id));
+
+  // Activar, paso 1: secreto nuevo (cifrado en la BD), su enlace otpauth y el QR.
+  app.post('/auth/2fa/iniciar', limite(5), async (req) => {
+    const { usuario } = exigirSesion(req);
+    const secreto = generarSecreto();
+    await repo.iniciar2fa(db, usuario.id, cifrar(config, secreto));
+    const uri = uriOtpauth(secreto, usuario.correo);
+    const qr_svg = await QRCode.toString(uri, {
+      type: 'svg',
+      margin: 1,
+      errorCorrectionLevel: 'M',
+    });
+    return { secreto, uri, qr_svg };
+  });
+
+  // Activar, paso 2: el primer código confirma; se entregan los 10 códigos de respaldo (una vez).
+  app.post('/auth/2fa/confirmar', limite(10), async (req) => {
+    const { usuario } = exigirSesion(req);
+    const { codigo } = validar(esquemaCodigoDosPasos, req.body);
+    const s = await repo.secreto2fa(db, usuario.id);
+    if (!s || s.confirmado) {
+      throw new ErrorNexo(
+        409,
+        'sin_activacion',
+        'No hay una activación pendiente. Empieza de nuevo.',
+      );
+    }
+    const paso = pasoValido(descifrar(config, s.secreto_cifrado), codigo);
+    if (paso === null) throw new ErrorNexo(400, 'codigo_incorrecto', 'El código no es correcto.');
+    const { codigos, hashes } = codigosRespaldo();
+    const estado = await repo.confirmar2fa(db, usuario.id, paso, hashes);
+    return { estado, codigos };
+  });
+
+  app.post('/auth/2fa/desactivar', limite(5), async (req) => {
+    const { usuario } = exigirSesion(req);
+    const { codigo } = validar(esquemaCodigoDosPasos, req.body);
+    const s = await repo.secreto2fa(db, usuario.id);
+    if (!s?.confirmado)
+      throw new ErrorNexo(409, 'no_activa', 'La verificación en dos pasos no está activa.');
+    const f = factor(s.secreto_cifrado, codigo);
+    return repo.desactivar2fa(db, usuario.id, f.paso ?? (f.respaldo ? null : -1), f.respaldo);
+  });
+
+  app.post('/auth/2fa/respaldo', limite(5), async (req) => {
+    const { usuario } = exigirSesion(req);
+    const { codigo } = validar(esquemaCodigoDosPasos, req.body);
+    const s = await repo.secreto2fa(db, usuario.id);
+    if (!s?.confirmado)
+      throw new ErrorNexo(409, 'no_activa', 'La verificación en dos pasos no está activa.');
+    const f = factor(s.secreto_cifrado, codigo);
+    const { codigos, hashes } = codigosRespaldo();
+    const estado = await repo.regenerarRespaldo2fa(
+      db,
+      usuario.id,
+      f.paso ?? (f.respaldo ? null : -1),
+      f.respaldo,
+      hashes,
+    );
+    return { estado, codigos };
   });
 
   // --- AUTH-03 y AUTH-04 · Recuperar contraseña -----------------------------------------------

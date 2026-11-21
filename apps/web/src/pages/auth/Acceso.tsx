@@ -19,6 +19,7 @@ import {
 } from '@/lib/consultasAuth';
 import { useDevLogin, useUsuariosDev } from '@/lib/consultas';
 import { erroresDe } from '@/lib/validacion';
+import { SegundoPaso } from '@/components/auth/DosPasos';
 import { destinoSeguro, Tarjeta } from './comunes';
 
 const enlace = 'font-medium text-brand hover:underline';
@@ -34,13 +35,41 @@ export function Entrar() {
   const [contrasena, setContrasena] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
   const destino = destinoSeguro(sp.get('volver')) ?? '/app';
+  // AUTH-07: con la 2FA activa, «entrar» devuelve un desafío y falta el segundo paso.
+  const [desafio, setDesafio] = useState<string | null>(null);
 
   const enviar = (e: FormEvent) => {
     e.preventDefault();
     const { datos, errores: err } = erroresDe(esquemaEntrar, { correo, contrasena });
     setErrores(err);
-    if (datos) entrar.mutate(datos, { onSuccess: () => nav(destino, { replace: true }) });
+    if (datos)
+      entrar.mutate(datos, {
+        onSuccess: (r) => {
+          if ('dos_pasos' in r) setDesafio(r.desafio);
+          else nav(destino, { replace: true });
+        },
+      });
   };
+
+  if (desafio) {
+    return (
+      <Tarjeta
+        titulo="Verificación en dos pasos"
+        subtitulo="Un paso más para entrar."
+        nombre="NX/AUTH-07-Entrar"
+      >
+        <SegundoPaso
+          desafio={desafio}
+          onListo={() => nav(destino, { replace: true })}
+          onCancelar={() => {
+            setDesafio(null);
+            setContrasena('');
+            entrar.reset();
+          }}
+        />
+      </Tarjeta>
+    );
+  }
 
   return (
     <Tarjeta

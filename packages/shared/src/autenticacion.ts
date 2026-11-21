@@ -69,5 +69,49 @@ export interface CuentaAuth {
   correo: string;
   correo_verificado: boolean;
   tiene_contrasena: boolean;
+  /** AUTH-07: verificación en dos pasos activa. */
+  dos_pasos: boolean;
   sesiones_activas: number;
+}
+
+// --- AUTH-07 · Verificación en dos pasos (docs/13, 1.2) -----------------------------------------
+
+/** Código del segundo paso: 6 dígitos de la app o un código de respaldo (XXXX-XXXX). */
+export const esquemaCodigoDosPasos = z.object({
+  codigo: z
+    .string()
+    .trim()
+    .regex(/^(\d{6}|[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})$/, 'Escribe los 6 dígitos o un código de respaldo.'),
+});
+export type CodigoDosPasos = z.infer<typeof esquemaCodigoDosPasos>;
+
+/** Segundo paso del inicio de sesión: el desafío que devolvió «entrar» y el código. */
+export const esquemaSegundoPaso = esquemaCodigoDosPasos.extend({
+  desafio: z.string().min(20).max(200),
+});
+export type SegundoPaso = z.infer<typeof esquemaSegundoPaso>;
+
+export interface EstadoDosPasos {
+  activa: boolean;
+  desde: string | null;
+  codigos_restantes: number;
+}
+
+/** Al empezar a activar: el secreto (para escribirlo a mano), el enlace otpauth y su QR en SVG. */
+export interface InicioDosPasos {
+  secreto: string;
+  uri: string;
+  qr_svg: string;
+}
+
+/** Al confirmar o regenerar: los 10 códigos de respaldo, que solo se muestran esta vez. */
+export interface CodigosRespaldo {
+  estado: EstadoDosPasos;
+  codigos: string[];
+}
+
+/** Respuesta de «entrar» cuando falta el segundo paso. */
+export interface PideDosPasos {
+  dos_pasos: true;
+  desafio: string;
 }

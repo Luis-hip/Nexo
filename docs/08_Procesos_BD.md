@@ -1865,7 +1865,7 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_
 - **Lo llama:** `repositorios/autenticacion.ts` → `entrar()`; `POST /auth/entrar` (10 por minuto por IP).
 - **Pruebas:** P202, P203, P208; `autenticacion.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_entrar($1, true, $2, $3, $4, $5)`
-- **Historial:** 2026-11-19 · creación · `0030`.
+- **Historial:** 2026-11-19 · creación · `0030`. 2026-11-21 · verificación en dos pasos (AUTH-07): con la 2FA activa devuelve `estado: '2fa'` y crea un desafío en lugar de la sesión · `0037_dos_pasos.sql`.
 
 ### proc_auth_recuperar
 - **Migración:** `0030_procesos_autenticacion.sql`
@@ -1935,7 +1935,7 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_
 - **Lo llama:** `repositorios/autenticacion.ts` → `cuenta()`; `GET /auth/cuenta`.
 - **Pruebas:** P207; `autenticacion.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_cuenta($1)`
-- **Historial:** 2026-11-19 · creación · `0030`.
+- **Historial:** 2026-11-19 · creación · `0030`. 2026-11-21 · verificación en dos pasos (AUTH-07): suma `dos_pasos` · `0037_dos_pasos.sql`.
 
 ### proc_auth_hash_actual
 - **Migración:** `0030_procesos_autenticacion.sql`
@@ -2562,3 +2562,138 @@ Auxiliares nuevos: `fn_wa_numero_normal` (P-13: México con y sin el `1`), `fn_w
 - **Pruebas:** P230; `spike.test.ts`; `integracion.test.ts`.
 - **Ejemplo de llamada:** `select proc_wa_formato_guardar($1, 'bajo_demanda')`
 - **Historial:** 2026-11-21 · creación · `0033`.
+
+---
+
+## Verificación en dos pasos (AUTH-07)
+
+Migración `0037_dos_pasos.sql` (docs/13_Plan_Integrado_Pendientes.md, 1.2). Pruebas `P235`–`P238` y `apps/api/src/rutas/dosPasos.test.ts`.
+
+**Esquema:** `credenciales_2fa` suma `ultimo_paso` (el último paso TOTP aceptado; un código no sirve dos veces) y `creado_en`; tabla nueva **`desafios_2fa`** (segundo paso pendiente del inicio de sesión: token como hash, método `contrasena` o `google`, 5 min, 5 intentos). El secreto TOTP llega cifrado con AES-256-GCM (`apps/api/src/cifrado.ts`, `ENCRYPTION_KEY`) y la API calcula el código (`apps/api/src/totp.ts`); los códigos de respaldo solo se guardan como hash SHA-256.
+
+**Procesos que cambian (misma firma):** `proc_auth_entrar` devuelve `estado: '2fa'` (sin sesión) cuando la persona tiene la 2FA activa, y el token de la sesión pasa a ser el del desafío; `proc_auth_cuenta` suma `dos_pasos`.
+
+Auxiliares: `fn_2fa_activa`, `fn_2fa_crear_desafio`, `fn_2fa_validar` (comprueba y consume un paso TOTP posterior al último o un código de respaldo sin usar), `fn_2fa_estado_json`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_2fa_estado` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_iniciar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_secreto` | Autenticación · sistema | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_confirmar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_desactivar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_respaldo_regenerar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_desafio` | Autenticación · sistema | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_completar` | Autenticación · sistema | `0037_dos_pasos.sql` | Vigente |
+
+### proc_2fa_estado
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** estado de la verificación en dos pasos de la persona (Ajustes → Cuenta).
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ activa, desde, codigos_restantes }`.
+- **Reglas y validaciones:** ninguna.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `credenciales_2fa`, `codigos_respaldo_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `estado2fa()`; `GET /auth/2fa`.
+- **Pruebas:** P235; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_estado($1)`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_iniciar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** primer paso de activar: guarda el secreto nuevo, cifrado y sin confirmar.
+- **Parámetros:** `p_actor_id uuid`. `p_secreto_cifrado text` (AES-256-GCM, lo cifra la API).
+- **Retorno:** `jsonb` estado (`activa: false`).
+- **Reglas y validaciones:** si había una activación a medias, la reemplaza.
+- **Errores:** `NX007` · ya está activa. `NX010` · falta el secreto.
+- **Tablas que toca:** escritura `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `iniciar2fa()`; `POST /auth/2fa/iniciar` (devuelve el secreto en base32, el enlace `otpauth://` y el QR en SVG; nada de eso se guarda en claro).
+- **Pruebas:** P235; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_iniciar($1, 'v1.…')`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_secreto
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** el secreto cifrado de la persona para que la API calcule el código.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ secreto_cifrado, confirmado, ultimo_paso }` o `NULL`.
+- **Reglas y validaciones:** solo la API lo usa; nunca se devuelve al navegador.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `secreto2fa()`; confirmar, desactivar y regenerar.
+- **Pruebas:** `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_secreto($1)`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_confirmar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** segundo paso de activar: la API ya comprobó el primer código.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint` (paso TOTP del código). `p_hashes text[]` (10 hashes SHA-256 de los códigos de respaldo).
+- **Retorno:** `jsonb` estado (`activa: true`, `codigos_restantes: 10`).
+- **Reglas y validaciones:** exige una activación pendiente; guarda `ultimo_paso`; borra los códigos de respaldo anteriores. Los códigos en claro solo los ve la persona en esa respuesta.
+- **Errores:** `NX007` · no hay activación pendiente. `NX010` · no son 10 códigos.
+- **Tablas que toca:** escritura `credenciales_2fa`, `codigos_respaldo_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `confirmar2fa()`; `POST /auth/2fa/confirmar`.
+- **Pruebas:** P235; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_confirmar($1, 59312345, $2::text[])`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_desactivar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** apagar la verificación en dos pasos.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint` (o `NULL`). `p_respaldo_hash text` (o `NULL`).
+- **Retorno:** `jsonb` estado (`activa: false`).
+- **Reglas y validaciones:** pide un segundo factor válido (`fn_2fa_validar`); borra secreto, códigos y desafíos.
+- **Errores:** `NX007` · no está activa. `NX010` · código incorrecto.
+- **Tablas que toca:** escritura `credenciales_2fa`, `codigos_respaldo_2fa`, `desafios_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `desactivar2fa()`; `POST /auth/2fa/desactivar`.
+- **Pruebas:** P238; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_desactivar($1, NULL, 'hash…')`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_respaldo_regenerar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** 10 códigos de respaldo nuevos; los anteriores dejan de servir.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint`. `p_respaldo_hash text`. `p_hashes text[]`.
+- **Retorno:** `jsonb` estado.
+- **Reglas y validaciones:** pide un segundo factor válido.
+- **Errores:** `NX007` · no está activa. `NX010` · código incorrecto o no son 10 códigos.
+- **Tablas que toca:** escritura `codigos_respaldo_2fa`, `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `regenerarRespaldo2fa()`; `POST /auth/2fa/respaldo`.
+- **Pruebas:** P238.
+- **Ejemplo de llamada:** `select proc_2fa_respaldo_regenerar($1, 59312346, NULL, $2::text[])`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_desafio
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** datos del desafío vigente para que la API calcule el código del segundo paso.
+- **Parámetros:** `p_token_hash bytea` (SHA-256 del desafío que devolvió «entrar»).
+- **Retorno:** `jsonb` `{ usuario_id, secreto_cifrado, ultimo_paso, metodo }`.
+- **Reglas y validaciones:** solo desafíos no vencidos con la 2FA confirmada.
+- **Errores:** `NX011` · el desafío venció o no existe (`desafio_vencido`).
+- **Tablas que toca:** lectura `desafios_2fa`, `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `desafio2fa()`; `POST /auth/2fa`.
+- **Pruebas:** P236, P237; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_desafio($1)`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_completar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** segundo paso del inicio de sesión (contraseña o Google).
+- **Parámetros:** `p_token_hash bytea`. `p_paso bigint` (paso TOTP válido según la API, `-1` si el código no cuadró, o `NULL`). `p_respaldo_hash text`. `p_sesion_hash bytea`, `p_ip text`, `p_dispositivo text`, `p_expira timestamptz` (la sesión nueva).
+- **Retorno:** `jsonb` `{ estado: ok | fallo | agotado, usuario?, intentos_restantes? }`.
+- **Reglas y validaciones:** con un factor válido borra el desafío y crea la sesión; si no, suma un intento y al quinto borra el desafío.
+- **Errores:** `NX011` · el desafío venció o no existe.
+- **Tablas que toca:** escritura `desafios_2fa`, `credenciales_2fa`, `codigos_respaldo_2fa`, `sesiones`, `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `completar2fa()`; `POST /auth/2fa`.
+- **Pruebas:** P236, P237; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_completar($1, 59312345, NULL, $2, '127.0.0.1', 'Firefox', now() + interval '30 days')`
+- **Historial:** 2026-11-21 · creación · `0037`.
