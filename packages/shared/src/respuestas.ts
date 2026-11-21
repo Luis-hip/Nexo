@@ -880,3 +880,33 @@ export const esquemaWhatsAppUsuarioRespuesta = z.object({
     }),
   ),
 }) satisfies z.ZodType<WhatsAppUsuario>;
+
+// --- Pendientes tras la Fase 5 (0032) -------------------------------------------------------------
+
+import {
+  TIPOS_SOLICITUD_INVITADO,
+  type ExportacionDatos,
+  type ReunionAgenda,
+  type SolicitudInvitado,
+} from './pendientes';
+
+export const esquemaAgendaPersonal = z.array(
+  esquemaReunion.extend({ equipo_id: z.string(), equipo_nombre: z.string() }),
+) satisfies z.ZodType<ReunionAgenda[]>;
+
+export const esquemaExportacionDatos = z.object({
+  exportacion_id: z.string(),
+  generada_en: fechaIso,
+  datos: z.record(z.string(), z.unknown()),
+}) satisfies z.ZodType<ExportacionDatos>;
+
+export const esquemaSolicitudInvitado = z.object({
+  id: z.string(),
+  tipo: z.enum(TIPOS_SOLICITUD_INVITADO),
+  estado: z.enum(['pendiente', 'aprobada', 'rechazada']),
+  creada_en: fechaIso,
+  resuelta_en: fechaIso.nullable(),
+  persona: esquemaPersonaTarea.nullable(),
+  membresia_id: z.string().nullable(),
+  caduca_en: fechaIso.nullable(),
+}) satisfies z.ZodType<SolicitudInvitado>;

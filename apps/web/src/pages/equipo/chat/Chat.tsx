@@ -14,12 +14,7 @@ import {
   Vacio,
 } from '@/components/ui';
 import { mensajeDeError } from '@/lib/api';
-import {
-  useAccionesChat,
-  useBusquedaChat,
-  useConversaciones,
-  useTiempoRealChat,
-} from '@/lib/consultasChat';
+import { useAccionesChat, useBusquedaChat, useConversaciones } from '@/lib/consultasChat';
 import { fechaCorta, hora } from '@/lib/fechas';
 import { toast } from '@/lib/toasts';
 import { useEquipoActual } from '../contexto';
@@ -54,7 +49,6 @@ export function Chat() {
   const conversaciones = useConversaciones(equipo.id);
   const [nueva, setNueva] = useState(false);
   const [busqueda, setBusqueda] = useState('');
-  useTiempoRealChat(true);
 
   const lista = conversaciones.data ?? [];
   // Sin conversación elegida, en escritorio se abre la del equipo (o, si no hay, la primera).

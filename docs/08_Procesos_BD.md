@@ -2281,3 +2281,164 @@ Auxiliares nuevos (solo el dueño): `fn_wa_regla_de` (evento → regla: reunione
 - **Pruebas:** P167; `whatsapp.test.ts`.
 - **Ejemplo de llamada:** `select proc_wa_consentimiento($1, $2, true)`
 - **Historial:** 2026-11-19 · creación · `0031`.
+
+---
+
+## Pendientes tras la Fase 5
+
+Procesos de la auditoría del 2026-11-20 (`progreso.md`, «Pendientes tras la Fase 5»; DEC-037). Migración `0032_procesos_pendientes.sql` (no cambia tablas). Pruebas `P210`–`P219` en `pruebas_procesos.sql` y `apps/api/src/rutas/pendientes.test.ts`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_personal_agenda` | Espacio personal (lectura) | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_datos_exportar` | Cuenta · datos | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_cuenta_eliminar` | Cuenta · datos | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_solicitud_invitado_crear` | Miembros | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_solicitud_invitado_listar` | Miembros (lectura) | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_solicitud_invitado_resolver` | Miembros | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_sprint_fotos_diarias` | Sprints · sistema | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_chat_editar` | Chat | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_usuario_foto_guardar` | Cuenta · perfil | `0032_procesos_pendientes.sql` | Vigente |
+| `proc_usuario_foto` | Cuenta · perfil (lectura) | `0032_procesos_pendientes.sql` | Vigente |
+
+Auxiliar nuevo: `fn_solicitud_json`. Sin códigos de error nuevos.
+
+### proc_personal_agenda
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** PER-04: reuniones de todos mis equipos en el calendario personal.
+- **Parámetros:** `p_actor_id uuid`. `p_desde timestamptz`. `p_hasta timestamptz` (1 a 62 días).
+- **Retorno:** `jsonb` `ReunionAgenda[]`: cada ocurrencia (`fn_reunion_json`) con `equipo_id` y `equipo_nombre`.
+- **Reglas y validaciones:** equipos activos donde la persona es líder o integrante (el invitado no ve reuniones, como en EQ-14); repeticiones en la zona de cada equipo.
+- **Errores:** `NX010` · rango inválido.
+- **Tablas que toca:** lectura `membresias`, `equipos`, `reuniones`, `reunion_asistencia`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/pendientes.ts` → `agenda()`; `GET /personal/agenda`.
+- **Pruebas:** P210; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_personal_agenda($1, now(), now() + interval '42 days')`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_datos_exportar
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** FALT-09: todo lo que Nexo guarda de la persona, en JSON.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ exportacion_id, generada_en, datos }`; `datos` trae perfil, preferencias, avisos, WhatsApp, equipos, tareas (personales, a su cargo o creadas por ella, con subtareas), comentarios, mensajes, reuniones y notificaciones.
+- **Reglas y validaciones:** nunca incluye el hash de la contraseña, `google_sub` ni el bloqueo; deja constancia en `exportaciones_datos` (`lista`, caduca en 7 días).
+- **Errores:** `NX006` · cuenta eliminada.
+- **Tablas que toca:** lectura de las anteriores; escritura `exportaciones_datos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/pendientes.ts` → `exportar()`; `GET /yo/datos/exportar` (descarga `nexo-mis-datos-AAAA-MM-DD.json`).
+- **Pruebas:** P211; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_datos_exportar($1)`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_cuenta_eliminar
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** FALT-09: eliminar la cuenta.
+- **Parámetros:** `p_actor_id uuid` (la API verifica antes la contraseña y la confirmación «ELIMINAR»).
+- **Retorno:** `jsonb` `{ eliminada: true }`.
+- **Reglas y validaciones:** quien lidera un equipo activo con más personas primero transfiere. Sale de todos los equipos (un equipo donde era la única persona se archiva); se borran tareas personales, número de WhatsApp, sesiones, tokens y notificaciones; sus solicitudes pendientes se rechazan; la cuenta queda anónima («Cuenta eliminada», correo inservible, sin contraseña) y con `eliminado_en`. Lo aportado a los equipos se conserva sin su nombre.
+- **Errores:** `NX006` · ya eliminada. `NX007` · es líder de un equipo con más personas.
+- **Tablas que toca:** escritura `usuarios`, `membresias`, `equipos`, `tareas`, `whatsapp_usuario`, `sesiones`, `tokens_verificacion`, `notificaciones`, `solicitudes_invitado`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `equipo.miembro_salio` (con `cuenta_eliminada`).
+- **Lo llama:** `repositorios/pendientes.ts` → `eliminarCuenta()`; `POST /yo/cuenta/eliminar` (5 por minuto).
+- **Pruebas:** P212, P213; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_cuenta_eliminar($1)`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_solicitud_invitado_crear
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** DEC-023: el invitado pide más días (`ampliacion`) o ser integrante (`conversion`).
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_tipo text`.
+- **Retorno:** `jsonb` `SolicitudInvitado`.
+- **Reglas y validaciones:** solo invitados con acceso vigente; equipo activo; una pendiente por tipo (repetir devuelve la misma); avisa al líder.
+- **Errores:** `NX005` · no es invitado o su acceso caducó. `NX006` · no es del equipo. `NX009` · archivado. `NX010` · tipo inválido.
+- **Tablas que toca:** escritura `solicitudes_invitado`, `notificaciones`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/pendientes.ts` → `crearSolicitud()`; `POST /equipos/:equipoId/solicitudes`.
+- **Pruebas:** P214; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_solicitud_invitado_crear($1, $2, 'ampliacion')`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_solicitud_invitado_listar
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** el líder ve las solicitudes pendientes; el invitado, las suyas.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`.
+- **Retorno:** `jsonb` `SolicitudInvitado[]`, de la más reciente a la más antigua.
+- **Reglas y validaciones:** el integrante no las ve.
+- **Errores:** `NX005` · integrante. `NX006` · no es del equipo.
+- **Tablas que toca:** lectura `solicitudes_invitado`, `membresias`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/pendientes.ts` → `solicitudes()`; `GET /equipos/:equipoId/solicitudes`.
+- **Pruebas:** P214; `pendientes.test.ts`; `matriz.test.ts` (no filtración).
+- **Ejemplo de llamada:** `select proc_solicitud_invitado_listar($1, $2)`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_solicitud_invitado_resolver
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** el líder aprueba o rechaza una solicitud.
+- **Parámetros:** `p_actor_id uuid`. `p_equipo_id uuid`. `p_solicitud_id uuid`. `p_aprobar boolean`. `p_dias int` (ampliación: 7, 14 o 30; por defecto 7).
+- **Retorno:** `jsonb` `SolicitudInvitado`.
+- **Reglas y validaciones:** solo el líder; solo pendientes. Aprobar aplica `proc_invitado_gestionar` (ampliar o convertir; el tope lo cuida `NX001`). Rechazar avisa al invitado; aprobar una ampliación también.
+- **Errores:** `NX001` · equipo lleno al convertir. `NX005`, `NX006`. `NX007` · ya respondida o ya no es invitado.
+- **Tablas que toca:** escritura `solicitudes_invitado`, `membresias`, `notificaciones` (y lo de `proc_invitado_gestionar`).
+- **Eventos que genera:** los de `proc_invitado_gestionar` (`equipo.invitado_ampliado`, `equipo.invitado_convertido`).
+- **Lo llama:** `repositorios/pendientes.ts` → `resolverSolicitud()`; `POST /equipos/:equipoId/solicitudes/:solicitudId`.
+- **Pruebas:** P215, P216; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_solicitud_invitado_resolver($1, $2, $3, true, 14)`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_sprint_fotos_diarias
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** foto diaria del burndown de cada sprint activo.
+- **Parámetros:** ninguno (sistema).
+- **Retorno:** `jsonb` `{ sprints }`.
+- **Reglas y validaciones:** usa `fn_sprint_instantanea` (una fila por sprint y día, en la zona del equipo); repetir el mismo día solo actualiza.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `sprint_instantaneas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/pendientes.ts` → `fotosDiarias()`; `trabajos/plazos.ts` (cada minuto).
+- **Pruebas:** P217.
+- **Ejemplo de llamada:** `select proc_sprint_fotos_diarias()`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_chat_editar
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** CH-02: quien escribió un mensaje lo corrige.
+- **Parámetros:** `p_actor_id uuid`. `p_mensaje_id uuid`. `p_texto text` (1 a 4000).
+- **Retorno:** `jsonb` `MensajeChat` con `editado_en`.
+- **Reglas y validaciones:** solo el autor (ni el líder edita mensajes ajenos; puede eliminarlos); no los de sistema ni los eliminados; mismo texto no marca «editado». La API avisa por Socket.IO (`chat:mensaje_actualizado`).
+- **Errores:** `NX005` · no es el autor. `NX006` · no existe o no lo ve. `NX007` · eliminado. `NX009` · archivado. `NX010` · texto inválido.
+- **Tablas que toca:** escritura `mensajes`.
+- **Eventos que genera:** ninguno (los mensajes no son eventos de dominio).
+- **Lo llama:** `repositorios/pendientes.ts` → `editarMensaje()`; `PATCH /chat/mensajes/:id`.
+- **Pruebas:** P218; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_chat_editar($1, $2, 'Texto corregido')`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_usuario_foto_guardar
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** ONB-02 y PF-01: foto de perfil.
+- **Parámetros:** `p_actor_id uuid`. `p_mime text` (`image/png`, `image/jpeg`, `image/webp`). `p_datos bytea` (hasta 1 MB; `NULL` la quita).
+- **Retorno:** `jsonb` `{ avatar_url }` (`/usuarios/<id>/foto?v=<archivo>` o `null`).
+- **Reglas y validaciones:** se guarda como archivo personal (`archivos.equipo_id` nulo, `storage_key` «foto:…») y reemplaza la anterior.
+- **Errores:** `NX006` · cuenta eliminada. `NX010` · tipo o tamaño.
+- **Tablas que toca:** escritura `archivos`, `archivo_contenidos`, `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/pendientes.ts` → `guardarFoto()`; `PUT /yo/foto`.
+- **Pruebas:** P219; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_foto_guardar($1, 'image/png', $2)`
+- **Historial:** 2026-11-20 · creación · `0032`.
+
+### proc_usuario_foto
+- **Migración:** `0032_procesos_pendientes.sql`
+- **Propósito:** servir la foto de perfil de una persona.
+- **Parámetros:** `p_usuario_id uuid`.
+- **Retorno:** `jsonb` `{ mime, contenido }` (base64).
+- **Reglas y validaciones:** la API exige sesión (cualquier persona con sesión ve las fotos, como ve los nombres en sus equipos).
+- **Errores:** `NX006` · sin foto.
+- **Tablas que toca:** lectura `archivos`, `archivo_contenidos`.
+- **Eventos que genera:** ninguno (lectura).
+- **Lo llama:** `repositorios/pendientes.ts` → `foto()`; `GET /usuarios/:usuarioId/foto`.
+- **Pruebas:** P219; `pendientes.test.ts`.
+- **Ejemplo de llamada:** `select proc_usuario_foto($1)`
+- **Historial:** 2026-11-20 · creación · `0032`.

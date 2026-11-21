@@ -414,6 +414,7 @@ describe.skipIf(!DATABASE_URL)('matriz de permisos completa contra la API (5.3)'
       `${E}/whatsapp`,
       `${E}/whatsapp/cola`,
       `${E}/whatsapp/historial`,
+      `${E}/solicitudes`,
     ];
     for (const url of lecturas) {
       const r = await e.app.inject({ method: 'GET', url, cookies: cookies.ajeno });

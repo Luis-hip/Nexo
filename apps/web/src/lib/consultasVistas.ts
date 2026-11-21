@@ -57,10 +57,13 @@ export function usePlantillas(equipoId: string) {
   });
 }
 
-export function useArchivos(equipoId: string) {
+/** Archivos del equipo; con `tareaId`, solo los adjuntos de esa tarea (EQ-06). */
+export function useArchivos(equipoId: string, tareaId?: string, activo = true) {
   return useQuery({
-    queryKey: [...claveEquipo(equipoId), 'archivos'],
-    queryFn: () => api<Archivo[]>(`/equipos/${equipoId}/archivos`),
+    queryKey: [...claveEquipo(equipoId), 'archivos', tareaId ?? 'todos'],
+    queryFn: () =>
+      api<Archivo[]>(`/equipos/${equipoId}/archivos`, { consulta: { tarea_id: tareaId } }),
+    enabled: activo,
   });
 }
 

@@ -67,6 +67,7 @@ export function registrarTiempoReal(
       const sesion = token ? await cuenta.resolverSesion(db, hashToken(token)) : null;
       if (!sesion) return siguiente(new Error('no_autenticado'));
       socket.data.usuarioId = sesion.usuario.id;
+      socket.data.nombre = sesion.usuario.nombre;
       siguiente();
     } catch (e) {
       app.log.error(e);
@@ -94,6 +95,20 @@ export function registrarTiempoReal(
         .finally(() => {
           if (typeof ack === 'function') ack();
         });
+    });
+    // «Escribiendo…»: solo se reenvía a la sala si esta conexión ya está en ella (el servidor decidió
+    // que tiene acceso). No se guarda nada; se limita a una vez cada 2 s por conexión.
+    let ultimoEscribiendo = 0;
+    socket.on(EVENTOS_CHAT.escribiendo, (carga: unknown) => {
+      const conversacionId = (carga as { conversacion_id?: unknown } | null)?.conversacion_id;
+      if (typeof conversacionId !== 'string' || !socket.rooms.has(sala(conversacionId))) return;
+      if (Date.now() - ultimoEscribiendo < 2000) return;
+      ultimoEscribiendo = Date.now();
+      socket.to(sala(conversacionId)).emit(EVENTOS_CHAT.escribiendo, {
+        conversacion_id: conversacionId,
+        usuario_id: socket.data.usuarioId as string,
+        nombre: socket.data.nombre as string,
+      });
     });
   });
 
