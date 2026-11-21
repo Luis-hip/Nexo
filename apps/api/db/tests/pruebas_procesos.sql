@@ -3228,3 +3228,21 @@ DO $$ DECLARE e uuid := pg_temp.wa_individual(1); i1 uuid := pg_temp.integrante(
   END IF;
   RAISE NOTICE 'OK P231: estados por entrega y reparto en el historial';
 END $$;
+
+-- P232. Comandos con el texto como lo manda WhatsApp (corrección 0034): espacio duro, marca
+--       invisible, salto de línea y puntuación no impiden verificar; «baja.» también da de baja.
+DO $$ DECLARE u uuid := pg_temp.usuario(); c jsonb; r jsonb; BEGIN
+  INSERT INTO preferencias_usuario (usuario_id) VALUES (u);
+  IF fn_wa_texto_comando(E'\u200e  verificar\u00a0123456.\n') <> 'VERIFICAR 123456' THEN
+    RAISE EXCEPTION 'FALLO P232: limpieza «%»', fn_wa_texto_comando(E'\u200e  verificar\u00a0123456.\n');
+  END IF;
+  c := proc_wa_solicitar_verificacion(u, '+5215500002321');
+  r := proc_wa_registrar_entrante('5215500002321', E'\u200eVERIFICAR\u00a0' || (c->>'codigo') || E'\n');
+  IF NOT (r->>'verificado')::boolean THEN RAISE EXCEPTION 'FALLO P232: no verificó: %', r; END IF;
+  r := proc_wa_registrar_entrante('5215500002321', E'Reporte.\n');
+  IF NOT (r->>'reporte')::boolean THEN RAISE EXCEPTION 'FALLO P232: REPORTE: %', r; END IF;
+  r := proc_wa_registrar_entrante('5215500002321', E'baja.');
+  IF NOT coalesce((r->>'baja')::boolean, false) THEN RAISE EXCEPTION 'FALLO P232: BAJA: %', r; END IF;
+  RAISE NOTICE 'OK P232: comandos con espacios duros, marcas invisibles y puntuación';
+END $$;
+
