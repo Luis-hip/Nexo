@@ -464,3 +464,13 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - Los eventos de la semilla se marcan procesados (el despachador no manda avisos viejos). No hay ninguna marca de «demostración» en la interfaz.
 - Ensayo: `pnpm --filter @nexo/api db:demo -- --ensayo` lo corre en la base local dentro de una transacción que se revierte, con una cuenta «real» de control que no debe cambiar.
 
+
+## DEC-039 · Spike de WhatsApp 1 a 1: decisiones ratificadas
+
+**Fecha:** 2026-11-21 · **Fuente:** `11_Plan_Spike_WhatsApp_1a1.md` (decisión de Luis de ejecutarlo) · **Detalle:** sección 15 de ese documento.
+
+- Dos canales (grupo y directo) que conviven por equipo con `modo_entrega` (`individual`, `grupo`, `ambos`); el reporte personal siempre va directo. Migración aditiva `0033`; pruebas P220–P249.
+- `proveedor` se lee como modo del backend (simulado o real); el canal lo decide el destino. Los equipos con `cloud_api_directo` pasan a `modo_entrega = 'individual'` sin cambiar su comportamiento.
+- Tres formatos (resumen con enlace, PDF, bajo demanda) con plantillas `nx_resumen_enlace`, `nx_reporte_pdf` y `nx_aviso_ver`; el líder fija el del equipo y cada persona puede cambiar el suyo.
+- Caducidad de 7 días para lo pendiente de ventana, un aviso corto cada 12 h por persona, PDF con `pdf-lib`.
+- Durante el spike la verificación del número no bloquea la entrega; los números se comparan normalizados (México con y sin el `1`).

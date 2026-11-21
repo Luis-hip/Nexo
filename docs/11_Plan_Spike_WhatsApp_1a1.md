@@ -463,3 +463,36 @@ Lista de control:
 | P-9 | Generación del PDF. | Librería sin navegador (más ligera para Render) o navegador headless. | Librería sin navegador. |
 | P-10 | ¿Una plantilla de aviso corto o una por tipo de evento? | Una con variable o varias. | Una; separar solo si Meta la rechaza. |
 | P-11 | ¿El texto libre dentro de la ventana respeta el formato 1 y 2 o siempre se envía completo? | Respetar formato o enviar completo. | Respetar el formato elegido; solo «bajo demanda» entrega completo en la ventana. |
+
+---
+
+## 15. Resultado de S0 (2026-11-21)
+
+### 15.1 Lo que el plan suponía y el código real
+
+| Supuesto del plan | Realidad en el repositorio | Consecuencia |
+|---|---|---|
+| Cola con `pg-boss` | No se usa: el ciclo de WhatsApp corre cada minuto en la API (`trabajos/whatsapp.ts`, DEC-WA-1) | La caducidad de entregas y el reparto entran en ese mismo ciclo |
+| Despliegue (Fase 3.5) pendiente; hace falta un túnel para el webhook | Ya está en línea: `https://api.nexo.lol/whatsapp/webhook` (GET de verificación y POST con firma HMAC e idempotencia) | V7 se resuelve sin túnel cuando se configure el webhook en Meta (requiere el secreto de la app en Render) |
+| `ProveedorWhatsApp` sin leer | `enviar(aviso: AvisoParaEnviar): Promise<string>`; `proveedorCloudApi` ya manda texto, plantilla (`WHATSAPP_PLANTILLA`) y a grupo; `proveedorPara(config, aviso)` elige simulado o real según `WHATSAPP_PROVIDER` | Se extiende con `enviarEntrega` por destino (persona o grupo) en lugar de reescribirla |
+| G4: sin `entregado` / `leido` | `whatsapp_mensajes` ya tiene `entregado_en` y `leido_en` (0031); el webhook ya los llena | Se repite por entrega en `whatsapp_entregas` |
+| Directo inexistente | `cloud_api_directo` ya manda **un mensaje igual a cada persona** con número y consentimiento, pero con un solo estado y un solo id para todos | Es justo el hueco G1: la tabla de entregas lo resuelve |
+| Ventana de 24 h | Ya probada con el número real (DEC-WA-2): Meta acepta el texto libre fuera de la ventana y lo **descarta después**, sin error en la respuesta | Confirma el diseño 5.2: decidir por `ultimo_entrante_en`, no por el error |
+| Número del destinatario | Meta devuelve a los números de México como `521…` (wa_id) aunque se registren como `+52…` | Al registrar mensajes entrantes se comparan números normalizados |
+
+### 15.2 Decisiones ratificadas (→ DEC-039)
+
+- **P-1 a P-6:** se aceptan tal cual. Numeración: migración **`0033`**, pruebas de procesos **P220–P249**.
+- **P-5:** opción (a). `proveedor` se lee como «modo del backend» (`simulado` o real); el canal lo deciden `modo_entrega` y el destino. Los equipos que hoy usan `cloud_api_directo` quedan con `modo_entrega = 'individual'`, así que no cambian.
+- **P-7:** caducidad de 7 días. **P-8:** 12 h entre avisos cortos, configurable. **P-9:** PDF con una librería sin navegador (`pdf-lib`). **P-10:** una plantilla de aviso corto con variable. **P-11:** se respeta el formato elegido; solo «bajo demanda» entrega completo dentro de la ventana.
+- **P-12 (nueva):** durante el spike, la **verificación del número no bloquea** la entrega (basta número y consentimiento, como hoy). Así la regresión A13 pasa sin tocar las pruebas de la Fase 4.2. Bloquearla queda para después de B6.
+- **P-13 (nueva):** los números se comparan normalizados (México: `52` + `1` + 10 dígitos ≡ `52` + 10 dígitos).
+
+### 15.3 Plantillas enviadas a Meta (S0)
+
+| Plantilla | Uso | Estado al enviarla |
+|---|---|---|
+| `nx_aviso_ver` | Formato 3: «Tienes {{1}} en Nexo…» + botón de respuesta rápida «Ver actualización» | En revisión |
+| `nx_resumen_enlace` | Formato 1: «Resumen de Nexo · {{1}}: {{2}}…» + botón URL a `https://app.nexo.lol/{{1}}` | En revisión |
+| `nx_reporte_pdf` | Formato 2: encabezado de documento + «Hola, {{1}}… del periodo {{2}}…» | En revisión (la primera versión se rechazó porque terminaba en variable) |
+| `nexo_aviso` (DEC-WA-2) | Aviso genérico con el texto completo | En revisión; **Meta la reclasificó como marketing** (V1). Se sustituye por las tres de arriba |
