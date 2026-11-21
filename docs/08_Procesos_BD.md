@@ -501,15 +501,15 @@
 - **Migración:** `0005_procesos_equipos.sql`
 - **Propósito:** Unirse a un equipo con un código de invitación.
 - **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_codigo text` · código ya normalizado.
-- **Retorno:** `jsonb` `{ equipo_id, rol }`.
+- **Retorno:** `jsonb` `{ equipo_id, rol, whatsapp_activo }`.
 - **Reglas y validaciones:** la invitación es de **un solo uso**: se marca `aceptada` en la misma transacción que crea la membresía; el integrante recibe el primer color libre y el invitado, una caducidad (7, 14 o 30 días); las altas del equipo se serializan con el mismo bloqueo que usa el disparador del tope; si el equipo está lleno, todo se deshace y la invitación sigue pendiente (DEC-019).
 - **Errores:** `NX006` / `NX011` · invitación inexistente, caducada, usada o revocada. `NX012` · ya es miembro (409, `ya_miembro`, con `equipo_id` en el detalle). `NX001` · equipo lleno (409, `equipo_lleno`, con `max_miembros` en el detalle).
 - **Tablas que toca:** lectura `equipos`; escritura `invitaciones`, `membresias`, `eventos_dominio`, `actividad`.
 - **Eventos que genera:** `membresia.creada` («… se unió al equipo como integrante»).
 - **Lo llama:** `repositorios/equipos.ts` → `aceptarInvitacion()`; `POST /invitaciones/:codigo/aceptar`.
-- **Pruebas:** `pruebas_procesos.sql` P31; `equipos.test.ts` (incluida la de dos personas a la vez al último lugar).
+- **Pruebas:** `pruebas_procesos.sql` P31, P234; `equipos.test.ts` (incluida la de dos personas a la vez al último lugar).
 - **Ejemplo de llamada:** `select proc_invitacion_aceptar($1, 'NX4-821Q')`
-- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`. 2026-11-21 · con número de WhatsApp verificado y consentimiento general, la membresía nueva queda con `consentimiento_wa = true`; devuelve `whatsapp_activo` (docs/13, 1.1) · `0036_invitacion_whatsapp.sql`.
 
 ### proc_tarea_listar
 - **Migración:** `0006_procesos_tareas_equipo.sql`
