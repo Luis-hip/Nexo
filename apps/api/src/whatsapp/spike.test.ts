@@ -268,4 +268,61 @@ describe('spike 1 a 1: formato PDF contra la API de Meta (imitada)', () => {
       plantilla: 'nx_reporte_pdf',
     });
   });
+
+  it('con la ventana abierta no usa plantillas: el resumen va como texto con enlace y el PDF como documento', async () => {
+    const { port } = meta.address() as AddressInfo;
+    const canal = canalCloud({
+      token: 't',
+      phoneId: '99',
+      graph: `http://127.0.0.1:${port}/v21.0`,
+    });
+    llegadas.length = 0;
+    const marcadas: unknown[] = [];
+    const repo = await import('../repositorios/whatsapp');
+    const original = repo.marcarEntrega;
+    Object.defineProperty(repo, 'marcarEntrega', {
+      value: async (_d: unknown, _id: string, r: unknown) => marcadas.push(r),
+      configurable: true,
+    });
+    const entrega = (id: string, formato: 'resumen_enlace' | 'pdf') => ({
+      id,
+      destino: 'persona' as const,
+      formato,
+      contenido: '📋 Tu reporte de Nexo\n• En curso: 1',
+      numero: '+5215500000000',
+      nombre: 'Paola',
+      ventana_abierta: true,
+      aviso_corto_reciente: false,
+    });
+    try {
+      await entregarEntregas(
+        {} as never,
+        { APP_URL: 'https://app.nexo.lol' } as never,
+        {
+          id: 'a',
+          equipo_id: null,
+          usuario_id: 'u',
+          texto: 'Reporte',
+          proveedor: 'cloud_api_directo',
+          grupo_externo_id: null,
+          destinatarios: [],
+          entregas: [entrega('r', 'resumen_enlace'), entrega('p', 'pdf')],
+        },
+        canal,
+      );
+    } finally {
+      Object.defineProperty(repo, 'marcarEntrega', { value: original, configurable: true });
+    }
+    const [texto, medio, documento] = llegadas;
+    const t = JSON.parse(texto!.cuerpo);
+    expect(t.type).toBe('text');
+    expect(t.text.body).toContain('Tu reporte de Nexo');
+    expect(t.text.body).toContain('https://app.nexo.lol/app/personal/reportes');
+    expect(medio!.url).toBe('/v21.0/99/media');
+    const d = JSON.parse(documento!.cuerpo);
+    expect(d).toMatchObject({ type: 'document', document: { id: 'medio-123' } });
+    expect(llegadas.some((l) => l.cuerpo.includes('"template"'))).toBe(false);
+    expect(marcadas).toHaveLength(2);
+    expect(marcadas.every((m) => (m as { plantilla?: string }).plantilla === undefined)).toBe(true);
+  });
 });

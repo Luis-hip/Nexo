@@ -3246,3 +3246,17 @@ DO $$ DECLARE u uuid := pg_temp.usuario(); c jsonb; r jsonb; BEGIN
   RAISE NOTICE 'OK P232: comandos con espacios duros, marcas invisibles y puntuación';
 END $$;
 
+-- P233. El código solo (sin «VERIFICAR») verifica si hay un código pendiente (corrección 0035); sin
+--       código pendiente, seis dígitos son un mensaje cualquiera.
+DO $$ DECLARE u uuid := pg_temp.usuario(); c jsonb; r jsonb; BEGIN
+  INSERT INTO preferencias_usuario (usuario_id) VALUES (u);
+  PERFORM proc_wa_usuario_guardar(u, '{"numero": "+5215500002331", "consentimiento": true}');
+  r := proc_wa_registrar_entrante('5215500002331', '123456');
+  IF (r->>'verificado')::boolean OR r->>'respuesta' LIKE 'Ese código%' THEN RAISE EXCEPTION 'FALLO P233: sin código pendiente: %', r; END IF;
+  c := proc_wa_solicitar_verificacion(u, '+5215500002331');
+  r := proc_wa_registrar_entrante('5215500002331', ' ' || (c->>'codigo') || E'
+');
+  IF NOT (r->>'verificado')::boolean THEN RAISE EXCEPTION 'FALLO P233: código solo no verificó: %', r; END IF;
+  RAISE NOTICE 'OK P233: código solo';
+END $$;
+
