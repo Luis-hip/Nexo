@@ -19,6 +19,76 @@ export const ESTADOS_MENSAJE_WA = [
   'cancelado',
 ] as const;
 export type EstadoMensajeWa = (typeof ESTADOS_MENSAJE_WA)[number];
+// Spike 1 a 1 (0033, DEC-039): canal por equipo, formato por persona y estado de cada entrega.
+export const MODOS_ENTREGA_WA = ['individual', 'grupo', 'ambos'] as const;
+export type ModoEntregaWa = (typeof MODOS_ENTREGA_WA)[number];
+export const NOMBRE_MODO_ENTREGA_WA: Record<
+  ModoEntregaWa,
+  { nombre: string; descripcion: string }
+> = {
+  individual: {
+    nombre: 'A cada persona',
+    descripcion: 'Un mensaje directo a cada integrante que aceptó.',
+  },
+  grupo: { nombre: 'Al grupo', descripcion: 'Un solo mensaje en el grupo del equipo.' },
+  ambos: {
+    nombre: 'Grupo y directo',
+    descripcion: 'En el grupo para quien está en él; directo para quien no (nunca los dos).',
+  },
+};
+export const FORMATOS_WA = ['resumen_enlace', 'pdf', 'bajo_demanda'] as const;
+export type FormatoWa = (typeof FORMATOS_WA)[number];
+export const NOMBRE_FORMATO_WA: Record<FormatoWa, { nombre: string; descripcion: string }> = {
+  resumen_enlace: {
+    nombre: 'Resumen con enlace',
+    descripcion: 'Un resumen corto y un botón que abre Nexo.',
+  },
+  pdf: { nombre: 'PDF', descripcion: 'El aviso o reporte como documento.' },
+  bajo_demanda: {
+    nombre: 'Bajo demanda',
+    descripcion: '«Tienes una actualización» y, al responder, todo el contenido.',
+  },
+};
+export const ESTADOS_ENTREGA_WA = [
+  'pendiente',
+  'pendiente_ventana',
+  'enviando',
+  'enviado',
+  'entregado',
+  'leido',
+  'fallido',
+  'caducado',
+  'cancelado',
+] as const;
+export type EstadoEntregaWa = (typeof ESTADOS_ENTREGA_WA)[number];
+
+/** Reparto de un aviso: una entrega por destinatario (o al grupo). Nunca el número completo. */
+export interface EntregaWa {
+  id: string;
+  destino: 'grupo' | 'persona';
+  formato: FormatoWa;
+  estado: EstadoEntregaWa;
+  persona: PersonaTarea | null;
+  numero_fin: string | null;
+  enviado_en: string | null;
+  entregado_en: string | null;
+  leido_en: string | null;
+  caduca_en: string | null;
+  ultimo_error: string | null;
+}
+
+/** Lo que el servidor necesita para enviar UNA entrega (solo dentro de la API). */
+export interface EntregaParaEnviar {
+  id: string;
+  destino: 'grupo' | 'persona';
+  formato: FormatoWa;
+  contenido: string | null;
+  numero: string | null;
+  nombre: string | null;
+  ventana_abierta: boolean;
+  aviso_corto_reciente: boolean;
+}
+
 export const MODOS_REGLA_WA = ['instantaneo', 'reporte', 'apagado'] as const;
 export type ModoReglaWa = (typeof MODOS_REGLA_WA)[number];
 
@@ -74,6 +144,8 @@ export interface ConfiguracionWa {
   envio_automatico: boolean;
   ultimo_reporte_en: string | null;
   proximo_reporte: string | null;
+  modo_entrega: ModoEntregaWa;
+  formato_defecto: FormatoWa;
 }
 
 export interface MensajeWa {
@@ -93,6 +165,7 @@ export interface MensajeWa {
   ultimo_error: string | null;
   reporte_id: string | null;
   creado_en: string;
+  entregas: EntregaWa[];
 }
 
 export interface PersonaWa extends PersonaTarea {
@@ -101,6 +174,9 @@ export interface PersonaWa extends PersonaTarea {
   consentimiento: boolean | null;
   en_grupo: boolean;
   tiene_numero: boolean;
+  numero_fin: string | null;
+  verificado: boolean;
+  formato: FormatoWa;
 }
 
 export interface PanelWa {
@@ -125,6 +201,10 @@ export interface WhatsAppUsuario {
   numero: string | null;
   consentimiento: boolean;
   consentimiento_en: string | null;
+  verificado: boolean;
+  verificado_en: string | null;
+  ventana_abierta: boolean;
+  formato: FormatoWa | null;
   equipos: {
     equipo_id: string;
     nombre: string;
@@ -139,11 +219,22 @@ export interface WhatsAppUsuario {
 /** Lo que devuelve la base para entregar un aviso con el proveedor del equipo. */
 export interface AvisoParaEnviar {
   id: string;
-  equipo_id: string;
+  /** Nulo en el reporte personal (spike 1 a 1). */
+  equipo_id: string | null;
   texto: string;
   proveedor: ProveedorWa;
   grupo_externo_id: string | null;
   destinatarios: string[];
+  usuario_id?: string | null;
+  /** Spike 1 a 1: el reparto por destinatario. Sin entregas se usa el camino de la 0031. */
+  entregas?: EntregaParaEnviar[];
+}
+
+/** Verificar el número por WhatsApp: código y enlace `wa.me` con «VERIFICAR <código>». */
+export interface VerificacionWa {
+  codigo: string;
+  expira_en: string;
+  enlace: string;
 }
 
 export interface ResultadoEnvioWa {
@@ -183,6 +274,8 @@ export const esquemaConfigurarWa = z
     silencio_desde: hora.nullable(),
     silencio_hasta: hora.nullable(),
     enlace_invitacion: z.string().trim().max(300),
+    modo_entrega: z.enum(MODOS_ENTREGA_WA),
+    formato_defecto: z.enum(FORMATOS_WA),
   })
   .partial()
   .refine((d) => Object.keys(d).length > 0, { message: 'No hay cambios que guardar.' })
@@ -229,3 +322,20 @@ export const esquemaWhatsAppUsuario = z
   .refine((d) => Object.keys(d).length > 0, { message: 'No hay cambios que guardar.' });
 
 export const esquemaConsentimientoWa = z.object({ acepta: z.boolean() });
+
+/** Spike 1 a 1: formato personal (`null` = el del equipo). */
+export const esquemaFormatoWa = z.object({ formato: z.enum(FORMATOS_WA).nullable() });
+
+/** Spike 1 a 1: pedir el código para verificar el número por WhatsApp. */
+export const esquemaVerificarNumeroWa = z.object({
+  numero: z
+    .string()
+    .trim()
+    .regex(/^\+[1-9]\d{7,14}$/, 'Escribe el número con lada internacional: +5212221234567.'),
+});
+
+/** Solo desarrollo: simular un mensaje que la persona manda al número de Nexo. */
+export const esquemaEntranteWa = z.object({
+  numero: z.string().trim().min(8).max(20),
+  texto: z.string().max(1000).default(''),
+});

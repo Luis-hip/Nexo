@@ -17,6 +17,7 @@ Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (has
 | [`docs/08_Procesos_BD.md`](docs/08_Procesos_BD.md)                                              | Procesos `proc_*` de la BD (un apartado por proceso)                   |
 | [`docs/09_Seguridad_y_Secretos.md`](docs/09_Seguridad_y_Secretos.md)                            | Política de secretos, rotación y filtraciones                          |
 | [`docs/10_Plan_de_Despliegue.md`](docs/10_Plan_de_Despliegue.md)                                | Fase 3.5: Vercel + Render + dominio propio (en línea desde 2026-11-18) |
+| [`docs/11_Plan_Spike_WhatsApp_1a1.md`](docs/11_Plan_Spike_WhatsApp_1a1.md)                      | Spike: WhatsApp 1 a 1 (canal directo, formatos y ventana de 24 h)      |
 | [`docs/decisiones.md`](docs/decisiones.md)                                                      | Decisiones tomadas durante el desarrollo                               |
 | [`docs/progreso.md`](docs/progreso.md)                                                          | Qué está hecho y qué falta por fase                                    |
 

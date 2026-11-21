@@ -2,6 +2,9 @@ import {
   esquemaConectarWa,
   esquemaConfigurarWa,
   esquemaConsentimientoWa,
+  esquemaEntranteWa,
+  esquemaFormatoWa,
+  esquemaVerificarNumeroWa,
   esquemaEditarMensajeWa,
   esquemaHistorialWa,
   esquemaIdsWa,
@@ -20,6 +23,7 @@ import { contextoEquipo, requiereEquipoActivo, requierePermiso } from '../equipo
 import { ErrorNexo } from '../errores';
 import * as repo from '../repositorios/whatsapp';
 import { cicloWhatsApp } from '../trabajos/whatsapp';
+import { entregarEntregas, procesarEntrante } from '../whatsapp/entregas';
 import { entregar } from '../whatsapp/proveedor';
 import { esquemaId, validar } from '../validacion';
 
@@ -153,6 +157,39 @@ export const rutasWhatsApp: FastifyPluginAsync<{ db: BaseDatos; config: Config }
     return repo.consentimiento(db, usuario.id, equipoId, acepta);
   });
 
+  // --- Spike 1 a 1 (DEC-039): verificación, formato y reporte personal ---------------------------
+
+  app.post(
+    '/yo/whatsapp/verificacion',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { usuario } = exigirSesion(req);
+      const { numero } = validar(esquemaVerificarNumeroWa, req.body);
+      const r = await repo.solicitarVerificacion(db, usuario.id, numero);
+      const nexo = config.WHATSAPP_NUMERO_NEXO.replace(/^\+/, '');
+      return {
+        ...r,
+        enlace: `https://wa.me/${nexo}?text=${encodeURIComponent(`VERIFICAR ${r.codigo}`)}`,
+      };
+    },
+  );
+
+  app.put('/yo/whatsapp/formato', async (req) => {
+    const { usuario } = exigirSesion(req);
+    const { formato } = validar(esquemaFormatoWa, req.body);
+    return repo.guardarFormato(db, usuario.id, formato);
+  });
+
+  app.post(
+    '/yo/whatsapp/reporte',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { usuario } = exigirSesion(req);
+      const aviso = await repo.crearReportePersonal(db, usuario.id);
+      return entregarEntregas(db, config, aviso);
+    },
+  );
+
   // --- 4.3: webhook de Meta --------------------------------------------------------------------
 
   await app.register(async (webhook) => {
@@ -212,7 +249,23 @@ export const rutasWhatsApp: FastifyPluginAsync<{ db: BaseDatos; config: Config }
             const tipo = Array.isArray(valor.statuses)
               ? 'statuses'
               : (cambio.field ?? 'desconocido');
-            await repo.registrarWebhook(db, `${huella}:${i++}`, tipo, valor);
+            const r = await repo.registrarWebhook(db, `${huella}:${i++}`, tipo, valor);
+            // Spike 1 a 1: mensajes de las personas (abren la ventana, verifican, BAJA, REPORTE).
+            if (r.nuevo && Array.isArray(valor.messages)) {
+              for (const m of valor.messages as Record<string, unknown>[]) {
+                const texto =
+                  (m.text as { body?: string } | undefined)?.body ??
+                  (m.button as { text?: string } | undefined)?.text ??
+                  (m.interactive as { button_reply?: { title?: string } } | undefined)?.button_reply
+                    ?.title ??
+                  '';
+                if (typeof m.from === 'string') {
+                  await procesarEntrante(db, config, m.from, texto).catch((e: unknown) =>
+                    req.log.error(e, 'No se pudo procesar un mensaje entrante de WhatsApp'),
+                  );
+                }
+              }
+            }
           }
         }
         return res.status(200).send({ recibido: true });
@@ -223,6 +276,15 @@ export const rutasWhatsApp: FastifyPluginAsync<{ db: BaseDatos; config: Config }
   // --- Solo desarrollo y pruebas: correr el ciclo ahora (sin esperar al minuto) ----------------
 
   if (config.DEV_LOGIN_ENABLED && config.NODE_ENV !== 'production') {
-    app.post('/dev/whatsapp/ciclo', async () => cicloWhatsApp(db, config));
+    app.post('/dev/whatsapp/ciclo', async (req) => {
+      // `?ahora=` adelanta el reloj para probar la caducidad (plan §5.4).
+      const { ahora } = validar(z.object({ ahora: z.iso.datetime().optional() }), req.query);
+      return cicloWhatsApp(db, config, ahora);
+    });
+    // Simula que una persona escribe al número de Nexo (plan §5.4).
+    app.post('/dev/whatsapp/entrante', async (req) => {
+      const { numero, texto } = validar(esquemaEntranteWa, req.body);
+      return procesarEntrante(db, config, numero, texto);
+    });
   }
 };

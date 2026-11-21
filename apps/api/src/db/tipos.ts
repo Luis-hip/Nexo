@@ -11,6 +11,10 @@ export type ColumnaRetro = "acciones" | "bien" | "mejorar";
 
 export type DensidadUi = "comoda" | "compacta";
 
+export type DestinoWa = "grupo" | "persona";
+
+export type EstadoEntregaWa = "caducado" | "cancelado" | "entregado" | "enviado" | "enviando" | "fallido" | "leido" | "pendiente" | "pendiente_ventana";
+
 export type EstadoEquipo = "activo" | "archivado";
 
 export type EstadoExportacion = "expirada" | "lista" | "preparando";
@@ -33,6 +37,8 @@ export type EstadoWhatsapp = "conectado" | "error" | "pausado" | "sin_configurar
 
 export type FaseEleccion = "empate" | "postulacion" | "resultado" | "sin_votos" | "votacion";
 
+export type FormatoWa = "bajo_demanda" | "pdf" | "resumen_enlace";
+
 export type FrecuenciaReporte = "diario" | "semanal";
 
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
@@ -52,6 +58,8 @@ export type JsonObject = {
 export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
+export type ModoEntregaWa = "ambos" | "grupo" | "individual";
 
 export type ModoReglaWa = "apagado" | "instantaneo" | "reporte";
 
@@ -370,6 +378,7 @@ export interface PreferenciasUsuario {
   tema: Generated<TemaUi>;
   tour_visto: Generated<boolean>;
   usuario_id: string;
+  wa_formato: FormatoWa | null;
 }
 
 export interface RetroNotas {
@@ -633,8 +642,10 @@ export interface WhatsappConfiguracion {
   envio_automatico: Generated<boolean>;
   equipo_id: string;
   estado: Generated<EstadoWhatsapp>;
+  formato_defecto: Generated<FormatoWa>;
   grupo_externo_id: string | null;
   grupo_nombre: string | null;
+  modo_entrega: Generated<ModoEntregaWa>;
   proveedor: Generated<ProveedorWhatsapp>;
   reporte_dia: Generated<number>;
   reporte_frecuencia: Generated<FrecuenciaReporte>;
@@ -645,12 +656,32 @@ export interface WhatsappConfiguracion {
   ultimo_reporte_en: Timestamp | null;
 }
 
+export interface WhatsappEntregas {
+  caduca_en: Timestamp | null;
+  contenido: string | null;
+  creado_en: Generated<Timestamp>;
+  destino: DestinoWa;
+  entregado_en: Timestamp | null;
+  enviado_en: Timestamp | null;
+  estado: Generated<EstadoEntregaWa>;
+  formato: FormatoWa;
+  id: Generated<string>;
+  intentos: Generated<number>;
+  leido_en: Timestamp | null;
+  mensaje_id: string;
+  plantilla: string | null;
+  proveedor_mensaje_id: string | null;
+  ultimo_error: string | null;
+  usuario_id: string | null;
+  variables: Generated<Json>;
+}
+
 export interface WhatsappMensajes {
   creado_en: Generated<Timestamp>;
   entregado_en: Timestamp | null;
   enviado_en: Timestamp | null;
   enviado_por: string | null;
-  equipo_id: string;
+  equipo_id: string | null;
   estado: Generated<EstadoMensajeWa>;
   evento_id: Int8 | null;
   id: Generated<string>;
@@ -665,6 +696,7 @@ export interface WhatsappMensajes {
   tipo_envio: TipoEnvioWa;
   tipo_evento: string;
   ultimo_error: string | null;
+  usuario_id: string | null;
 }
 
 export interface WhatsappReglas {
@@ -674,9 +706,13 @@ export interface WhatsappReglas {
 }
 
 export interface WhatsappUsuario {
+  codigo_expira_en: Timestamp | null;
+  codigo_hash: string | null;
   consentimiento_en: Timestamp | null;
   consentimiento_revocado_en: Timestamp | null;
   numero_e164: string;
+  ultimo_entrante_en: Timestamp | null;
+  ultimo_teaser_en: Timestamp | null;
   usuario_id: string;
   verificado_en: Timestamp | null;
 }
@@ -741,6 +777,7 @@ export interface DB {
   v_miembros_activos: VMiembrosActivos;
   v_tareas_semaforo: VTareasSemaforo;
   whatsapp_configuracion: WhatsappConfiguracion;
+  whatsapp_entregas: WhatsappEntregas;
   whatsapp_mensajes: WhatsappMensajes;
   whatsapp_reglas: WhatsappReglas;
   whatsapp_usuario: WhatsappUsuario;

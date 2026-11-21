@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Encabezado, EsqueletoTarjetas, EstadosDatos, Tarjeta } from '@/components/ui';
 import { api } from '@/lib/api';
+import { EnviarMiReporte } from '@/components/whatsapp/Directo';
 
 /**
  * FALT-01: reportes personales. Tus tareas personales y las de equipo que tienes a cargo (solo de
@@ -18,6 +19,7 @@ export function ReportesPersonales() {
       <Encabezado
         titulo="Mis reportes"
         descripcion="Tus tareas personales y las de equipo a tu cargo."
+        acciones={<EnviarMiReporte />}
       />
       <EstadosDatos consulta={consulta} esqueleto={<EsqueletoTarjetas n={2} />}>
         {(r) => {
