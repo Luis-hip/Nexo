@@ -52,7 +52,7 @@ BEGIN
     IF u.id IS NOT NULL THEN
       -- Ya hay una cuenta con ese correo: solo se vincula sola si ambos lados lo tienen verificado.
       IF u.correo_verificado_en IS NULL OR NOT p_correo_verificado THEN
-        RAISE EXCEPTION 'Ya existe una cuenta con ese correo. Entra con tu contraseña y vincula Google en Ajustes → Cuenta.'
+        RAISE EXCEPTION 'Ya existe una cuenta con ese correo. Entra con tu contraseña.'
           USING ERRCODE = 'NX012', HINT = 'cuenta_existente';
       END IF;
       UPDATE usuarios SET google_sub = p_sub WHERE id = u.id;
