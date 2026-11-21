@@ -39,7 +39,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 ### Pendiente
 
 - [x] **Proteger `main`, `dev` y `produccion`** en GitHub (DEC-001). Comprobado el 2026-11-18: las tres ramas figuran como protegidas (`protected: true`); el detalle de las reglas (PR obligatorio y el check **Verificar (BD, tipos, lint, pruebas, build)**) no se pudo leer sin sesión de administrador.
-- [ ] Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
 - [ ] Tablero de proyecto en GitHub (Por hacer / En curso / En revisión / Hecho) e *issues* por fase y módulo grande.
 - [x] **0.7 WhatsApp** (Carlos e Isac, con Jova). **Hecho lo necesario (2026-11-20):** cuenta, app, WABA de prueba y número de pruebas; D-01 resuelta para esta etapa (DEC-WA-2: mensajes directos con el número de pruebas). [~] La verificación de la empresa, la OBA y los grupos quedan **ignorados hasta nuevo aviso**. Historial:: cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**. **Avance (2026-11-18):** cuenta, app «Nexo conexión de equipos», WABA de prueba y número de pruebas **hechos**; `docs/whatsapp-verificacion.md` llenado con datos oficiales (preguntas 2 y 6 y la tarifa en MXN, «no se pudo verificar»). **Pendiente:** verificación de la empresa (faltan documentos reales; el sitio `nexo.lol` ya existe pero el dominio raíz sigue en el parking de Porkbun), solicitud de OBA (exige verificación, 30 días y un número real) y decidir D-01. Capturas de evidencia sin adjuntar.
 - [ ] Probar `docker compose up -d` + `pnpm db:reset` en una máquina con Docker (la de Luis aún no lo tiene). Mientras tanto la BD se cubre con `pnpm db:local` (PGlite) y con la CI en PostgreSQL 16.
@@ -125,7 +125,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 ### Pendiente
 
 - [x] **Abrir el PR `Dev_Luis` → `dev`.** Hecho: PR #12 (incluye las Fases 2.5 y 3).
-- [ ] Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2). Hoy es público.
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2). Hoy es público.
 - [ ] Revisar los valores por confirmar V-10 y V-11 y las desviaciones anotadas arriba (decisión de Luis).
 
 ### Cierre
@@ -190,7 +190,7 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [ ] Revisar DEC-031 a DEC-034, en especial: qué entra al planear (más que «aceptadas»), capacidad sin estimaciones, todos los integrantes como candidatos y desempate por antigüedad (DEC-032), archivos guardados en PostgreSQL (DEC-033).
 - [ ] Revisar DEC-030 (forma por miembro) y V-10 y V-11 de la Fase 2.5.
 - [x] PR `Dev_Luis` → `dev` → `main` de las Fases 2.5 y 3 (pendiente de la Fase 2.5): hecho el 2026-11-18.
-- [ ] Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
 - [ ] Revisión **visual** por una persona del tablero, sprints y ajustes en claro/oscuro y móvil (Fases 1 a 3). La verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
 
 ## Fase 4 · Chat
@@ -287,7 +287,7 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 
 ### Pendiente
 
-- [ ] **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
 - [x] (Hecho en `feat/fase-4-whatsapp`: `0031`, índice, `explain.ts` y sondas.) **Avisar a quien hace WhatsApp** que renumere sus migraciones desde `0031` (DEC-AUTH-2), que agregue en una de ellas el índice `ix_wa_msj_pendientes` para Q4 (y quite `pendiente` de Q4 en `explain.ts`), y que sume a `matriz.test.ts` las sondas de `configurar_whatsapp`, `enviar_cola_whatsapp` y `ver_historial_whatsapp`.
 - [ ] Revisar DEC-AUTH-1 (el registro sí dice si un correo ya tiene cuenta).
 - [ ] 2FA (AUTH-07), cambio de correo e inicio con Google: fase posterior.
@@ -312,13 +312,13 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 | P-10 | Insignia de no leídos del chat en tiempo real fuera del chat | Fase 4 | código | El socket del chat escucha en todo el equipo; la insignia cambia al momento | Hecho (2026-11-20) |
 | P-11 | Verificar el número de WhatsApp por código | Fase 4 | ignorado | Requiere mandar el código por WhatsApp real con un número verificado; con el de pruebas solo llega a destinatarios ya dados de alta | [~] |
 | P-12 | Verificación del negocio, OBA, grupos, FALT-03/04 | 0.7 / 4.3 | ignorado | DEC-WA-2 | [~] |
-| P-13 | Repositorio privado y licencia; *secret scanning* y *push protection* | Fases 0 y 2.5 | persona | Decisión de Luis | Abierto |
+| P-13 | Repositorio privado y licencia; *secret scanning* y *push protection* | Fases 0 y 2.5 | ignorado | Decisión de Luis. Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
 | P-14 | Tablero de proyecto e *issues* en GitHub | Fase 0 | persona | Decisión del equipo (el seguimiento real vive en `progreso.md`) | Abierto |
 | P-15 | Probar `docker compose` en una máquina con Docker | Fase 0 | persona | Falta una máquina con Docker | Abierto |
 | P-16 | Revisión visual por una persona (claro/oscuro y móvil) | Fases 1 a 5 | persona | La automática (axe, 360 px) ya pasa | Abierto |
 | P-17 | Revisar DEC-030 a DEC-034, V-10, V-11 y DEC-AUTH-1 | Fases 2.5, 3 y 5 | persona | Lectura de Luis | Abierto |
-| P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | persona | Sin ella no hay correos en producción (P-04 depende de esto en producción) | Abierto |
-| P-19 | Copias de seguridad, raíz `nexo.lol`, plan de pago antes del 2026-12-18 y *Auto-Deploy* de Render | Fase 3.5 | persona | Paneles de Render y Porkbun | Abierto |
+| P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | ignorado | Sin ella no hay correos en producción (P-04 depende de esto en producción). Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
+| P-19 | Copias de seguridad, raíz `nexo.lol`, plan de pago antes del 2026-12-18 y *Auto-Deploy* de Render | Fase 3.5 | ignorado | Paneles de Render y Porkbun. Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
 | P-20 | 2FA, cambio de correo e inicio con Google | Fase 5 | — | Fuera de alcance («solo si hay tiempo», `03` 5.1): fase posterior | Fase posterior |
 
 ### Resultado del trabajo en `Dev_Luis` (2026-11-20)

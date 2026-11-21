@@ -96,3 +96,7 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 
 *Agregado el 2026-11-20.* La migración `0032` no cambia tablas: solo agrega procesos (se aplica sola al arrancar en Render). Nada nuevo que configurar; el correo de invitación sale cuando haya `RESEND_API_KEY`.
 
+## 12. Ignorado hasta nuevo aviso
+
+*Decisión de Luis, 2026-11-20.* No se trabajan mientras no se diga otra cosa: repositorio privado, licencia, *secret scanning* y *push protection*; cuenta de Resend (`RESEND_API_KEY`: sin ella no salen correos en producción); copias de seguridad de la BD, plan de pago de Render (la BD gratuita **caduca el 2026-12-18**), raíz `nexo.lol` y *Auto-Deploy* de Render (se sigue desplegando a mano).
+
