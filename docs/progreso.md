@@ -16,10 +16,10 @@
 | 3.5 · Despliegue | En línea con las Fases 0–5; prueba de humo hecha. Copias, raíz `nexo.lol` y plan de pago: `[~]` ignorados hasta nuevo aviso | — | `produccion` |
 | 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp en modo simulado; envío real comprobado en local con el número de pruebas, DEC-WA-2) | `fase-4` | `produccion` |
 | 5 · Autenticación, QA y permisos | Terminada y en producción | `fase-5` | `produccion` |
-| Pendientes tras la Fase 5 | Terminados (P-01 a P-10, DEC-037 y DEC-038) | — | `Dev_Luis` → `produccion` |
+| Pendientes tras la Fase 5 | Terminados y en producción (P-01 a P-10, DEC-037 y DEC-038) | — | `produccion` |
 | 6 · Cierre | **Siguiente** | — | — |
 
-**`produccion` tiene las Fases 0 a 5** (último: PR #30, `de2f9a1`, 2026-11-19) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
+**`produccion` tiene las Fases 0 a 5** (último: PR #33, `4a2edff`, 2026-11-21) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
 Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas; las `[~]` están **ignoradas hasta nuevo aviso** (no cuentan como faltantes: dependen de la verificación del negocio en Meta, DEC-WA-2).
 
@@ -335,4 +335,25 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 
 - **WhatsApp real (P-08):** desde el número de prueba de Meta (+1 555 183 3695) al número personal de Luis dado de alta como destinatario. `wa:probar`: plantilla `hello_world` y aviso de Nexo aceptados por Meta. En la app local en modo real: reunión → cola → «Enviar» → `enviado` con el id de Meta. El token del panel caduca a las 24 h (`operacion.md` §14).
 - **Cuentas de la semilla en producción (DEC-038):** 11 cuentas con el «Equipo Nexo» y todos sus datos, correos `@nexo.lol` y contraseñas propias (en `.credenciales-demo.md`, fuera de git). Comprobado: Valeria entra en `api.nexo.lol` y ve las tareas; la contraseña pública de la semilla es rechazada.
+
+### Despliegue (2026-11-21)
+
+- PR #31 (`Dev_Luis` → `dev`), #32 (`dev` → `main`) y #33 (`main` → `produccion`), con la CI en verde en los tres. `produccion` en `4a2edff`.
+- **Render:** *Manual Deploy* de `nexo-api`; la `0032` se aplicó (solo procesos). **Vercel** publicó el front solo.
+- **Comprobado en producción** con la cuenta de Carlos (DEC-038): entra, la agenda personal responde, las solicitudes del invitado le dan 403 por ser integrante y la exportación de sus datos responde 200; el front nuevo trae Ajustes → Privacidad (FALT-09) y las solicitudes del invitado.
+- Producción sigue con `WHATSAPP_PROVIDER=simulado`. La plantilla `nexo_aviso` está en revisión de Meta.
+
+## Fase 6 · Cierre (siguiente)
+
+Según `03`, Fase 6. Plan:
+
+| # | Tarea | Tipo | Cómo |
+|---|---|---|---|
+| F6-1 | Secretos de producción con la lista de `09_Seguridad_y_Secretos.md` | código + revisión | Repasar la lista; gitleaks ya corre en la CI |
+| F6-2 | Prueba de humo completa en producción: registrar, crear equipo, proponer y votar, chatear y ver un aviso de WhatsApp (simulado) | código (Playwright contra `app.nexo.lol`) + persona | Un flujo E2E apuntando a producción con cuentas creadas para la prueba y borradas al final |
+| F6-3 | Webhook de WhatsApp en la URL pública | — | `[~]` Ignorado hasta nuevo aviso: solo con cuenta real y token permanente (DEC-WA-2) |
+| F6-4 | `README.md` para que alguien nuevo levante el proyecto en local | código | Instalación, BD local (PGlite o Docker), semilla y cuentas, pruebas y ramas |
+| F6-5 | Tabla de verificación del artículo (`04`) sin `[VERIFICAR]` | persona (Carlos e Isac) | Hoy hay 6 marcas (comparativa Trello/Asana y 3 referencias); el código aporta capturas y cifras de pruebas |
+| F6-6 | Resumen de lo que quedó fuera | código | Sección final en este archivo |
+| F6-7 | Tag `v1.0` | — | Con la CI en verde en `produccion` y F6-1 a F6-6 cerrados |
 
