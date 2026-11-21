@@ -771,6 +771,12 @@ export const esquema2faDesafio = z.object({
   metodo: z.enum(['contrasena', 'google']),
 });
 
+export const esquemaAuthGoogle = z.object({
+  estado: z.enum(['ok', '2fa', 'vinculada']),
+  nuevo: z.boolean(),
+  usuario: esquemaUsuarioSesion.optional(),
+});
+
 export const esquema2faCompletar = z.object({
   estado: z.enum(['ok', 'fallo', 'agotado']),
   usuario: esquemaUsuarioSesion.optional(),
@@ -792,6 +798,7 @@ export const esquemaCuentaAuth = z.object({
   correo_verificado: z.boolean(),
   tiene_contrasena: z.boolean(),
   dos_pasos: z.boolean().default(false),
+  google: z.boolean().default(false),
   sesiones_activas: z.number().int(),
 }) satisfies z.ZodType<CuentaAuth>;
 

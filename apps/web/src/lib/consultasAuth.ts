@@ -5,6 +5,7 @@ import type {
   EstadoDosPasos,
   InicioDosPasos,
   PideDosPasos,
+  ProveedoresAcceso,
   Registro,
   SegundoPaso,
   UsuarioSesion,
@@ -133,5 +134,24 @@ export function useCambiarContrasena() {
         cuerpo: datos,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: claveCuenta }),
+  });
+}
+
+// --- AUTH-07 · Entrar con Google ------------------------------------------------------------------
+
+/** ¿Este servidor tiene Google configurado? Si no, el botón no aparece. */
+export function useProveedores() {
+  return useQuery({
+    queryKey: ['auth', 'proveedores'],
+    queryFn: () => api<ProveedoresAcceso>('/auth/proveedores'),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function useDesvincularGoogle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ google: boolean }>('/auth/google/desvincular', { metodo: 'POST' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: claveCuenta }),
   });
 }

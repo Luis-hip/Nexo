@@ -49,6 +49,7 @@ const rutas: RouteObject[] = [
         lazy: diferida(auth, (m) => m.AuthLayout),
         children: [
           { path: 'entrar', lazy: diferida(auth, (m) => m.Entrar) },
+          { path: 'entrar/dos-pasos', lazy: diferida(auth, (m) => m.EntrarDosPasos) },
           { path: 'sesion-expirada', lazy: diferida(auth, (m) => m.SesionExpirada) },
           { path: 'bienvenida/:paso', lazy: diferida(auth, (m) => m.Bienvenida) },
           // Fase 5.1: autenticación real (AUTH-01 a AUTH-06).

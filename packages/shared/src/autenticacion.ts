@@ -71,6 +71,8 @@ export interface CuentaAuth {
   tiene_contrasena: boolean;
   /** AUTH-07: verificación en dos pasos activa. */
   dos_pasos: boolean;
+  /** AUTH-07: cuenta de Google vinculada. */
+  google: boolean;
   sesiones_activas: number;
 }
 
@@ -118,3 +120,20 @@ export interface PideDosPasos {
   dos_pasos: true;
   desafio: string;
 }
+
+/** Métodos de acceso disponibles en este servidor (el botón de Google solo sale si está configurado). */
+export interface ProveedoresAcceso {
+  google: boolean;
+}
+
+/** Mensajes del regreso de Google (`?google=<código>` en /entrar o en Ajustes → Cuenta). */
+export const MENSAJES_GOOGLE: Record<string, string> = {
+  cancelado: 'Cancelaste el acceso con Google.',
+  expirado: 'El acceso con Google tardó demasiado. Inténtalo de nuevo.',
+  error: 'No se pudo completar el acceso con Google. Inténtalo de nuevo.',
+  cuenta_existente:
+    'Ya existe una cuenta con ese correo. Entra con tu contraseña y vincula Google en Ajustes → Cuenta.',
+  google_en_uso: 'Esa cuenta de Google ya está vinculada a otra cuenta de Nexo.',
+  cuenta_bloqueada: 'La cuenta está bloqueada por intentos fallidos. Espera 15 minutos.',
+  vinculada: 'Listo: tu cuenta de Google quedó vinculada.',
+};

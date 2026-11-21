@@ -49,6 +49,14 @@ const esquemaEntorno = z.object({
   /** Plantilla aprobada para mensajes fuera de la ventana de 24 h (DEC-WA-2) y su idioma. */
   WHATSAPP_PLANTILLA: z.string().min(1).default('hello_world'),
   WHATSAPP_PLANTILLA_IDIOMA: z.string().min(2).default('en_US'),
+  /**
+   * AUTH-07 · Entrar con Google (OAuth 2.0 con PKCE, docs/13 1.2). Sin ID y secreto el botón no
+   * aparece. Las URL solo se cambian en pruebas (un servidor que imita a Google).
+   */
+  GOOGLE_CLIENT_ID: textoOpcional,
+  GOOGLE_CLIENT_SECRET: textoOpcional,
+  GOOGLE_AUTH_URL: z.url().default('https://accounts.google.com/o/oauth2/v2/auth'),
+  GOOGLE_TOKEN_URL: z.url().default('https://oauth2.googleapis.com/token'),
   /** Spike 1 a 1: número de WhatsApp de Nexo (para el enlace `wa.me` de la verificación). */
   WHATSAPP_NUMERO_NEXO: z
     .string()
@@ -101,6 +109,16 @@ function problemasDeProduccion(entorno: Record<string, string | undefined>, c: C
     ] as const) {
       if (!c[k]) problemas.push(`falta ${k} (WHATSAPP_PROVIDER=real)`);
     }
+  }
+  // El secreto de Google solo viaja a Google.
+  if (!c.GOOGLE_AUTH_URL.startsWith('https://accounts.google.com/')) {
+    problemas.push('GOOGLE_AUTH_URL debe ser la de Google (https://accounts.google.com/…)');
+  }
+  if (!c.GOOGLE_TOKEN_URL.startsWith('https://oauth2.googleapis.com/')) {
+    problemas.push('GOOGLE_TOKEN_URL debe ser la de Google (https://oauth2.googleapis.com/…)');
+  }
+  if (!!c.GOOGLE_CLIENT_ID !== !!c.GOOGLE_CLIENT_SECRET) {
+    problemas.push('GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET van juntos');
   }
   // El token de Meta solo viaja a Meta.
   if (!c.WHATSAPP_API_URL.startsWith('https://graph.facebook.com/')) {

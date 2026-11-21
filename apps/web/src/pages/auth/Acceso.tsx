@@ -20,6 +20,7 @@ import {
 import { useDevLogin, useUsuariosDev } from '@/lib/consultas';
 import { erroresDe } from '@/lib/validacion';
 import { SegundoPaso } from '@/components/auth/DosPasos';
+import { AccesoGoogle, AvisoGoogle } from '@/components/auth/Google';
 import { destinoSeguro, Tarjeta } from './comunes';
 
 const enlace = 'font-medium text-brand hover:underline';
@@ -83,6 +84,10 @@ export function Entrar() {
       }
       nombre="NX/AUTH-02-Inicio-sesion"
     >
+      <div className="mb-4 space-y-4">
+        <AvisoGoogle codigo={sp.get('google')} />
+        <AccesoGoogle volver={destino} />
+      </div>
       <form onSubmit={enviar} noValidate className="space-y-4">
         {entrar.error && (
           <Banner tono="danger" className="mb-1">
@@ -221,6 +226,9 @@ export function Registro() {
       subtitulo="Organiza tu trabajo y el de tu equipo en un solo lugar."
       nombre="NX/AUTH-01-Registro"
     >
+      <div className="mb-4">
+        <AccesoGoogle />
+      </div>
       <form onSubmit={enviar} noValidate className="space-y-4">
         {registro.error && <Banner tono="danger">{mensajeDeError(registro.error)}</Banner>}
         <Campo etiqueta="Nombre" error={errores.nombre}>
@@ -480,6 +488,47 @@ export function Verificar() {
       >
         Ir a Nexo
       </Link>
+    </Tarjeta>
+  );
+}
+
+// --- AUTH-07 · Segundo paso al volver de Google ------------------------------------------------
+
+/** `/entrar/dos-pasos#desafio=…&volver=…`: Google ya respondió y falta el código de la app. */
+export function EntrarDosPasos() {
+  const nav = useNavigate();
+  const [datos] = useState(() => {
+    const p = new URLSearchParams(window.location.hash.slice(1));
+    return { desafio: p.get('desafio'), volver: destinoSeguro(p.get('volver')) ?? '/app' };
+  });
+  useEffect(() => {
+    // El desafío no se queda en la barra de direcciones ni en el historial.
+    window.history.replaceState(null, '', window.location.pathname);
+  }, []);
+  if (!datos.desafio) {
+    return (
+      <Tarjeta
+        titulo="Verificación en dos pasos"
+        subtitulo="El enlace ya no es válido."
+        nombre="NX/AUTH-07-Google"
+      >
+        <Link to="/entrar" className={enlace}>
+          Volver a iniciar sesión
+        </Link>
+      </Tarjeta>
+    );
+  }
+  return (
+    <Tarjeta
+      titulo="Verificación en dos pasos"
+      subtitulo="Un paso más para entrar."
+      nombre="NX/AUTH-07-Google"
+    >
+      <SegundoPaso
+        desafio={datos.desafio}
+        onListo={() => nav(datos.volver, { replace: true })}
+        onCancelar={() => nav('/entrar', { replace: true })}
+      />
     </Tarjeta>
   );
 }

@@ -6,6 +6,7 @@ import {
   esquemaAuthVerificacion,
   esquemaCuentaAuth,
   esquema2faCompletar,
+  esquemaAuthGoogle,
   esquema2faDesafio,
   esquema2faEstado,
   esquema2faSecreto,
@@ -159,4 +160,45 @@ export const completar2fa = (
     'proc_2fa_completar',
     [tokenHash, paso, respaldoHash, s.tokenHash, s.ip, s.dispositivo, s.expiraEn.toISOString()],
     esquema2faCompletar,
+  );
+
+// --- AUTH-07 · Entrar con Google (`proc_auth_google*`, migración 0038) --------------------------
+
+export const google = (
+  db: Ejecutor,
+  datos: { sub: string; correo: string; verificado: boolean; nombre: string },
+  actorId: string | null,
+  s: DatosSesion,
+) =>
+  llamarProceso(
+    db,
+    'proc_auth_google',
+    [
+      datos.sub,
+      datos.correo,
+      datos.verificado,
+      datos.nombre,
+      actorId,
+      s.tokenHash,
+      s.ip,
+      s.dispositivo,
+      s.expiraEn.toISOString(),
+    ],
+    esquemaAuthGoogle,
+  );
+
+export const desvincularGoogle = (db: Ejecutor, actorId: string) =>
+  llamarProceso(db, 'proc_auth_google_desvincular', [actorId], z.object({ google: z.boolean() }));
+
+export const verificar2fa = (
+  db: Ejecutor,
+  actorId: string,
+  paso: number | null,
+  respaldoHash: string | null,
+) =>
+  llamarProceso(
+    db,
+    'proc_2fa_verificar',
+    [actorId, paso, respaldoHash],
+    z.object({ valido: z.boolean() }),
   );

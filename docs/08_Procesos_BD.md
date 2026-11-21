@@ -1935,7 +1935,7 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_
 - **Lo llama:** `repositorios/autenticacion.ts` → `cuenta()`; `GET /auth/cuenta`.
 - **Pruebas:** P207; `autenticacion.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_cuenta($1)`
-- **Historial:** 2026-11-19 · creación · `0030`. 2026-11-21 · verificación en dos pasos (AUTH-07): suma `dos_pasos` · `0037_dos_pasos.sql`.
+- **Historial:** 2026-11-19 · creación · `0030`. 2026-11-21 · verificación en dos pasos (AUTH-07): suma `dos_pasos` · `0037_dos_pasos.sql`. 2026-11-21 · suma `google` (cuenta de Google vinculada) · `0038_google.sql`.
 
 ### proc_auth_hash_actual
 - **Migración:** `0030_procesos_autenticacion.sql`
@@ -2697,3 +2697,61 @@ Auxiliares: `fn_2fa_activa`, `fn_2fa_crear_desafio`, `fn_2fa_validar` (comprueba
 - **Pruebas:** P236, P237; `dosPasos.test.ts`.
 - **Ejemplo de llamada:** `select proc_2fa_completar($1, 59312345, NULL, $2, '127.0.0.1', 'Firefox', now() + interval '30 days')`
 - **Historial:** 2026-11-21 · creación · `0037`.
+
+---
+
+## Entrar con Google (AUTH-07)
+
+Migración `0038_google.sql` (docs/13_Plan_Integrado_Pendientes.md, 1.2). Pruebas `P239`–`P241` y `apps/api/src/rutas/google.test.ts`. La API hace el flujo OAuth 2.0 con PKCE (`GET /auth/google` y `/auth/google/callback`): el estado y el verificador viajan en una cookie cifrada (AES-256-GCM), y el `id_token` se pide directo a Google y se comprueban emisor, audiencia y vigencia. Sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` el botón no aparece (`GET /auth/proveedores`).
+
+**Reglas:** cuenta creada o vinculada con Google → el correo queda verificado si Google lo marca verificado; con otro correo, el registro manda el correo de verificación de siempre. Una cuenta que ya existe solo se vincula sola si su correo ya estaba verificado en Nexo; si no, hay que entrar con la contraseña y vincular en Ajustes → Cuenta. Con la 2FA activa, Google también pide el segundo paso.
+
+**Procesos que cambian (misma firma):** `proc_auth_cuenta` suma `google`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_auth_google` | Autenticación · sistema | `0038_google.sql` | Vigente |
+| `proc_auth_google_desvincular` | Autenticación · persona | `0038_google.sql` | Vigente |
+| `proc_2fa_verificar` | Autenticación · persona | `0038_google.sql` | Vigente |
+
+### proc_auth_google
+- **Migración:** `0038_google.sql`
+- **Propósito:** entrar (o crear la cuenta) con Google, o vincular Google a la cuenta con sesión.
+- **Parámetros:** `p_sub text`, `p_correo text`, `p_correo_verificado boolean`, `p_nombre text` (lo que confirmó Google). `p_actor_id uuid` (`NULL` = entrar; con valor = vincular). `p_token_hash bytea`, `p_ip text`, `p_dispositivo text`, `p_expira timestamptz` (la sesión nueva, o el desafío si hay 2FA).
+- **Retorno:** `jsonb` `{ estado: ok | 2fa | vinculada, nuevo, usuario? }`.
+- **Reglas y validaciones:** ver arriba. Cuenta nueva sin contraseña, con preferencias y `nuevo: true` (la web la lleva a la bienvenida). Respeta el bloqueo por intentos fallidos.
+- **Errores:** `NX010` · Google no devolvió los datos. `NX012` · `cuenta_existente` (correo sin verificar en Nexo) o `google_en_uso` (ese Google es de otra cuenta). `NX006` · la cuenta con sesión no existe. `NX007` · cuenta bloqueada.
+- **Tablas que toca:** escritura `usuarios`, `preferencias_usuario`, `sesiones` o `desafios_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `google()`; `GET /auth/google/callback`.
+- **Pruebas:** P239, P240, P241; `google.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_google('1098…', 'ana@gmail.com', true, 'Ana', NULL, $1, '127.0.0.1', 'Firefox', now() + interval '30 days')`
+- **Historial:** 2026-11-21 · creación · `0038`.
+
+### proc_auth_google_desvincular
+- **Migración:** `0038_google.sql`
+- **Propósito:** quitar Google de la cuenta.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ google: false }`.
+- **Reglas y validaciones:** solo si la cuenta tiene contraseña; si no, la persona se quedaría sin acceso.
+- **Errores:** `NX007` · `sin_contrasena`. `NX006` · no encontrada.
+- **Tablas que toca:** escritura `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `desvincularGoogle()`; `POST /auth/google/desvincular`.
+- **Pruebas:** P241; `google.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_google_desvincular($1)`
+- **Historial:** 2026-11-21 · creación · `0038`.
+
+### proc_2fa_verificar
+- **Migración:** `0038_google.sql`
+- **Propósito:** comprobar (y consumir) un segundo factor para una acción sensible: eliminar una cuenta que solo usa Google.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint` (o `NULL`/`-1`). `p_respaldo_hash text` (o `NULL`).
+- **Retorno:** `jsonb` `{ valido }`.
+- **Reglas y validaciones:** falso si la 2FA no está activa.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `credenciales_2fa` o `codigos_respaldo_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `verificar2fa()`; `POST /yo/cuenta/eliminar`.
+- **Pruebas:** P241.
+- **Ejemplo de llamada:** `select proc_2fa_verificar($1, NULL, 'hash…')`
+- **Historial:** 2026-11-21 · creación · `0038`.

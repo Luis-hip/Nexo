@@ -11,7 +11,7 @@ import {
   MENSAJE_RECUPERAR,
 } from '@nexo/shared';
 import { hash, verify } from '@node-rs/argon2';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import QRCode from 'qrcode';
 import { exigirSesion } from '../autenticacion';
@@ -237,6 +237,135 @@ export const rutasAutenticacion: FastifyPluginAsync<Opciones> = async (
     );
     return { estado, codigos };
   });
+
+  // --- AUTH-07 · Entrar con Google (OAuth 2.0 con PKCE, docs/13 1.2) ---------------------------
+  //
+  // El estado y el verificador PKCE viajan en una cookie cifrada y autenticada (AES-256-GCM) que
+  // solo sirve 10 minutos. El token de Google se pide directo a Google por TLS (OpenID permite no
+  // verificar la firma del id_token recibido así) y se comprueban emisor, audiencia y vigencia.
+
+  const COOKIE_GOOGLE = 'nexo_google';
+  const googleActivo = !!(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET);
+  const appUrl = config.APP_URL.replace(/\/$/, '');
+  const callbackGoogle = `${config.API_URL.replace(/\/$/, '')}/auth/google/callback`;
+
+  app.get('/auth/proveedores', async () => ({ google: googleActivo }));
+
+  app.get('/auth/google', limite(20), async (req, res) => {
+    if (!googleActivo)
+      throw new ErrorNexo(404, 'google_no_configurado', 'Google no está configurado.');
+    const q = req.query as { volver?: string; modo?: string };
+    const modo = q.modo === 'vincular' ? 'vincular' : 'entrar';
+    if (modo === 'vincular') exigirSesion(req);
+    const volver =
+      q.volver && q.volver.startsWith('/') && !q.volver.startsWith('//') ? q.volver : '/app';
+    const estado = randomBytes(24).toString('base64url');
+    const verificador = randomBytes(48).toString('base64url');
+    const reto = createHash('sha256').update(verificador).digest('base64url');
+    res.setCookie(
+      COOKIE_GOOGLE,
+      cifrar(config, JSON.stringify({ estado, verificador, volver, modo })),
+      {
+        path: '/auth/google',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: produccion,
+        maxAge: 600,
+      },
+    );
+    const url = new URL(config.GOOGLE_AUTH_URL);
+    url.search = new URLSearchParams({
+      client_id: config.GOOGLE_CLIENT_ID!,
+      redirect_uri: callbackGoogle,
+      response_type: 'code',
+      scope: 'openid email profile',
+      state: estado,
+      code_challenge: reto,
+      code_challenge_method: 'S256',
+      prompt: 'select_account',
+    }).toString();
+    return res.redirect(url.toString());
+  });
+
+  app.get('/auth/google/callback', limite(20), async (req, res) => {
+    const q = req.query as { code?: string; state?: string; error?: string };
+    const guardado = req.cookies[COOKIE_GOOGLE];
+    res.clearCookie(COOKIE_GOOGLE, { path: '/auth/google' });
+    let datos: { estado: string; verificador: string; volver: string; modo: string } | null;
+    try {
+      datos = guardado ? JSON.parse(descifrar(config, guardado)) : null;
+    } catch {
+      datos = null;
+    }
+    const vincular = datos?.modo === 'vincular';
+    const fallo = (codigo: string) =>
+      res.redirect(`${appUrl}${vincular ? '/ajustes/cuenta' : '/entrar'}?google=${codigo}`);
+    if (!googleActivo || !datos) return fallo('expirado');
+    if (q.error) return fallo('cancelado');
+    if (!q.code || q.state !== datos.estado) return fallo('error');
+    try {
+      const r = await fetch(config.GOOGLE_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code: q.code,
+          client_id: config.GOOGLE_CLIENT_ID!,
+          client_secret: config.GOOGLE_CLIENT_SECRET!,
+          redirect_uri: callbackGoogle,
+          grant_type: 'authorization_code',
+          code_verifier: datos.verificador,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const t = (await r.json().catch(() => null)) as { id_token?: string } | null;
+      const partes = t?.id_token?.split('.');
+      if (!r.ok || !partes || partes.length !== 3) return fallo('error');
+      const p = JSON.parse(Buffer.from(partes[1]!, 'base64url').toString('utf8')) as {
+        iss?: string;
+        aud?: string;
+        exp?: number;
+        sub?: string;
+        email?: string;
+        email_verified?: boolean;
+        name?: string;
+      };
+      const emisorOk = p.iss === 'https://accounts.google.com' || p.iss === 'accounts.google.com';
+      if (!emisorOk || p.aud !== config.GOOGLE_CLIENT_ID || !p.exp || p.exp * 1000 < Date.now()) {
+        return fallo('error');
+      }
+      const { token, datos: sesion } = nuevaSesion(req);
+      const actor = vincular ? (req.sesion?.usuario.id ?? null) : null;
+      if (vincular && !actor) return fallo('expirado');
+      const g = await repo.google(
+        db,
+        {
+          sub: p.sub ?? '',
+          correo: p.email ?? '',
+          verificado: p.email_verified === true,
+          nombre: p.name ?? '',
+        },
+        actor,
+        sesion,
+      );
+      if (g.estado === 'vinculada')
+        return res.redirect(`${appUrl}/ajustes/cuenta?google=vinculada`);
+      if (g.estado === '2fa') {
+        // El desafío va en el fragmento (#): no llega a los registros ni al Referer.
+        const frag = new URLSearchParams({ desafio: token, volver: datos.volver }).toString();
+        return res.redirect(`${appUrl}/entrar/dos-pasos#${frag}`);
+      }
+      ponerCookie(res, token, sesion.expiraEn);
+      return res.redirect(`${appUrl}${g.nuevo ? '/bienvenida/1' : datos.volver}`);
+    } catch (e) {
+      if (e instanceof ErrorNexo) return fallo(e.codigo);
+      req.log.error({ err: e }, 'Falló el acceso con Google.');
+      return fallo('error');
+    }
+  });
+
+  app.post('/auth/google/desvincular', limite(5), async (req) =>
+    repo.desvincularGoogle(db, exigirSesion(req).usuario.id),
+  );
 
   // --- AUTH-03 y AUTH-04 · Recuperar contraseña -----------------------------------------------
   app.post('/auth/recuperar', limite(5), async (req, res) => {

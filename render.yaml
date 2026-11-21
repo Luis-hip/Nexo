@@ -71,6 +71,12 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+      # AUTH-07 · Entrar con Google (docs/13 1.2): ID y secreto del cliente OAuth de Google Cloud.
+      # Sin ellos el botón no aparece. Redirección autorizada: https://api.nexo.lol/auth/google/callback
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
 
 databases:
   - name: nexo-bd

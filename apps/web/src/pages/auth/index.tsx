@@ -24,7 +24,15 @@ import { useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { destinoSeguro, Tarjeta } from './comunes';
 
 // Fase 5.1: AUTH-01 a AUTH-06 (registro, entrar, recuperar, restablecer y verificar).
-export { Entrar, Recuperar, RecuperarEnviado, Registro, Restablecer, Verificar } from './Acceso';
+export {
+  Entrar,
+  EntrarDosPasos,
+  Recuperar,
+  RecuperarEnviado,
+  Registro,
+  Restablecer,
+  Verificar,
+} from './Acceso';
 
 export function AuthLayout() {
   return (

@@ -3359,3 +3359,63 @@ DO $$ DECLARE u uuid := pg_temp.usuario('Dani Dos Pasos'); e jsonb; ok int := 0;
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P238: % de 2 rechazos', ok; END IF;
   RAISE NOTICE 'OK P238: desactivar y regenerar con segundo factor';
 END $$;
+
+-- P239. Google · entrar crea la cuenta con el correo verificado (si Google lo verificó) y la sesión;
+--       la segunda vez entra a la misma cuenta, sin crear otra.
+DO $$ DECLARE r jsonb; v_id uuid; BEGIN
+  r := proc_auth_google('sub-P239', 'Nueva.Google@P239.test', true, 'Gina Google', NULL,
+                        sha256('s-P239a'), '127.0.0.1', 'prueba', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR NOT (r->>'nuevo')::boolean THEN RAISE EXCEPTION 'FALLO P239: %', r; END IF;
+  SELECT id INTO v_id FROM usuarios WHERE correo = 'nueva.google@p239.test'
+     AND google_sub = 'sub-P239' AND correo_verificado_en IS NOT NULL AND hash_contrasena IS NULL;
+  IF v_id IS NULL OR NOT EXISTS (SELECT 1 FROM sesiones WHERE token_hash = sha256('s-P239a')) THEN
+    RAISE EXCEPTION 'FALLO P239: cuenta o sesión';
+  END IF;
+  r := proc_auth_google('sub-P239', 'nueva.google@p239.test', true, 'Gina', NULL,
+                        sha256('s-P239b'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR (r->>'nuevo')::boolean OR (r->'usuario'->>'id')::uuid <> v_id THEN
+    RAISE EXCEPTION 'FALLO P239: segunda vez %', r;
+  END IF;
+  IF (proc_auth_cuenta(v_id)->>'google')::boolean IS NOT TRUE THEN RAISE EXCEPTION 'FALLO P239: cuenta sin google'; END IF;
+  RAISE NOTICE 'OK P239: entrar con Google crea la cuenta verificada';
+END $$;
+
+-- P240. Google · una cuenta existente con el correo SIN verificar no se vincula sola (NX012); con el
+--       correo verificado sí. Con sesión se vincula aunque no esté verificada, y el correo queda
+--       verificado si coincide. Un sub de Google no se puede vincular a dos cuentas.
+DO $$ DECLARE a uuid; b uuid; r jsonb; ok int := 0; BEGIN
+  INSERT INTO usuarios (correo, nombre, hash_contrasena) VALUES ('sinverif@p240.test', 'Sin Verificar', '$argon2id$x') RETURNING id INTO a;
+  INSERT INTO usuarios (correo, nombre, hash_contrasena, correo_verificado_en) VALUES ('verif@p240.test', 'Verificada', '$argon2id$x', now()) RETURNING id INTO b;
+  BEGIN PERFORM proc_auth_google('sub-P240a', 'sinverif@p240.test', true, 'X', NULL, sha256('s-P240-1'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF (SELECT google_sub FROM usuarios WHERE id = a) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P240: se vinculó sola'; END IF;
+  r := proc_auth_google('sub-P240b', 'verif@p240.test', true, 'X', NULL, sha256('s-P240-2'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR (SELECT google_sub FROM usuarios WHERE id = b) <> 'sub-P240b' THEN RAISE EXCEPTION 'FALLO P240: verificada %', r; END IF;
+  r := proc_auth_google('sub-P240a', 'sinverif@p240.test', true, 'X', a, sha256('s-P240-3'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'vinculada' OR (SELECT correo_verificado_en FROM usuarios WHERE id = a) IS NULL THEN
+    RAISE EXCEPTION 'FALLO P240: vincular con sesión %', r;
+  END IF;
+  BEGIN PERFORM proc_auth_google('sub-P240a', 'otra@p240.test', true, 'X', b, sha256('s-P240-4'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P240: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P240: vincular Google sin apoderarse de cuentas';
+END $$;
+
+-- P241. Google · con la 2FA activa pide el segundo paso (desafío «google», sin sesión); desvincular
+--       exige contraseña (NX007 sin ella); proc_2fa_verificar consume un factor válido.
+DO $$ DECLARE r jsonb; v uuid; ok int := 0; BEGIN
+  r := proc_auth_google('sub-P241', 'dos@p241.test', true, 'Dos Factores', NULL, sha256('s-P241a'), '', '', now() + interval '1 day');
+  v := (r->'usuario'->>'id')::uuid;
+  PERFORM proc_2fa_iniciar(v, 'cifrado');
+  PERFORM proc_2fa_confirmar(v, 500, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  r := proc_auth_google('sub-P241', 'dos@p241.test', true, 'Dos Factores', NULL, sha256('s-P241b'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> '2fa' OR EXISTS (SELECT 1 FROM sesiones WHERE token_hash = sha256('s-P241b'))
+     OR (SELECT metodo FROM desafios_2fa WHERE token_hash = sha256('s-P241b')) <> 'google' THEN
+    RAISE EXCEPTION 'FALLO P241: %', r;
+  END IF;
+  BEGIN PERFORM proc_auth_google_desvincular(v); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF (proc_2fa_verificar(v, 500, NULL)->>'valido')::boolean THEN RAISE EXCEPTION 'FALLO P241: paso repetido valió'; END IF;
+  IF NOT (proc_2fa_verificar(v, NULL, 'h4')->>'valido')::boolean THEN RAISE EXCEPTION 'FALLO P241: respaldo no valió'; END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P241: desvincular sin contraseña'; END IF;
+  RAISE NOTICE 'OK P241: Google con dos pasos y desvincular';
+END $$;
