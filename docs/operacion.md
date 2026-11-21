@@ -89,4 +89,26 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 1. **Migración `0031`.** Agrega columnas e índices a las tablas de WhatsApp y 20 procesos; marca como procesados los eventos que ya había, para que el despachador no mande avisos viejos. Comprobar en el registro de Render que aparece y que la API arranca.
 2. **Temporizador.** La API corre el ciclo de WhatsApp cada minuto (vencimientos, eventos, reportes, envíos). Con la API dormida no corre; al despertar se pone al día.
 3. **`WHATSAPP_PROVIDER=simulado`** (en `render.yaml`): los equipos pueden conectar el simulado y todo funciona, pero ningún mensaje sale a WhatsApp. **No** cambiarlo a `real` sin decisión del equipo: envía mensajes de verdad.
-4. **Para el envío real (cuando haya OBA):** poner a mano en Render `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET` y `WHATSAPP_VERIFY_TOKEN` (el servidor no arranca con `real` si falta alguna), cambiar a `real`, y en Meta for Developers suscribir el webhook a `https://api.nexo.lol/whatsapp/webhook` con el mismo token de verificación. La firma `X-Hub-Signature-256` se comprueba con `WHATSAPP_APP_SECRET`.
+4. **Envío real con el número de pruebas (DEC-WA-2), en local:** en `apps/api/.env` poner `WHATSAPP_TOKEN` (token de acceso de la app en Meta for Developers → WhatsApp → Configuración de la API) y `WHATSAPP_PHONE_ID` (el «Identificador del número de teléfono» de prueba); dar de alta como destinatario el número que recibirá (hasta 5) en esa misma pantalla, y correr `pnpm --filter @nexo/api wa:probar +52XXXXXXXXXX`. El script dice desde qué `phone_number_id` envía y a qué número, y manda la plantilla `hello_world` y un aviso de Nexo (si la persona no le ha escrito al número en 24 h, Meta solo acepta la plantilla y Nexo la usa sola: `WHATSAPP_PLANTILLA`). Para la app completa: `WHATSAPP_PROVIDER=real` con las cuatro variables, conectar el equipo en «Mensajes directos» (WA-06) y que cada persona guarde su número y acepte en Ajustes → WhatsApp.
+5. **Para el envío a grupos (ignorado hasta nuevo aviso, DEC-WA-2; cuando haya OBA):** poner a mano en Render `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET` y `WHATSAPP_VERIFY_TOKEN` (el servidor no arranca con `real` si falta alguna), cambiar a `real`, y en Meta for Developers suscribir el webhook a `https://api.nexo.lol/whatsapp/webhook` con el mismo token de verificación. La firma `X-Hub-Signature-256` se comprueba con `WHATSAPP_APP_SECRET`.
+
+## 11. Pendientes tras la Fase 5 (DEC-037)
+
+*Agregado el 2026-11-20.* La migración `0032` no cambia tablas: solo agrega procesos (se aplica sola al arrancar en Render). Nada nuevo que configurar; el correo de invitación sale cuando haya `RESEND_API_KEY`.
+
+## 12. Ignorado hasta nuevo aviso
+
+*Decisión de Luis, 2026-11-20.* No se trabajan mientras no se diga otra cosa: repositorio privado, licencia, *secret scanning* y *push protection*; cuenta de Resend (`RESEND_API_KEY`: sin ella no salen correos en producción); copias de seguridad de la BD, plan de pago de Render (la BD gratuita **caduca el 2026-12-18**), raíz `nexo.lol` y *Auto-Deploy* de Render (se sigue desplegando a mano).
+
+## 13. Cuentas de la semilla en producción (DEC-038)
+
+*Cargadas el 2026-11-21.* Las 11 personas de la semilla (con el «Equipo Nexo», sus tareas, sprints, chat y reuniones) existen en `https://app.nexo.lol` con correos `@nexo.lol` y contraseñas propias. **Los accesos están en `.credenciales-demo.md`** (en la máquina de Luis; no está en git). Para volver a generarlos haría falta borrar el equipo y las cuentas de la semilla en producción y correr otra vez `db:demo` con `DATABASE_URL_PRODUCCION` (la «External Database URL» de `nexo-bd` en Render) en `apps/api/.env`; después se borra esa línea.
+
+## 14. Prueba real de WhatsApp (2026-11-21)
+
+- `pnpm --filter @nexo/api wa:probar` desde el número de prueba **+1 555 183 3695** (`phone_number_id` 1574533925737980) al número de Luis dado de alta como destinatario en Meta: Meta aceptó la plantilla `hello_world` y el aviso de Nexo (ids `wamid.…`).
+- En la app local con `WHATSAPP_PROVIDER=real`: el «Equipo Nexo» conectado en «Mensajes directos», una reunión generó el aviso, la líder lo envió desde la cola y quedó `enviado` con el id de Meta.
+- **El token del panel de pruebas caduca a las 24 h.** Para un envío continuo hace falta un token permanente de un usuario del sistema (Business Manager → Usuarios del sistema → Generar token con `whatsapp_business_messaging`). Producción sigue en `simulado`.
+- **Resultado:** la primera vez solo llegó `hello_world`: Meta aceptó los textos pero los descartó porque Luis no había escrito al número en 24 h (sin webhook en local, no se ve). Tras escribirle «hola», los textos llegaron, por script y desde la app («Segunda prueba real (texto libre)»: 1 enviado, 0 fallidos).
+- **Plantilla propia `nexo_aviso`** (es_MX, utilidad) creada en la WABA para que los avisos lleguen sin depender de la ventana. Con `WHATSAPP_PLANTILLA=nexo_aviso` y `WHATSAPP_PLANTILLA_IDIOMA=es_MX`, todo aviso directo sale como esa plantilla (DEC-WA-2). Para producción, además de estas dos variables hace falta el token permanente.
+

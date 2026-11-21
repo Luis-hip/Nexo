@@ -2837,3 +2837,155 @@ DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); i1 uuid := p
   IF v->0->'destinatarios' <> '["+5215511112222"]'::jsonb THEN RAISE EXCEPTION 'FALLO P169: %', v->0->'destinatarios'; END IF;
   RAISE NOTICE 'OK P169: destinatarios con consentimiento';
 END $$;
+
+-- =============================================================================================
+-- Pendientes tras la Fase 5 (0032, DEC-037). Pruebas P210 en adelante.
+-- =============================================================================================
+
+-- P210. proc_personal_agenda: las reuniones de mis equipos (no las de equipos donde soy invitado),
+--       con el nombre del equipo; un rango de más de 62 días es NX010.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); i1 uuid := pg_temp.integrante(e, 1); inv uuid := pg_temp.invitado(e); v jsonb; ok int := 0; BEGIN
+  PERFORM pg_temp.reunion(e, pg_temp.lider(e), '{"titulo": "Agenda de prueba"}');
+  v := proc_personal_agenda(i1, now(), now() + interval '7 days');
+  IF jsonb_array_length(v) <> 1 OR v->0->>'titulo' <> 'Agenda de prueba' OR v->0->>'equipo_nombre' <> 'Equipo de prueba' THEN
+    RAISE EXCEPTION 'FALLO P210: %', v;
+  END IF;
+  IF jsonb_array_length(proc_personal_agenda(inv, now(), now() + interval '7 days')) <> 0 THEN
+    RAISE EXCEPTION 'FALLO P210: el invitado ve reuniones';
+  END IF;
+  BEGIN PERFORM proc_personal_agenda(i1, now(), now() + interval '90 days'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P210: rango largo aceptado'; END IF;
+  RAISE NOTICE 'OK P210: proc_personal_agenda';
+END $$;
+
+-- P211. proc_datos_exportar: trae perfil, equipos, tareas y mensajes; nunca el hash; deja constancia.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); i1 uuid := pg_temp.integrante(e, 1); v jsonb; BEGIN
+  UPDATE usuarios SET hash_contrasena = pg_temp.hash_falso() WHERE id = i1;
+  PERFORM pg_temp.decir(i1, pg_temp.canal(e, 'equipo'), 'Hola para exportar');
+  INSERT INTO tareas (dueno_id, codigo, titulo) VALUES (i1, 1, 'Tarea personal exportable');
+  v := proc_datos_exportar(i1);
+  IF v->'datos'->'perfil' ? 'hash_contrasena' OR v->'datos'->'perfil'->>'nombre' <> 'Integrante 1'
+     OR jsonb_array_length(v->'datos'->'equipos') <> 1
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v->'datos'->'mensajes') x WHERE x->>'texto' = 'Hola para exportar')
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v->'datos'->'tareas') x WHERE x->>'titulo' = 'Tarea personal exportable')
+     OR (SELECT estado FROM exportaciones_datos WHERE id = (v->>'exportacion_id')::uuid) <> 'lista' THEN
+    RAISE EXCEPTION 'FALLO P211: %', v;
+  END IF;
+  RAISE NOTICE 'OK P211: proc_datos_exportar';
+END $$;
+
+-- P212. proc_cuenta_eliminar: el líder con equipo primero transfiere (NX007); el integrante sale de
+--       sus equipos, pierde sus tareas personales y sesiones y su cuenta queda anónima.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); i1 uuid := pg_temp.integrante(e, 1); ok int := 0; BEGIN
+  BEGIN PERFORM proc_cuenta_eliminar(pg_temp.lider(e)); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P212: el líder eliminó su cuenta'; END IF;
+  INSERT INTO tareas (dueno_id, codigo, titulo) VALUES (i1, 1, 'Se borra');
+  PERFORM proc_cuenta_eliminar(i1);
+  IF (SELECT nombre FROM usuarios WHERE id = i1) <> 'Cuenta eliminada'
+     OR (SELECT eliminado_en IS NULL OR hash_contrasena IS NOT NULL FROM usuarios WHERE id = i1)
+     OR EXISTS (SELECT 1 FROM tareas WHERE dueno_id = i1)
+     OR EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = i1)
+     OR EXISTS (SELECT 1 FROM membresias WHERE usuario_id = i1 AND estado = 'activa') THEN
+    RAISE EXCEPTION 'FALLO P212: la cuenta no quedó eliminada';
+  END IF;
+  RAISE NOTICE 'OK P212: proc_cuenta_eliminar';
+END $$;
+
+-- P213. proc_cuenta_eliminar: quien lidera un equipo donde solo está él (más invitados) lo archiva.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(0); BEGIN
+  PERFORM proc_cuenta_eliminar(pg_temp.lider(e));
+  IF (SELECT estado FROM equipos WHERE id = e) <> 'archivado' THEN RAISE EXCEPTION 'FALLO P213: equipo sin archivar'; END IF;
+  RAISE NOTICE 'OK P213: equipo de una persona archivado';
+END $$;
+
+-- P214. Solicitudes del invitado: solo el invitado pide (NX005 al integrante); repetir devuelve la
+--       misma; el líder la ve y recibe un aviso; el integrante no las lista (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); inv uuid := pg_temp.invitado(e); s jsonb; ok int := 0; BEGIN
+  BEGIN PERFORM proc_solicitud_invitado_crear(pg_temp.integrante(e, 1), e, 'ampliacion'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  s := proc_solicitud_invitado_crear(inv, e, 'ampliacion');
+  IF (proc_solicitud_invitado_crear(inv, e, 'ampliacion')->>'id') <> s->>'id' THEN RAISE EXCEPTION 'FALLO P214: duplicada'; END IF;
+  IF jsonb_array_length(proc_solicitud_invitado_listar(pg_temp.lider(e), e)) <> 1
+     OR NOT EXISTS (SELECT 1 FROM notificaciones WHERE usuario_id = pg_temp.lider(e) AND titulo LIKE '%pide más días%') THEN
+    RAISE EXCEPTION 'FALLO P214: el líder no la ve';
+  END IF;
+  BEGIN PERFORM proc_solicitud_invitado_listar(pg_temp.integrante(e, 1), e); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_solicitud_invitado_crear(inv, e, 'otra'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P214: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P214: proc_solicitud_invitado_crear y _listar';
+END $$;
+
+-- P215. proc_solicitud_invitado_resolver: aprobar la ampliación suma días; aprobar la conversión lo
+--       hace integrante; responder dos veces es NX007; solo el líder (NX005).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); inv uuid := pg_temp.invitado(e); a jsonb; c jsonb; antes timestamptz; ok int := 0; BEGIN
+  antes := (SELECT caduca_en FROM membresias WHERE equipo_id = e AND usuario_id = inv);
+  a := proc_solicitud_invitado_crear(inv, e, 'ampliacion');
+  BEGIN PERFORM proc_solicitud_invitado_resolver(pg_temp.integrante(e, 1), e, (a->>'id')::uuid, true, 14); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  a := proc_solicitud_invitado_resolver(pg_temp.lider(e), e, (a->>'id')::uuid, true, 14);
+  IF a->>'estado' <> 'aprobada' OR (SELECT caduca_en FROM membresias WHERE equipo_id = e AND usuario_id = inv) < antes + interval '13 days' THEN
+    RAISE EXCEPTION 'FALLO P215: ampliación %', a;
+  END IF;
+  BEGIN PERFORM proc_solicitud_invitado_resolver(pg_temp.lider(e), e, (a->>'id')::uuid, true, 7); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  c := proc_solicitud_invitado_crear(inv, e, 'conversion');
+  PERFORM proc_solicitud_invitado_resolver(pg_temp.lider(e), e, (c->>'id')::uuid, true);
+  IF (SELECT rol FROM membresias WHERE equipo_id = e AND usuario_id = inv AND estado = 'activa') <> 'integrante' THEN
+    RAISE EXCEPTION 'FALLO P215: no se convirtió';
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P215: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P215: proc_solicitud_invitado_resolver';
+END $$;
+
+-- P216. Rechazar una solicitud no cambia el acceso y avisa al invitado.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); inv uuid := pg_temp.invitado(e); s jsonb; antes timestamptz; BEGIN
+  antes := (SELECT caduca_en FROM membresias WHERE equipo_id = e AND usuario_id = inv);
+  s := proc_solicitud_invitado_crear(inv, e, 'ampliacion');
+  s := proc_solicitud_invitado_resolver(pg_temp.lider(e), e, (s->>'id')::uuid, false);
+  IF s->>'estado' <> 'rechazada' OR (SELECT caduca_en FROM membresias WHERE equipo_id = e AND usuario_id = inv) <> antes
+     OR NOT EXISTS (SELECT 1 FROM notificaciones WHERE usuario_id = inv AND titulo LIKE 'El líder no aprobó%') THEN
+    RAISE EXCEPTION 'FALLO P216: %', s;
+  END IF;
+  RAISE NOTICE 'OK P216: solicitud rechazada';
+END $$;
+
+-- P217. proc_sprint_fotos_diarias: guarda la foto de hoy de cada sprint activo, una sola por día.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); s uuid := pg_temp.planear(e); r jsonb; BEGIN
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  DELETE FROM sprint_instantaneas WHERE sprint_id = s;
+  r := proc_sprint_fotos_diarias();
+  r := proc_sprint_fotos_diarias();
+  IF (r->>'sprints')::int < 1 OR (SELECT count(*) FROM sprint_instantaneas WHERE sprint_id = s) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P217: %', r;
+  END IF;
+  RAISE NOTICE 'OK P217: proc_sprint_fotos_diarias';
+END $$;
+
+-- P218. proc_chat_editar: el autor corrige su mensaje (queda «editado»); otra persona no puede
+--       (NX005); vacío es NX010 y uno eliminado es NX007.
+DO $$ DECLARE e uuid := pg_temp.equipo_chat(1); i1 uuid := pg_temp.integrante(e, 1); m jsonb; ok int := 0; BEGIN
+  m := pg_temp.decir(i1, pg_temp.canal(e, 'equipo'), 'Texto con erorr');
+  m := proc_chat_editar(i1, (m->>'id')::uuid, 'Texto con error');
+  IF m->>'texto' <> 'Texto con error' OR m->>'editado_en' IS NULL THEN RAISE EXCEPTION 'FALLO P218: %', m; END IF;
+  BEGIN PERFORM proc_chat_editar(pg_temp.lider(e), (m->>'id')::uuid, 'Ajeno'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_chat_editar(i1, (m->>'id')::uuid, '   '); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_chat_eliminar(i1, (m->>'id')::uuid);
+  BEGIN PERFORM proc_chat_editar(i1, (m->>'id')::uuid, 'Otra vez'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P218: % de 3 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P218: proc_chat_editar';
+END $$;
+
+-- P219. proc_usuario_foto_guardar y proc_usuario_foto: guarda la foto (solo imagen, hasta 1 MB),
+--       reemplaza la anterior, la sirve y se puede quitar.
+DO $$ DECLARE u uuid := pg_temp.usuario(); r jsonb; ok int := 0; BEGIN
+  r := proc_usuario_foto_guardar(u, 'image/png', '\x89504e47'::bytea);
+  r := proc_usuario_foto_guardar(u, 'image/png', '\x89504e4701'::bytea);
+  IF (SELECT avatar_url FROM usuarios WHERE id = u) <> r->>'avatar_url'
+     OR (SELECT count(*) FROM archivos WHERE subido_por = u AND storage_key LIKE 'foto:%') <> 1
+     OR proc_usuario_foto(u)->>'contenido' <> encode('\x89504e4701'::bytea, 'base64') THEN
+    RAISE EXCEPTION 'FALLO P219: %', r;
+  END IF;
+  BEGIN PERFORM proc_usuario_foto_guardar(u, 'application/pdf', '\x25'::bytea); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_usuario_foto_guardar(u, NULL, NULL);
+  IF (SELECT avatar_url FROM usuarios WHERE id = u) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P219: no se quitó'; END IF;
+  BEGIN PERFORM proc_usuario_foto(u); EXCEPTION WHEN SQLSTATE 'NX006' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P219: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P219: foto de perfil';
+END $$;

@@ -16,7 +16,7 @@
 
 | ID | Decisión | Estado | Efecto mientras tanto |
 |---|---|---|---|
-| D-01 | Capacidad de grupos de WhatsApp: ¿equipos de 8 personas **más** el número de la empresa? | **Pendiente** (ver 7.3) | `equipos.max_miembros` es configurable (1–8, por defecto 8). Se verifica en la documentación oficial de Meta en la Fase 0. |
+| D-01 | Capacidad de grupos de WhatsApp: ¿equipos de 8 personas **más** el número de la empresa? | **Resuelta para esta etapa (DEC-WA-2):** mensajes directos con el número de pruebas, sin grupos; el tope sigue en 8 | `equipos.max_miembros` es configurable (1–8, por defecto 8). Se verifica en la documentación oficial de Meta en la Fase 0. |
 | D-03 | Proveedor de alojamiento (API y PostgreSQL) | **Resuelta** (DEC-027, 2026-11-16) | Front en Vercel; API, worker y BD en Render; dominio propio (`app.` y `api.`). Detalle en `10_Plan_de_Despliegue.md` (Fase 3.5). |
 
 ---

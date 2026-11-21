@@ -4,22 +4,24 @@
 
 ## Estado general
 
-*Actualizado el 2026-11-19, al juntar la parte de WhatsApp de la Fase 4.*
+*Actualizado el 2026-11-21: pendientes tras la Fase 5 resueltos (P-01 a P-10), WhatsApp real probado con el número de pruebas y cuentas de la semilla en producción (DEC-038). Siguiente: Fase 6 · Cierre.*
 
 | Fase | Estado | Etiqueta | Dónde está |
 |---|---|---|---|
-| 0 · Arranque | Construida; quedan 4 pendientes que son de personas (ver Fase 0) | — | `main` |
+| 0 · Arranque | Terminada (lo de personas que quedaba está `[~]` ignorado hasta nuevo aviso o es la revisión de Docker) | — | `produccion` |
 | 1 · Base, roles y espacio personal | Terminada | `fase-1` | `main` |
 | 2 · Equipos, tablero y estados | Terminada | `fase-2` | `main` y `produccion` |
 | 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
 | 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
-| 3.5 · Despliegue | En curso (front y API en línea; faltan prueba de humo, copias y raíz) | — | — |
-| 4 · Chat y WhatsApp | Construida: chat en producción; WhatsApp simulado en `feat/fase-4-whatsapp` (envío real no, DEC-WA-1) | — (al cerrar) | `produccion` (chat) y `feat/fase-4-whatsapp` |
+| 3.5 · Despliegue | En línea con las Fases 0–5; prueba de humo hecha. Copias, raíz `nexo.lol` y plan de pago: `[~]` ignorados hasta nuevo aviso | — | `produccion` |
+| 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp en modo simulado; envío real comprobado en local con el número de pruebas, DEC-WA-2) | `fase-4` | `produccion` |
 | 5 · Autenticación, QA y permisos | Terminada y en producción | `fase-5` | `produccion` |
+| Pendientes tras la Fase 5 | Terminados (P-01 a P-10, DEC-037 y DEC-038) | — | `Dev_Luis` → `produccion` |
+| 6 · Cierre | **Siguiente** | — | — |
 
-**`produccion` ya tiene las Fases 2.5 y 3** (PR #16, 2026-11-18) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
+**`produccion` tiene las Fases 0 a 5** (último: PR #30, `de2f9a1`, 2026-11-19) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
-Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas.
+Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su comprobación para no perder el historial); las `[ ]` siguen abiertas; las `[~]` están **ignoradas hasta nuevo aviso** (no cuentan como faltantes: dependen de la verificación del negocio en Meta, DEC-WA-2).
 
 ## Fase 0 · Arranque del repositorio y de la BD
 
@@ -39,9 +41,9 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 ### Pendiente
 
 - [x] **Proteger `main`, `dev` y `produccion`** en GitHub (DEC-001). Comprobado el 2026-11-18: las tres ramas figuran como protegidas (`protected: true`); el detalle de las reglas (PR obligatorio y el check **Verificar (BD, tipos, lint, pruebas, build)**) no se pudo leer sin sesión de administrador.
-- [ ] Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) Confirmar que el repositorio es **privado** y decidir la **licencia** (DEC-009). Hoy el repositorio es **público** y no tiene licencia (comprobado el 2026-11-18).
 - [ ] Tablero de proyecto en GitHub (Por hacer / En curso / En revisión / Hecho) e *issues* por fase y módulo grande.
-- [ ] **0.7 WhatsApp** (Carlos e Isac, con Jova): cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**. **Avance (2026-11-18):** cuenta, app «Nexo conexión de equipos», WABA de prueba y número de pruebas **hechos**; `docs/whatsapp-verificacion.md` llenado con datos oficiales (preguntas 2 y 6 y la tarifa en MXN, «no se pudo verificar»). **Pendiente:** verificación de la empresa (faltan documentos reales; el sitio `nexo.lol` ya existe pero el dominio raíz sigue en el parking de Porkbun), solicitud de OBA (exige verificación, 30 días y un número real) y decidir D-01. Capturas de evidencia sin adjuntar.
+- [x] **0.7 WhatsApp** (Carlos e Isac, con Jova). **Hecho lo necesario (2026-11-20):** cuenta, app, WABA de prueba y número de pruebas; D-01 resuelta para esta etapa (DEC-WA-2: mensajes directos con el número de pruebas). [~] La verificación de la empresa, la OBA y los grupos quedan **ignorados hasta nuevo aviso**. Historial:: cuenta de Meta for Developers, app, WABA, número de pruebas, verificación de la empresa, y llenar `docs/whatsapp-verificacion.md`. Con eso, decidir **D-01**. **Avance (2026-11-18):** cuenta, app «Nexo conexión de equipos», WABA de prueba y número de pruebas **hechos**; `docs/whatsapp-verificacion.md` llenado con datos oficiales (preguntas 2 y 6 y la tarifa en MXN, «no se pudo verificar»). **Pendiente:** verificación de la empresa (faltan documentos reales; el sitio `nexo.lol` ya existe pero el dominio raíz sigue en el parking de Porkbun), solicitud de OBA (exige verificación, 30 días y un número real) y decidir D-01. Capturas de evidencia sin adjuntar.
 - [ ] Probar `docker compose up -d` + `pnpm db:reset` en una máquina con Docker (la de Luis aún no lo tiene). Mientras tanto la BD se cubre con `pnpm db:local` (PGlite) y con la CI en PostgreSQL 16.
 
 ## Fase 1 · Base, roles y espacio personal
@@ -67,8 +69,8 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 - [ ] Revisión **visual** por una persona (claro/oscuro y móvil): la verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
 - [x] PR `Dev_Luis` → `dev` con CI en verde y tag `fase-1`. Hecho: el tag existe y la Fase 1 llegó a `dev` y `main` junto con la Fase 2.
 - [x] Rutas que mostraban «Próximamente»: crear o unirse a un equipo y `/app/e/:equipo/*` (Fase 2), reportes personales, notificaciones y `/ajustes/*` (Fase 3) y las invitaciones (Fase 2) ya funcionan. **Siguen en «Próximamente»:** registro, recuperar contraseña, verificar correo y 2FA (Fase 5) y WhatsApp personal (Fase 4).
-- [ ] En el calendario personal solo hay entregas de tareas; las reuniones del equipo ya están en el calendario del equipo (Fase 3), pero **no** en el personal (PER-04): queda para una fase posterior. *(El Hill Chart ya se arrastra: Fase 3.1.)*
-- [ ] El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil. La API de archivos (EQ-19, Fase 3) ya existe; falta enlazarla en esas dos pantallas.
+- [x] (Hecho 2026-11-20, P-02.) En el calendario personal solo hay entregas de tareas; las reuniones del equipo ya están en el calendario del equipo (Fase 3), pero **no** en el personal (PER-04): queda para una fase posterior. *(El Hill Chart ya se arrastra: Fase 3.1.)*
+- [x] (2026-11-20, P-09: foto de perfil hecha en el onboarding y en Ajustes; el adjunto del contacto queda en fase posterior, DEC-037.) El formulario de contacto no admite adjuntos y el onboarding no sube foto de perfil. La API de archivos (EQ-19, Fase 3) ya existe; falta enlazarla en esas dos pantallas.
 - Nota: el aviso de cookies guarda la elección en el navegador; no hay analítica instalada.
 
 ## Fase 2 · Equipos, tablero y estados
@@ -92,7 +94,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 - [ ] Revisión **visual** por una persona (claro/oscuro y móvil): solo se tomó una captura del tablero (tema oscuro, escritorio estrecho). El arrastre con el **ratón** no se pudo reproducir con la herramienta de pruebas (suelta de golpe); el arrastre con teclado sí se verificó.
 - [ ] Prueba de «mover en dos navegadores a la vez» a nivel de interfaz: está probada en la API (200 y 409) y la web muestra el aviso, pero no se probó con dos navegadores reales.
 - [x] Salir y expulsar: hechos en la Fase 3, tarea 3.5 «Liderazgo» (DEC-032).
-- [ ] Invitar por correo (necesita el envío de correos, Fase 5) y **solicitudes del invitado** para ampliar su acceso o ser integrante (la tabla `solicitudes_invitado` existe, pero no hay proceso ni pantalla; no estaba en 3.1–3.7). Chat y WhatsApp: Fase 4. Ver DEC-023.
+- [x] (Hecho 2026-11-20, P-04 y P-05.) Invitar por correo (necesita el envío de correos, Fase 5) y **solicitudes del invitado** para ampliar su acceso o ser integrante (la tabla `solicitudes_invitado` existe, pero no hay proceso ni pantalla; no estaba en 3.1–3.7). Chat y WhatsApp: Fase 4. Ver DEC-023.
 - [x] Sin sprint activo no había planeación: los sprints llegaron en la Fase 3.3 (DEC-031).
 
 ## Fase 2.5 · Cambios de alcance
@@ -125,7 +127,7 @@ Las casillas `[x]` de abajo son pendientes que ya se cumplieron (se dejan con su
 ### Pendiente
 
 - [x] **Abrir el PR `Dev_Luis` → `dev`.** Hecho: PR #12 (incluye las Fases 2.5 y 3).
-- [ ] Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2). Hoy es público.
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) Activar *secret scanning* y *push protection* en GitHub y decidir si el repositorio pasa a privado (ver Paso 2). Hoy es público.
 - [ ] Revisar los valores por confirmar V-10 y V-11 y las desviaciones anotadas arriba (decisión de Luis).
 
 ### Cierre
@@ -190,7 +192,7 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [ ] Revisar DEC-031 a DEC-034, en especial: qué entra al planear (más que «aceptadas»), capacidad sin estimaciones, todos los integrantes como candidatos y desempate por antigüedad (DEC-032), archivos guardados en PostgreSQL (DEC-033).
 - [ ] Revisar DEC-030 (forma por miembro) y V-10 y V-11 de la Fase 2.5.
 - [x] PR `Dev_Luis` → `dev` → `main` de las Fases 2.5 y 3 (pendiente de la Fase 2.5): hecho el 2026-11-18.
-- [ ] Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) Activar *secret scanning* y *push protection* y decidir privacidad y licencia del repositorio (Fases 0 y 2.5).
 - [ ] Revisión **visual** por una persona del tablero, sprints y ajustes en claro/oscuro y móvil (Fases 1 a 3). La verificación automática cubrió contraste, estructura y desbordamiento, no el aspecto.
 
 ## Fase 4 · Chat
@@ -209,21 +211,21 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 ### Criterio de la Fase 4 que cubre esta parte
 
 - [x] «Dos navegadores con distintos usuarios intercambian mensajes en tiempo real; un invitado **no** recibe mensajes del chat del equipo (prueba)»: probado de forma automática en `chat.test.ts` con tres conexiones reales. En la interfaz se probó con un navegador y un segundo usuario por la API, **no con dos navegadores reales**.
-- [ ] Los demás puntos del criterio son de WhatsApp (otra rama).
-- [ ] CI en verde: pendiente del push.
+- [x] Los demás puntos del criterio son de WhatsApp: cubiertos en «Fase 4 · WhatsApp» (abajo).
+- [x] CI en verde (PR #23 a #30).
 
 ### Pendiente o movido
 
 - [x] **El despachador de eventos** (avisos de asignaciones, propuestas y vencimientos) se hizo con WhatsApp (ver abajo, DEC-WA-1), en el temporizador de la API y **sin `pg-boss`**. Siguen sin hacerse: sustituir `trabajos/plazos.ts` y la foto nocturna del burndown.
-- [ ] Adjuntar archivos en el chat (la tabla `archivos` tiene `mensaje_id`, pero `proc_archivo_subir` solo acepta `tarea_id`), editar mensajes e indicador de «escribiendo…».
-- [ ] La insignia de no leídos de la barra se refresca cada 2 minutos fuera del chat; dentro del chat es en tiempo real.
+- [x] (2026-11-20, P-07.) Editar mensajes e indicador de «escribiendo…» hechos. Adjuntar archivos en el chat queda en fase posterior (los archivos se adjuntan a la tarea, P-03).
+- [x] (2026-11-20, P-10.) La insignia de no leídos es en tiempo real en todo el equipo (antes, cada 2 minutos fuera del chat).
 - [ ] Render en plan gratuito duerme la API a los 15 minutos: el socket se reconecta al despertar, pero el primer mensaje tarda (DEC-036).
 - [ ] Revisión **visual** por una persona del chat en claro/oscuro y móvil.
-- [ ] Las decisiones del chat usan el prefijo `DEC-CHAT-` para no chocar con las de WhatsApp; renumerar al juntar si se prefiere.
+- [x] Las decisiones del chat usan el prefijo `DEC-CHAT-` y las de WhatsApp `DEC-WA-`: se conservan así (no se renumera, para no romper referencias).
 
 ### Fase 4 · WhatsApp (4.2 y 4.3)
 
-**Estado:** construida en `feat/fase-4-whatsapp` (sale de `produccion` con el chat y la Fase 5). La rama `Dev_Isac` se juntó ahí (`5f5e9fa`): traía otra versión del chat, no WhatsApp, y se conservó la nuestra (DEC-WA-1).
+**Estado:** terminada y en producción desde el 2026-11-19 (PR #27 → #29 → #28 → #30, tag `fase-4` en `de2f9a1`). Se construyó en `feat/fase-4-whatsapp` (sale de `produccion` con el chat y la Fase 5). La rama `Dev_Isac` se juntó ahí (`5f5e9fa`): traía otra versión del chat, no WhatsApp, y se conservó la nuestra (DEC-WA-1).
 
 #### Hecho
 
@@ -242,15 +244,16 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 - [x] Sin consentimiento no se menciona a la persona (P152, `whatsapp.test.ts`).
 - [x] Un reporte programado se genera y se envía a la hora (P161, P162, `whatsapp.test.ts`).
 - [x] Envío real: **nota explícita de por qué no se hizo** (DEC-WA-1: falta la cuenta OBA; el proveedor real y el webhook están construidos y probados sin cuenta).
-- [ ] CI en verde y tag `fase-4`: tras el push y los PR.
+- [x] CI en verde y tag `fase-4` (en `de2f9a1`, 2026-11-20).
 
 #### Pendiente
 
-- [ ] **Envío real (4.3):** verificación de la empresa, OBA y número real (Fase 0.7); después poner `WHATSAPP_PROVIDER=real` y las cuatro variables en Render y probar con el grupo de prueba. Es decisión del equipo.
-- [ ] **FALT-03 y FALT-04** (unirse al grupo y aprobar solicitudes): necesitan la API de grupos con cuenta real. Mientras, el enlace de invitación se ve en Ajustes → WhatsApp.
-- [ ] Verificar el número por código (`whatsapp_usuario.verificado` existe, no hay flujo) y la decisión D-01.
+- [~] **Envío a grupos (4.3 con API de grupos):** verificación de la empresa, OBA y número real. Ignorado hasta nuevo aviso (DEC-WA-2).
+- [ ] **Envío real con el número de pruebas** (mensajes directos, DEC-WA-2): ver «Pendientes tras la Fase 5».
+- [~] **FALT-03 y FALT-04** (unirse al grupo y aprobar solicitudes): necesitan la API de grupos con OBA. Ignorado hasta nuevo aviso; mientras, el enlace de invitación se ve en Ajustes → WhatsApp.
+- [~] Verificar el número por código (`whatsapp_usuario.verificado_en` existe, no hay flujo): ignorado hasta nuevo aviso (P-11). D-01 ya resuelta (DEC-WA-2).
 - [ ] La API duerme en el plan gratuito de Render: los reportes pueden salir tarde (al despertar).
-- [ ] Desplegar: la `0031` marca como procesados los eventos viejos para no mandar avisos atrasados.
+- [x] Desplegado el 2026-11-19 (Render, *Manual Deploy* de `de2f9a1`): la `0031` se aplicó y marcó como procesados los eventos viejos; `/yo/whatsapp` responde 401 sin sesión y el webhook rechaza peticiones sin firma.
 
 ## Fase 5 · Autenticación, QA y permisos
 
@@ -286,9 +289,50 @@ Decisiones y revisiones que son de personas (no bloquean la Fase 4):
 
 ### Pendiente
 
-- [ ] **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
+- [~] (Ignorado hasta nuevo aviso, 2026-11-20.) **Cuenta de Resend** y dominio verificado para enviar correos en producción; poner `RESEND_API_KEY` en Render. Sin ella se puede registrar y entrar, pero no recuperar la contraseña ni verificar el correo.
 - [x] (Hecho en `feat/fase-4-whatsapp`: `0031`, índice, `explain.ts` y sondas.) **Avisar a quien hace WhatsApp** que renumere sus migraciones desde `0031` (DEC-AUTH-2), que agregue en una de ellas el índice `ix_wa_msj_pendientes` para Q4 (y quite `pendiente` de Q4 en `explain.ts`), y que sume a `matriz.test.ts` las sondas de `configurar_whatsapp`, `enviar_cola_whatsapp` y `ver_historial_whatsapp`.
 - [ ] Revisar DEC-AUTH-1 (el registro sí dice si un correo ya tiene cuenta).
 - [ ] 2FA (AUTH-07), cambio de correo e inicio con Google: fase posterior.
 - [x] Capturas de WhatsApp para el artículo (`docs/capturas/wa-*` y `pf-05-*`).
 - [ ] Revisión visual por una persona: la automática cubre contraste, desbordamiento y estructura, no el aspecto.
+
+## Pendientes tras la Fase 5 (auditoría del 2026-11-20)
+
+Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo construido. Se trabajan en `Dev_Luis`. **Tipo:** *código* (lo hace el equipo de desarrollo), *persona* (decisión, cuenta o revisión que no se puede automatizar) o *ignorado* (`[~]`, DEC-WA-2).
+
+| # | Pendiente | Origen | Tipo | Cómo se aborda | Estado |
+|---|---|---|---|---|---|
+| P-01 | Exportar y eliminar mis datos (FALT-09, PF-06) | `03` 9.2, Fase 5 | código | `proc_datos_exportar` y `proc_cuenta_eliminar`; Ajustes → Privacidad descarga el JSON y elimina la cuenta con contraseña y «ELIMINAR» | Hecho (2026-11-20) |
+| P-02 | Reuniones del equipo en el calendario personal (PER-04) | Fase 1 | código | `proc_personal_agenda`; las reuniones salen en el mes y en el día elegido, con enlace al equipo | Hecho (2026-11-20) |
+| P-03 | Adjuntar archivos desde el detalle de la tarea (EQ-06 / EQ-19) | Fase 3 | código | Sección «Archivos» con «Adjuntar» en el detalle (mismas reglas: 5 MB y tipos permitidos) | Hecho (2026-11-20) |
+| P-04 | Invitar por correo (AD-02) | Fase 2 | código | «Enviar por correo» en cada invitación pendiente (`POST …/invitaciones/:id/enviar`); en producción sale cuando haya Resend (P-18) | Hecho (2026-11-20) |
+| P-05 | Solicitudes del invitado (DEC-023) | Fase 2 | código | `proc_solicitud_invitado_*`: botones en el banner del invitado; «Solicitudes de invitados» en Miembros con aprobar (7, 14 o 30 días) o rechazar | Hecho (2026-11-20) |
+| P-06 | Foto diaria del burndown | Fase 3 → 4 | código | `proc_sprint_fotos_diarias` en el temporizador de `trabajos/plazos.ts` | Hecho (2026-11-20) |
+| P-07 | Chat: editar mensajes e indicador «escribiendo…» | Fase 4 | código | `proc_chat_editar` («(editado)») y «X está escribiendo…» por Socket.IO solo a la sala | Hecho (2026-11-20) |
+| P-08 | Envío real con el número de pruebas (DEC-WA-2) | Fase 4.3 | código + persona | Plantilla fuera de la ventana de 24 h (DEC-WA-2) y `pnpm --filter @nexo/api wa:probar +52…`; la prueba real necesita el token y el id del número de Meta en `apps/api/.env` y un destinatario dado de alta en Meta | Hecho (2026-11-21): envío real a WhatsApp comprobado |
+| P-09 | Adjunto en contacto y foto de perfil en el onboarding | Fase 1 | código | Foto de perfil en el onboarding y en Ajustes → Perfil (`proc_usuario_foto_*`). El formulario público de contacto **no** admite adjuntos: `contacto_mensajes` no tiene dónde guardarlos y abrir la subida a visitantes sin sesión es riesgo de abuso (DEC-037) | Foto hecha; adjunto del contacto a fase posterior |
+| P-10 | Insignia de no leídos del chat en tiempo real fuera del chat | Fase 4 | código | El socket del chat escucha en todo el equipo; la insignia cambia al momento | Hecho (2026-11-20) |
+| P-11 | Verificar el número de WhatsApp por código | Fase 4 | ignorado | Requiere mandar el código por WhatsApp real con un número verificado; con el de pruebas solo llega a destinatarios ya dados de alta | [~] |
+| P-12 | Verificación del negocio, OBA, grupos, FALT-03/04 | 0.7 / 4.3 | ignorado | DEC-WA-2 | [~] |
+| P-13 | Repositorio privado y licencia; *secret scanning* y *push protection* | Fases 0 y 2.5 | ignorado | Decisión de Luis. Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
+| P-14 | Tablero de proyecto e *issues* en GitHub | Fase 0 | persona | Decisión del equipo (el seguimiento real vive en `progreso.md`) | Abierto |
+| P-15 | Probar `docker compose` en una máquina con Docker | Fase 0 | persona | Falta una máquina con Docker | Abierto |
+| P-16 | Revisión visual por una persona (claro/oscuro y móvil) | Fases 1 a 5 | persona | La automática (axe, 360 px) ya pasa | Abierto |
+| P-17 | Revisar DEC-030 a DEC-034, V-10, V-11 y DEC-AUTH-1 | Fases 2.5, 3 y 5 | persona | Lectura de Luis | Abierto |
+| P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | ignorado | Sin ella no hay correos en producción (P-04 depende de esto en producción). Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
+| P-19 | Copias de seguridad, raíz `nexo.lol`, plan de pago antes del 2026-12-18 y *Auto-Deploy* de Render | Fase 3.5 | ignorado | Paneles de Render y Porkbun. Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
+| P-20 | 2FA, cambio de correo e inicio con Google | Fase 5 | — | Fuera de alcance («solo si hay tiempo», `03` 5.1): fase posterior | Fase posterior |
+
+### Resultado del trabajo en `Dev_Luis` (2026-11-20)
+
+- **Código:** migración `0032_procesos_pendientes.sql` (11 procesos, todos en `docs/08`, «Pendientes tras la Fase 5»), rutas en `apps/api/src/rutas/pendientes.ts`, WhatsApp con plantilla fuera de la ventana de 24 h y `wa:probar`, y las pantallas de P-01 a P-10. DEC-037.
+- **Corrección encontrada al probar:** al aprobar que un invitado sea integrante con el equipo lleno, el aviso decía «El equipo ya tiene 0 miembros». La API ahora toma el tope del mensaje de la BD (también arregla convertir invitados desde el menú de Miembros).
+- **Pruebas:** SQL 11 + **168** (P210–P219 nuevas); `procesos:verificar` **153**; API **200** (`pendientes.test.ts` 7, `chat.test.ts` con «escribiendo…» e `integracion.test.ts` de WhatsApp 7, con la plantilla); web 100; `shared` 197; extremo a extremo **8/8**; lint, tipos, formato y build en verde.
+- **Verificado en el navegador:** reuniones en el calendario personal (Carlos), editar un mensaje («(editado)»), exportar mis datos, foto de perfil en Perfil y en la cabecera, solicitudes de Mariana en Miembros (aprobar con el equipo lleno da «El equipo ya tiene 8 miembros.»), botones del banner del invitado, archivo adjunto en T-02 y la insignia del chat que sube de 1 a 2 en el Resumen sin recargar.
+- **WhatsApp:** el flujo completo (evento → cola → envío → historial → estados del webhook firmado) está probado en simulado y contra una API de Meta imitada, incluida la plantilla de la ventana de 24 h. **No se envió ningún mensaje a WhatsApp real**: en `apps/api/.env` no hay token ni id del número de pruebas (P-08).
+
+### Prueba real de WhatsApp y cuentas en producción (2026-11-21)
+
+- **WhatsApp real (P-08):** desde el número de prueba de Meta (+1 555 183 3695) al número personal de Luis dado de alta como destinatario. `wa:probar`: plantilla `hello_world` y aviso de Nexo aceptados por Meta. En la app local en modo real: reunión → cola → «Enviar» → `enviado` con el id de Meta. El token del panel caduca a las 24 h (`operacion.md` §14).
+- **Cuentas de la semilla en producción (DEC-038):** 11 cuentas con el «Equipo Nexo» y todos sus datos, correos `@nexo.lol` y contraseñas propias (en `.credenciales-demo.md`, fuera de git). Comprobado: Valeria entra en `api.nexo.lol` y ve las tareas; la contraseña pública de la semilla es rechazada.
+

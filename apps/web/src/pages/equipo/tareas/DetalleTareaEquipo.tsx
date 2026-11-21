@@ -43,6 +43,7 @@ import { fechaLarga, haceCuanto } from '@/lib/fechas';
 import { formaDeEstado, NOMBRE_ESTADO, NOMBRE_FORMA, PRIORIDADES } from '@/lib/tareas';
 import { toast } from '@/lib/toasts';
 import { useEquipoActual } from '../contexto';
+import { ArchivosTarea } from '../vistas/Archivos';
 import { AsignacionModal } from './AsignacionModal';
 import { avisarError, codigoTarea, useCambiarEstado, useTransiciones } from './comunes';
 import { TareaFormEquipo } from './TareaFormEquipo';
@@ -559,6 +560,8 @@ function Contenido({ tarea: t, onCerrar }: { tarea: TareaEquipoDetalle; onCerrar
           )}
         </section>
       )}
+
+      <ArchivosTarea tareaId={t.id} />
 
       {/* Fase 4 · Chat (CH-03): el chat de la tarea; el invitado entra si está compartida con él. */}
       <Link

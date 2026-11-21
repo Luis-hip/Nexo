@@ -2,23 +2,23 @@
 
 Aplicación web de trabajo colaborativo tipo tablero para equipos pequeños (hasta 8 miembros activos), con una aportación propia: **avisos en el grupo de WhatsApp del equipo**, configurados por el líder y con consentimiento individual.
 
-> Estado: **Fase 2.5 terminada** (votación de propuestas, procesos de la BD y secretos); sigue la **Fase 3** (ver [`docs/progreso.md`](docs/progreso.md)).
+> Estado: **Fases 0 a 5 terminadas y en producción** (`https://app.nexo.lol`, tag `fase-4` y `fase-5`); en curso los pendientes tras la Fase 5 y después la **Fase 6 · Cierre** (ver [`docs/progreso.md`](docs/progreso.md)).
 
 ## Documentación
 
-| Documento                                                                                       | Contenido                                                             |
-| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [`docs/06_README_AGENTS.md`](docs/06_README_AGENTS.md)                                          | Índice y orden de lectura (empieza aquí)                              |
-| [`docs/01_Contexto_y_Especificaciones.md`](docs/01_Contexto_y_Especificaciones.md)              | Producto, roles y permisos, diseño, stack, arquitectura, convenciones |
-| [`docs/02_Base_de_Datos.md`](docs/02_Base_de_Datos.md)                                          | Diseño completo de la base de datos                                   |
-| [`docs/03_Plan_de_Accion.md`](docs/03_Plan_de_Accion.md)                                        | Fases 0–6 con criterio de terminado                                   |
-| [`docs/04_Articulo.md`](docs/04_Articulo.md) · [`docs/05_Cronograma.md`](docs/05_Cronograma.md) | Artículo y cronograma                                                 |
-| [`docs/07_Cambios_de_Alcance_Fase2.md`](docs/07_Cambios_de_Alcance_Fase2.md)                    | Fase 2.5: votación de propuestas, procesos en la BD, secretos         |
-| [`docs/08_Procesos_BD.md`](docs/08_Procesos_BD.md)                                              | Procesos `proc_*` de la BD (un apartado por proceso)                  |
-| [`docs/09_Seguridad_y_Secretos.md`](docs/09_Seguridad_y_Secretos.md)                            | Política de secretos, rotación y filtraciones                         |
-| [`docs/10_Plan_de_Despliegue.md`](docs/10_Plan_de_Despliegue.md)                                | Fase 3.5: Vercel + Render + dominio propio (no se ejecuta aún)        |
-| [`docs/decisiones.md`](docs/decisiones.md)                                                      | Decisiones tomadas durante el desarrollo                              |
-| [`docs/progreso.md`](docs/progreso.md)                                                          | Qué está hecho y qué falta por fase                                   |
+| Documento                                                                                       | Contenido                                                              |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`docs/06_README_AGENTS.md`](docs/06_README_AGENTS.md)                                          | Índice y orden de lectura (empieza aquí)                               |
+| [`docs/01_Contexto_y_Especificaciones.md`](docs/01_Contexto_y_Especificaciones.md)              | Producto, roles y permisos, diseño, stack, arquitectura, convenciones  |
+| [`docs/02_Base_de_Datos.md`](docs/02_Base_de_Datos.md)                                          | Diseño completo de la base de datos                                    |
+| [`docs/03_Plan_de_Accion.md`](docs/03_Plan_de_Accion.md)                                        | Fases 0–6 con criterio de terminado                                    |
+| [`docs/04_Articulo.md`](docs/04_Articulo.md) · [`docs/05_Cronograma.md`](docs/05_Cronograma.md) | Artículo y cronograma                                                  |
+| [`docs/07_Cambios_de_Alcance_Fase2.md`](docs/07_Cambios_de_Alcance_Fase2.md)                    | Fase 2.5: votación de propuestas, procesos en la BD, secretos          |
+| [`docs/08_Procesos_BD.md`](docs/08_Procesos_BD.md)                                              | Procesos `proc_*` de la BD (un apartado por proceso)                   |
+| [`docs/09_Seguridad_y_Secretos.md`](docs/09_Seguridad_y_Secretos.md)                            | Política de secretos, rotación y filtraciones                          |
+| [`docs/10_Plan_de_Despliegue.md`](docs/10_Plan_de_Despliegue.md)                                | Fase 3.5: Vercel + Render + dominio propio (en línea desde 2026-11-18) |
+| [`docs/decisiones.md`](docs/decisiones.md)                                                      | Decisiones tomadas durante el desarrollo                               |
+| [`docs/progreso.md`](docs/progreso.md)                                                          | Qué está hecho y qué falta por fase                                    |
 
 ## Requisitos
 

@@ -1,5 +1,6 @@
 import type { Invitacion, Miembro } from '@nexo/shared';
-import { Copy, Crown, Link2, Settings, UserPlus, Users, X } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { Copy, Crown, Link2, Mail, Settings, UserPlus, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -16,15 +17,17 @@ import {
   Radios,
   Selector,
   Campo,
+  Entrada,
   Tarjeta,
   Vacio,
   useConfirmar,
 } from '@/components/ui';
-import { mensajeDeError } from '@/lib/api';
+import { api, mensajeDeError } from '@/lib/api';
 import { useCrearInvitacion, useInvitaciones, useRevocarInvitacion } from '@/lib/consultasEquipo';
 import { useAccionesLiderazgo } from '@/lib/consultasLiderazgo';
 import { fechaCorta, relativo } from '@/lib/fechas';
 import { toast } from '@/lib/toasts';
+import { SolicitudesInvitados } from '@/components/equipo/Solicitudes';
 import { useEquipoActual } from './contexto';
 
 const enlaceDe = (codigo: string) => `${location.origin}/invitacion/${codigo}`;
@@ -176,6 +179,7 @@ export function Miembros() {
         )}
       </section>
 
+      {puedeInvitar && <SolicitudesInvitados equipoId={equipo.id} />}
       {puedeInvitar && <Invitaciones equipoId={equipo.id} />}
       {invitar && (
         <InvitarModal equipoId={equipo.id} lleno={lleno} onCerrar={() => setInvitar(false)} />
@@ -229,6 +233,7 @@ function Invitaciones({ equipoId }: { equipoId: string }) {
                       >
                         Copiar enlace
                       </Boton>
+                      <EnviarPorCorreo equipoId={equipoId} invitacionId={i.id} />
                       <Boton
                         tamano="sm"
                         variante="texto"
@@ -473,5 +478,66 @@ export function AccionesMiembro({ m }: { m: Miembro }) {
         },
       ]}
     />
+  );
+}
+
+/** AD-02: manda el enlace de la invitación por correo (en producción necesita Resend). */
+function EnviarPorCorreo({ equipoId, invitacionId }: { equipoId: string; invitacionId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [correo, setCorreo] = useState('');
+  const [error, setError] = useState('');
+  const enviar = useMutation({
+    mutationFn: () =>
+      api<{ enviada: boolean; proveedor: string }>(
+        `/equipos/${equipoId}/invitaciones/${invitacionId}/enviar`,
+        { metodo: 'POST', cuerpo: { correo } },
+      ),
+    onSuccess: (r) => {
+      toast(
+        r.proveedor === 'ninguno'
+          ? 'Este servidor aún no envía correos: comparte el enlace.'
+          : `Invitación enviada a ${correo}.`,
+        r.proveedor === 'ninguno' ? 'warn' : 'ok',
+      );
+      setAbierto(false);
+      setCorreo('');
+    },
+    onError: (e) => setError(mensajeDeError(e)),
+  });
+  if (!abierto) {
+    return (
+      <Boton tamano="sm" icono={<Mail className="size-4" />} onClick={() => setAbierto(true)}>
+        Enviar por correo
+      </Boton>
+    );
+  }
+  return (
+    <span className="flex w-full flex-wrap items-start gap-2">
+      <Campo etiqueta="Correo de la persona" error={error} className="min-w-56 flex-1">
+        <Entrada
+          type="email"
+          autoComplete="email"
+          value={correo}
+          onChange={(e) => setCorreo(e.target.value)}
+        />
+      </Campo>
+      <span className="flex gap-2 self-end">
+        <Boton
+          tamano="sm"
+          variante="primario"
+          disabled={!correo.includes('@')}
+          cargando={enviar.isPending}
+          onClick={() => {
+            setError('');
+            enviar.mutate();
+          }}
+        >
+          Enviar
+        </Boton>
+        <Boton tamano="sm" onClick={() => setAbierto(false)}>
+          Cancelar
+        </Boton>
+      </span>
+    </span>
   );
 }
