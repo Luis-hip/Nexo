@@ -454,3 +454,13 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Foto de perfil:** archivo personal en PostgreSQL (como DEC-033), PNG, JPEG o WebP hasta 1 MB, servido solo con sesión.
 - **Adjunto del formulario de contacto: no se hace.** `contacto_mensajes` no tiene dónde guardarlo y abrir la subida de archivos a visitantes sin sesión es un riesgo de abuso. Queda como fase posterior.
 
+## DEC-038 · Cuentas de la semilla en producción
+
+**Fecha:** 2026-11-21 · **Fuente:** decisión de Luis: entrar a producción con las personas y los datos de la semilla «como si fueran usuarios reales».
+
+- Se cargan con `pnpm --filter @nexo/api db:demo -- --confirmar` (`apps/api/scripts/demo-produccion.ts`), **no** con `db:seed`: la semilla tiene sentencias globales (preferencias, etiquetas, tareas compartidas, lecturas del chat y la contraseña de todas las cuentas) que en una base con personas reales las tocarían. El script las limita al equipo y a las cuentas de la semilla y se detiene si la semilla cambia; no carga dos veces.
+- **Contraseñas propias y aleatorias** por cuenta: la de la semilla (`Nexo-2026`) es pública en el repositorio. La tabla de accesos queda en `.credenciales-demo.md` (raíz, ignorado por git) y la tiene Luis.
+- **Correos `@nexo.lol`** (mismo nombre antes de la @): los de la semilla son dominios de terceros (`nexo.mx`, `universidad.mx`, `salas-consultores.mx`) y no deben recibir correos de recuperación.
+- Los eventos de la semilla se marcan procesados (el despachador no manda avisos viejos). No hay ninguna marca de «demostración» en la interfaz.
+- Ensayo: `pnpm --filter @nexo/api db:demo -- --ensayo` lo corre en la base local dentro de una transacción que se revierte, con una cuenta «real» de control que no debe cambiar.
+

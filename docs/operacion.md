@@ -100,3 +100,14 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 
 *Decisión de Luis, 2026-11-20.* No se trabajan mientras no se diga otra cosa: repositorio privado, licencia, *secret scanning* y *push protection*; cuenta de Resend (`RESEND_API_KEY`: sin ella no salen correos en producción); copias de seguridad de la BD, plan de pago de Render (la BD gratuita **caduca el 2026-12-18**), raíz `nexo.lol` y *Auto-Deploy* de Render (se sigue desplegando a mano).
 
+## 13. Cuentas de la semilla en producción (DEC-038)
+
+*Cargadas el 2026-11-21.* Las 11 personas de la semilla (con el «Equipo Nexo», sus tareas, sprints, chat y reuniones) existen en `https://app.nexo.lol` con correos `@nexo.lol` y contraseñas propias. **Los accesos están en `.credenciales-demo.md`** (en la máquina de Luis; no está en git). Para volver a generarlos haría falta borrar el equipo y las cuentas de la semilla en producción y correr otra vez `db:demo` con `DATABASE_URL_PRODUCCION` (la «External Database URL» de `nexo-bd` en Render) en `apps/api/.env`; después se borra esa línea.
+
+## 14. Prueba real de WhatsApp (2026-11-21)
+
+- `pnpm --filter @nexo/api wa:probar` desde el número de prueba **+1 555 183 3695** (`phone_number_id` 1574533925737980) al número de Luis dado de alta como destinatario en Meta: Meta aceptó la plantilla `hello_world` y el aviso de Nexo (ids `wamid.…`).
+- En la app local con `WHATSAPP_PROVIDER=real`: el «Equipo Nexo» conectado en «Mensajes directos», una reunión generó el aviso, la líder lo envió desde la cola y quedó `enviado` con el id de Meta.
+- **El token del panel de pruebas caduca a las 24 h.** Para un envío continuo hace falta un token permanente de un usuario del sistema (Business Manager → Usuarios del sistema → Generar token con `whatsapp_business_messaging`). Producción sigue en `simulado`.
+- Texto libre solo llega si la persona escribió al número en las últimas 24 h; si no, Meta lo rechaza y Nexo manda la plantilla (DEC-WA-2). Sin webhook configurado en local, ese rechazo no se ve en el historial.
+
