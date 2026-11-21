@@ -1,6 +1,6 @@
 # Nexo · Plan del spike: WhatsApp 1 a 1 (canal directo)
 
-> **Estado:** propuesta para revisión del equipo · **Fecha:** 2026-11-20
+> **Estado:** en ejecución en `Dev_Luis` (aprobado por Luis el 2026-11-21; S0 hecho, ver sección 15) · **Fecha:** 2026-11-20, actualizado el 2026-11-21
 > **Base:** `01_Contexto_y_Especificaciones.md` (§7), `02_Base_de_Datos.md`, `03_Plan_de_Accion.md` (Fase 4), `docs/whatsapp-verificacion.md`, `apps/api/db/migrations/0001_esquema.sql` y `apps/api/src/db/tipos.ts`.
 > **Marca `[POR VERIFICAR]`:** dato de Meta o del código que no se confirmó. Se cierra en la pista B del spike (sección 10) o al leer el código (S0).
 > **Numeración:** las decisiones nuevas se llaman `P-1…P-6` (propuestas) para no chocar con `D-01…D-03` de `docs/decisiones.md`; se renumeran al aprobarlas.
@@ -54,7 +54,7 @@
 | `whatsapp_usuario` | `numero_e164` único, `verificado_en`, `consentimiento_en`, `consentimiento_revocado_en`. |
 | `preferencias_notificacion` | `(usuario_id, evento)` con `por_app`, `por_whatsapp`, `por_correo`. |
 | `whatsapp_webhook_eventos` | Bitácora idempotente (`proveedor_evento_id UNIQUE`). |
-| Arquitectura | Outbox `eventos_dominio` → procesador → cola `pg-boss`; capa `ProveedorWhatsApp`; solo `proc_*` desde la API (rol `nexo_app`, DEC-025). |
+| Arquitectura | Outbox `eventos_dominio` → despachador `proc_wa_procesar_eventos` en el ciclo de la API cada minuto (`trabajos/whatsapp.ts`; sin `pg-boss`, DEC-WA-1); capa `ProveedorWhatsApp`; solo `proc_*` desde la API (rol `nexo_app`, DEC-025). |
 
 ### 3.2 Huecos que el canal directo obliga a cerrar
 
@@ -69,7 +69,7 @@
 | G7 | No hay verificación del número por mensaje entrante. | Hoy solo hay `verificado_en` sin flujo que lo llene. |
 | G8 | `/app/personal/reportes` existe en el router pero no figura en el inventario de pantallas. | Se agrega al inventario con este trabajo. |
 
-> `[POR VERIFICAR]` No se pudo leer el código de `ProveedorWhatsApp` (carpeta del API) con las búsquedas disponibles. En S0 se confirma su firma antes de modificarla.
+> **Resuelto en S0:** `ProveedorWhatsApp` está en `apps/api/src/whatsapp/proveedor.ts` con `enviar(aviso): Promise<string>`; el directo actual manda el mismo texto a cada persona con un solo estado (sección 15.1).
 
 ---
 
@@ -362,7 +362,7 @@ Reglas del mensaje entrante (`proc_wa_registrar_entrante`):
 
 ### 10.2 Pista B: número de pruebas de Meta
 
-**Prerrequisitos.** URL pública HTTPS para el webhook (túnel durante el spike, porque el despliegue de la Fase 3.5 sigue pendiente) y el enlace del formato 1 apuntando a algo accesible.
+**Prerrequisitos.** URL pública HTTPS para el webhook: ya existe (`https://api.nexo.lol/whatsapp/webhook`, desplegado en la Fase 3.5); falta suscribirla en Meta y poner el secreto de la app en Render. El enlace del formato 1 apunta a `https://app.nexo.lol`, que ya está en línea.
 
 | # | Prueba | Resultado esperado |
 |---|---|---|
@@ -385,15 +385,15 @@ Reglas del mensaje entrante (`proc_wa_registrar_entrante`):
 
 | # | Riesgo o dato | Efecto | Mitigación / cómo se cierra |
 |---|---|---|---|
-| V1 | Meta rechaza o reclasifica plantillas. | Retrasa la pista B; puede cambiar el costo. | Mandar a aprobar en S0; plantilla genérica de una variable. |
+| V1 | Meta rechaza o reclasifica plantillas. | Retrasa la pista B; puede cambiar el costo. | Mandar a aprobar en S0; plantilla genérica de una variable. **Ocurrió:** `nexo_aviso` se reclasificó como marketing y `nx_reporte_pdf` se rechazó por terminar en variable (corregida). |
 | V2 | El número de pruebas solo envía a un máximo de destinatarios autorizados (recuerdo 5). | Limita la demostración. | `[POR VERIFICAR]` en B1; suficiente para un equipo de 4. |
 | V3 | El botón de respuesta rápida abre la ventana de 24 h. | Define si la opción 3 funciona como se pensó. | `[POR VERIFICAR]` en B3. |
 | V4 | Restricciones de variables y de encabezado de documento. | Cambia el diseño del resumen y del PDF. | `[POR VERIFICAR]` en B2 y B4. |
 | V5 | Límite de envío sin verificar el negocio. | Tope de pruebas y de la beta. | Para portafolios nuevos es de **250 destinatarios únicos por día fuera de ventana** ([documentación de Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/messaging-limits), consultada el 2026-11-20); suficiente para la beta. |
 | V6 | Costo en MXN por mensaje de utilidad. | Presupuesto. | `docs/whatsapp-verificacion.md` ya dice que las tarifas de grupo y las individuales coinciden por destinatario; la cifra en MXN **no está verificada**. |
-| V7 | Webhook sin URL pública hasta el despliegue. | Bloquea la pista B. | Túnel temporal; o adelantar solo el servicio de la API de la Fase 3.5. |
+| V7 | Webhook sin URL pública hasta el despliegue. | Bloquea la pista B. | **Resuelto:** la API ya está en `api.nexo.lol`. Para la pista B se despliega el spike y se configura el webhook en Meta. |
 | V8 | Usuarios que bloquean o reportan el número. | Baja la calidad del número ante Meta. | Un aviso corto por intervalo, `BAJA`/`STOP`, solo eventos de las reglas del equipo. |
-| V9 | Conflicto de migraciones con quien trabaja en WhatsApp de la Fase 4. | Números repetidos, esquema roto. | Acordar numeración y quién escribe cada migración en S0. |
+| V9 | Conflicto de migraciones con quien trabaja en WhatsApp de la Fase 4. | Números repetidos, esquema roto. | **Resuelto:** la Fase 4 ya terminó y está en producción; el spike usa `0033` y P220–P249. |
 | V10 | Aviso corto muy genérico → baja tasa de toque del botón. | La opción 3 pierde utilidad. | Medir en la pista B; permitir elegir formato 1 o 2. |
 | V11 | Datos personales dentro de PDF y de `contenido`. | Privacidad. | Subida por API de medios, caducidad de `contenido`, texto de consentimiento visible y revocable. |
 
@@ -416,8 +416,8 @@ Una persona, referencia nominal; se ajusta con las horas reales.
 
 Lista de control:
 
-- [ ] S0 · Decisiones ratificadas y numeración de migraciones acordada
-- [ ] S0 · Plantillas enviadas a aprobación
+- [x] S0 · Decisiones ratificadas y numeración de migraciones acordada (DEC-039)
+- [x] S0 · Plantillas enviadas a aprobación (sección 15.3)
 - [ ] S1 · Migración aplicada en local y en CI (los tres scripts SQL más la nueva)
 - [ ] S1 · Procesos documentados y con `EXECUTE` para `nexo_app`
 - [ ] S2 · A1–A13 en verde en el simulado
@@ -432,7 +432,7 @@ Lista de control:
 
 **Ramas.** Se respeta el flujo `Dev_<Nombre> → dev → main → produccion`, solo por PR. El spike vive en la rama personal de quien lo haga. Como la migración es aditiva y los valores por defecto no cambian el comportamiento (`modo_entrega = 'grupo'`, `proveedor = 'simulado'`), puede fusionarse a `dev` en cuanto pase el *go*, sin una rama larga que se aleje de lo que avanza la Fase 4.
 
-**Reparto con quien lleva la conexión con WhatsApp en la Fase 4**
+**Reparto** *(actualizado: la Fase 4 ya terminó y la conexión la lleva el mismo equipo de `Dev_Luis`, así que todo el spike lo escribe una sola persona y no hay contrato que acordar)*
 
 | Pieza | Responsable propuesto |
 |---|---|
