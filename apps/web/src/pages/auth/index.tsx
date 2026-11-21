@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Logo } from '@/components/shell/Logo';
 import {
-  Avatar,
   Boton,
   Campo,
   Entrada,
@@ -19,6 +18,7 @@ import {
 import { mensajeDeError } from '@/lib/api';
 import { useGuardarPerfil, useGuardarPreferencias, useYo } from '@/lib/consultas';
 import { AvisoCookies } from '@/pages/publico/AvisoCookies';
+import { FotoPerfil } from '@/components/perfil/FotoPerfil';
 import { destinoSeguro, Tarjeta } from './comunes';
 
 // Fase 5.1: AUTH-01 a AUTH-06 (registro, entrar, recuperar, restablecer y verificar).
@@ -189,7 +189,7 @@ function PasosBienvenida({ yo }: { yo: Yo }) {
       {n === 1 && (
         <div className="mt-6 space-y-4">
           <h1 className="text-[22px] sm:text-[28px]">Tu perfil</h1>
-          <Avatar persona={{ nombre: nombre || yo.usuario.nombre }} tamano={64} />
+          <FotoPerfil nombre={nombre || yo.usuario.nombre} avatarUrl={yo.usuario.avatar_url} />
           <Campo etiqueta="Nombre visible" error={error}>
             <Entrada
               value={nombre}

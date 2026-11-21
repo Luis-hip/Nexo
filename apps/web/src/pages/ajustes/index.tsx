@@ -6,7 +6,7 @@ import {
   type PreferenciaAviso,
 } from '@nexo/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, LogOut } from 'lucide-react';
+import { Download, ExternalLink, LogOut, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import {
@@ -29,10 +29,11 @@ import {
   cx,
   useConfirmar,
 } from '@/components/ui';
-import { api, mensajeDeError } from '@/lib/api';
+import { api, mensajeDeError, urlApi } from '@/lib/api';
 import { claves, useGuardarPerfil, useGuardarPreferencias, useSalir, useYo } from '@/lib/consultas';
 import { useCambiarContrasena, useCuenta, useReenviarVerificacion } from '@/lib/consultasAuth';
 import { useAccionesWhatsAppYo, useWhatsAppYo } from '@/lib/consultasWhatsApp';
+import { FotoPerfil } from '@/components/perfil/FotoPerfil';
 import { toast } from '@/lib/toasts';
 
 const SECCIONES = [
@@ -99,6 +100,7 @@ export function Perfil() {
   return (
     <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-01-Perfil">
       <h2 className="font-semibold">Perfil</h2>
+      <FotoPerfil nombre={u.nombre} avatarUrl={u.avatar_url} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Nombre">
           <Entrada
@@ -133,9 +135,6 @@ export function Perfil() {
           onChange={(e) => setV({ ...v, zona_horaria: e.target.value })}
         />
       </Campo>
-      <p className="text-xs text-muted">
-        La foto de perfil llega con la subida de archivos personales (fase posterior).
-      </p>
       <Boton
         variante="primario"
         disabled={Object.keys(cambios).length === 0 || v.nombre.trim().length < 2}
@@ -560,7 +559,7 @@ export function WhatsAppPersonal() {
   );
 }
 
-/** PF-06: visibilidad del estado y primer día de la semana. Exportar o borrar datos: Fase 5. */
+/** PF-06: visibilidad del estado y primer día de la semana; FALT-09: exportar y borrar mis datos. */
 export function Privacidad() {
   const { consulta, guardar } = useAjustes();
   return (
@@ -585,10 +584,7 @@ export function Privacidad() {
               { valor: 'domingo', etiqueta: 'Domingo' },
             ]}
           />
-          <Banner tono="info">
-            Exportar todos tus datos o borrar tu cuenta llega en la Fase 5 (FALT-09). Mientras
-            tanto, cada equipo puede exportar su reporte en CSV.
-          </Banner>
+          <MisDatos />
           <Link
             to="/privacidad"
             className="inline-flex items-center gap-1 text-sm text-brand hover:underline"
@@ -598,6 +594,87 @@ export function Privacidad() {
         </Tarjeta>
       )}
     </EstadosDatos>
+  );
+}
+
+/** FALT-09: descargar todo lo que Nexo guarda de mí y eliminar la cuenta (con contraseña). */
+function MisDatos() {
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const [abierto, setAbierto] = useState(false);
+  const [contrasena, setContrasena] = useState('');
+  const [confirmacion, setConfirmacion] = useState('');
+  const [error, setError] = useState('');
+  const eliminar = useMutation({
+    mutationFn: () =>
+      api<{ eliminada: true }>('/yo/cuenta/eliminar', {
+        metodo: 'POST',
+        cuerpo: { contrasena, confirmacion },
+      }),
+    onSuccess: () => {
+      qc.clear();
+      toast('Tu cuenta se eliminó. Gracias por usar Nexo.');
+      void nav('/', { replace: true });
+    },
+    onError: (e) => setError(mensajeDeError(e)),
+  });
+  return (
+    <div className="space-y-4 border-t border-line pt-4" data-name="NX/FALT-09-Mis-datos">
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold">Exportar mis datos</h3>
+        <p className="text-sm text-muted">
+          Descarga en un archivo JSON tu perfil, preferencias, equipos, tareas, comentarios,
+          mensajes, reuniones y notificaciones. No incluye tu contraseña.
+        </p>
+        <a
+          href={urlApi('/yo/datos/exportar')}
+          download
+          className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-line px-3 text-sm font-medium hover:bg-surface"
+        >
+          <Download className="size-4" aria-hidden /> Descargar mis datos
+        </a>
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-danger">Eliminar mi cuenta</h3>
+        <p className="text-sm text-muted">
+          Sales de todos tus equipos, se borran tus tareas personales y tu número de WhatsApp, y tu
+          nombre deja de aparecer en lo que aportaste. No se puede deshacer. Si eres líder de un
+          equipo con más personas, primero transfiere el liderazgo.
+        </p>
+        {!abierto ? (
+          <Boton variante="destructivo" onClick={() => setAbierto(true)}>
+            <Trash2 className="size-4" aria-hidden /> Eliminar mi cuenta
+          </Boton>
+        ) : (
+          <div className="space-y-3 rounded-[8px] border border-danger/40 p-3">
+            <Campo etiqueta="Tu contraseña">
+              <Contrasena
+                autoComplete="current-password"
+                value={contrasena}
+                onChange={(e) => setContrasena(e.target.value)}
+              />
+            </Campo>
+            <Campo etiqueta="Escribe ELIMINAR para confirmar" error={error}>
+              <Entrada value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} />
+            </Campo>
+            <div className="flex flex-wrap gap-2">
+              <Boton
+                variante="destructivo"
+                cargando={eliminar.isPending}
+                disabled={!contrasena || confirmacion !== 'ELIMINAR'}
+                onClick={() => {
+                  setError('');
+                  eliminar.mutate();
+                }}
+              >
+                Eliminar definitivamente
+              </Boton>
+              <Boton onClick={() => setAbierto(false)}>Cancelar</Boton>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

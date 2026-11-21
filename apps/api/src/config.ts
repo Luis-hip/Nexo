@@ -46,6 +46,9 @@ const esquemaEntorno = z.object({
   WHATSAPP_VERIFY_TOKEN: textoOpcional,
   /** URL base de la API Graph de Meta. Solo se cambia en pruebas (un servidor que imita a Meta). */
   WHATSAPP_API_URL: z.string().url().default('https://graph.facebook.com/v21.0'),
+  /** Plantilla aprobada para mensajes fuera de la ventana de 24 h (DEC-WA-2) y su idioma. */
+  WHATSAPP_PLANTILLA: z.string().min(1).default('hello_world'),
+  WHATSAPP_PLANTILLA_IDIOMA: z.string().min(2).default('en_US'),
 });
 
 export type Config = z.infer<typeof esquemaEntorno>;

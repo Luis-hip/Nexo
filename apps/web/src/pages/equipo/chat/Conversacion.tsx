@@ -14,6 +14,7 @@ import {
   CornerDownRight,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Pin,
   PinOff,
   Send,
@@ -41,7 +42,9 @@ import {
 import { mensajeDeError } from '@/lib/api';
 import {
   aplanarMensajes,
+  avisarEscribiendo,
   useAccionesChat,
+  useEscribiendo,
   useFijados,
   useHilo,
   useMensajes,
@@ -271,6 +274,7 @@ function Mensaje({
   const acciones = useAccionesChat(equipo.id);
   const confirmar = useConfirmar();
   const [reaccionando, setReaccionando] = useState(false);
+  const [editando, setEditando] = useState<string | null>(null);
   const nombres = miembros.map((x) => x.nombre);
   const propio = m.autor?.usuario_id === usuarioId;
   const agrupado =
@@ -328,6 +332,45 @@ function Mensaje({
         )}
         {m.eliminado ? (
           <p className="text-sm text-muted italic">Mensaje eliminado</p>
+        ) : editando !== null ? (
+          <div className="space-y-1.5">
+            <AreaTexto
+              aria-label="Editar mensaje"
+              value={editando}
+              maxLength={MAX_CARACTERES_MENSAJE}
+              rows={2}
+              autoFocus
+              onChange={(e) => setEditando(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setEditando(null);
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (editando.trim())
+                    void intentar(
+                      acciones.editar.mutateAsync({ mensaje: m, texto: editando.trim() }),
+                    ).then(() => setEditando(null));
+                }
+              }}
+            />
+            <span className="flex gap-2">
+              <Boton
+                tamano="sm"
+                variante="primario"
+                disabled={!editando.trim()}
+                cargando={acciones.editar.isPending}
+                onClick={() =>
+                  void intentar(
+                    acciones.editar.mutateAsync({ mensaje: m, texto: editando.trim() }),
+                  ).then(() => setEditando(null))
+                }
+              >
+                Guardar
+              </Boton>
+              <Boton tamano="sm" onClick={() => setEditando(null)}>
+                Cancelar
+              </Boton>
+            </span>
+          </div>
         ) : (
           <>
             <p className="text-sm break-words whitespace-pre-wrap">
@@ -340,6 +383,7 @@ function Mensaje({
                   <span key={i}>{t.texto}</span>
                 ),
               )}
+              {m.editado_en && <span className="ml-1 text-xs text-muted">(editado)</span>}
             </p>
             {m.tarea && (
               <Link
@@ -456,6 +500,12 @@ function Mensaje({
                         onClick: onATarea,
                       },
                       {
+                        etiqueta: 'Editar',
+                        icono: <Pencil className="size-4" />,
+                        oculto: !propio,
+                        onClick: () => setEditando(m.texto),
+                      },
+                      {
                         etiqueta: 'Eliminar',
                         icono: <Trash2 className="size-4" />,
                         destructivo: true,
@@ -494,6 +544,7 @@ function Compositor({
   const area = useRef<HTMLTextAreaElement>(null);
   const [error, setError] = useState('');
 
+  const escribiendo = useEscribiendo(conversacionId);
   const mencion = consultaDeMencion(texto, cursor);
   const sugeridos = mencion ? sugerirMenciones(mencion.q, miembros, usuarioId) : [];
 
@@ -562,6 +613,7 @@ function Compositor({
           onChange={(e) => {
             setTexto(e.target.value);
             setCursor(e.target.selectionStart);
+            if (e.target.value.trim()) avisarEscribiendo(conversacionId);
           }}
           onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
           onKeyDown={(e) => {
@@ -587,6 +639,13 @@ function Compositor({
           {error}
         </p>
       )}
+      <p className="mt-1 h-4 text-xs text-muted" aria-live="polite">
+        {escribiendo.length === 1
+          ? `${escribiendo[0]} está escribiendo…`
+          : escribiendo.length > 1
+            ? `${escribiendo.slice(0, 2).join(' y ')} están escribiendo…`
+            : ''}
+      </p>
     </div>
   );
 }

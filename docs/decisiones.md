@@ -429,3 +429,38 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Consentimiento (WA-07, PF-05):** número E.164, consentimiento general y por equipo (`membresias.consentimiento_wa`). Sin consentimiento **no se nombra** a la persona («ya tiene responsable»); con él, «@Nombre». El envío directo solo llega a quien tiene las tres cosas. El invitado no participa.
 - **4.3, envío real: no se hizo.** La API de grupos exige una cuenta de empresa oficial (OBA), que a su vez exige la verificación del negocio, 30 días de registro y un número real (`docs/whatsapp-verificacion.md`); hoy solo hay un número de pruebas. Queda **construido y probado sin cuenta**: la capa `ProveedorWhatsApp` (`simulado`, `cloud_api_grupos`, `cloud_api_directo`) y el webhook con verificación de suscripción y **firma HMAC-SHA256** sobre el cuerpo crudo, idempotente. El servidor solo llama a Meta con `WHATSAPP_PROVIDER=real` (y en producción exige las cuatro variables); activarlo envía mensajes reales y es decisión del equipo. El llamado a la API de grupos **no se probó** con una cuenta real; sí contra un servidor que imita la API de Meta (`integracion.test.ts`, con `WHATSAPP_API_URL`, que en producción solo puede ser `graph.facebook.com`).
 - **FALT-03 y FALT-04 (unirse al grupo y aprobar solicitudes) no se construyeron:** dependen de la API de grupos (webhook `group_participants_update` y endpoints de aprobación), sin cuenta OBA no se pueden probar. Mientras tanto, el líder guarda el enlace de invitación y cada persona con consentimiento lo ve en Ajustes → WhatsApp. D-01 sigue pendiente.
+
+## DEC-WA-2 · WhatsApp con el número de pruebas; la verificación del negocio queda en pausa
+
+**Fecha:** 2026-11-20 · **Fuente:** decisión de Luis: «con el número de pruebas ya pudimos conectar Nexo a WhatsApp y probar el envío; nos mantenemos sobre esa línea» · **Resuelve:** D-01 para esta etapa.
+
+- **Línea de trabajo:** el envío real usa el **número de pruebas** de la WABA de Meta con **mensajes directos** (`cloud_api_directo`): un mensaje por persona del equipo que dio su número y su consentimiento. El número de pruebas solo entrega a los destinatarios dados de alta en Meta for Developers (hasta 5).
+- **D-01 (capacidad de grupos):** resuelta para esta etapa: no se usan grupos, así que el tope de 8 miembros por equipo se queda como está (`max_miembros`, por defecto 8) y no depende de Meta.
+- **Ignorado hasta nuevo aviso:** verificación del negocio, solicitud de OBA, número real, API de grupos (`cloud_api_grupos` sigue construido pero sin usar) y las pantallas FALT-03 y FALT-04. En `progreso.md` se marcan `[~]` y no cuentan como faltantes. Si Meta aprueba la verificación, se retoma desde DEC-WA-1.
+- **Ventana de 24 horas (corregido el 2026-11-21 tras la prueba real):** Meta solo entrega texto libre si la persona escribió al número en las últimas 24 h, y fuera de esa ventana **acepta el envío (200) y lo descarta después**, avisando solo por webhook. Por eso, con una plantilla propia configurada (`WHATSAPP_PLANTILLA=nexo_aviso`, `WHATSAPP_PLANTILLA_IDIOMA=es_MX`, categoría utilidad: «Aviso de tu equipo en Nexo: {{1}} Revisa los detalles en la app.»), **todo aviso directo sale como plantilla** con el texto en una línea. Solo con `hello_world` (sin variable) se intenta el texto y se usa la plantilla si Meta lo rechaza al momento.
+- **Producción sigue en `simulado`** hasta que el equipo ponga el token y el id del número en Render (docs/operacion.md §10). Las pruebas reales se hacen en local con `pnpm --filter @nexo/api wa:probar`.
+
+## DEC-037 · Pendientes tras la Fase 5
+
+**Fecha:** 2026-11-20 · **Fuente:** auditoría de `03` (Fases 0 a 5) en `progreso.md`, «Pendientes tras la Fase 5» · **Detalle:** `08_Procesos_BD.md`, sección del mismo nombre.
+
+- **Agenda personal (PER-04):** solo reuniones de equipos donde la persona es líder o integrante; el invitado no ve reuniones (como en EQ-14).
+- **Exportar mis datos (FALT-09):** JSON inmediato (sin cola), con todo lo de la persona y nunca secretos; queda registro en `exportaciones_datos`.
+- **Eliminar la cuenta (FALT-09):** contraseña y la palabra «ELIMINAR». Quien lidera un equipo con más personas primero transfiere; un equipo donde solo estaba esa persona se archiva. La cuenta se **anonimiza** («Cuenta eliminada») en vez de borrarse, para no romper lo que aportó a los equipos (autoría de tareas, mensajes y actividad).
+- **Solicitudes del invitado (DEC-023):** una pendiente por tipo; aprobar reutiliza AD-05 (`proc_invitado_gestionar`), así el tope de miembros (NX001) se respeta igual.
+- **Invitar por correo (AD-02):** la invitación sigue siendo el enlace o el código; el correo solo lo manda (no se guarda la dirección). En producción depende de Resend.
+- **Foto diaria del burndown:** en el temporizador de la API (`trabajos/plazos.ts`), no en `pg-boss` (DEC-WA-1).
+- **Chat:** editar solo quien escribió (el líder puede eliminar, no editar, mensajes ajenos). «Escribiendo…» no se guarda: el servidor lo reenvía solo a la sala si la conexión ya está en ella, y como mucho cada 2 s. El socket del chat escucha en todo el equipo para que la insignia de no leídos sea en tiempo real.
+- **Foto de perfil:** archivo personal en PostgreSQL (como DEC-033), PNG, JPEG o WebP hasta 1 MB, servido solo con sesión.
+- **Adjunto del formulario de contacto: no se hace.** `contacto_mensajes` no tiene dónde guardarlo y abrir la subida de archivos a visitantes sin sesión es un riesgo de abuso. Queda como fase posterior.
+
+## DEC-038 · Cuentas de la semilla en producción
+
+**Fecha:** 2026-11-21 · **Fuente:** decisión de Luis: entrar a producción con las personas y los datos de la semilla «como si fueran usuarios reales».
+
+- Se cargan con `pnpm --filter @nexo/api db:demo -- --confirmar` (`apps/api/scripts/demo-produccion.ts`), **no** con `db:seed`: la semilla tiene sentencias globales (preferencias, etiquetas, tareas compartidas, lecturas del chat y la contraseña de todas las cuentas) que en una base con personas reales las tocarían. El script las limita al equipo y a las cuentas de la semilla y se detiene si la semilla cambia; no carga dos veces.
+- **Contraseñas propias y aleatorias** por cuenta: la de la semilla (`Nexo-2026`) es pública en el repositorio. La tabla de accesos queda en `.credenciales-demo.md` (raíz, ignorado por git) y la tiene Luis.
+- **Correos `@nexo.lol`** (mismo nombre antes de la @): los de la semilla son dominios de terceros (`nexo.mx`, `universidad.mx`, `salas-consultores.mx`) y no deben recibir correos de recuperación.
+- Los eventos de la semilla se marcan procesados (el despachador no manda avisos viejos). No hay ninguna marca de «demostración» en la interfaz.
+- Ensayo: `pnpm --filter @nexo/api db:demo -- --ensayo` lo corre en la base local dentro de una transacción que se revierte, con una cuenta «real» de control que no debe cambiar.
+
