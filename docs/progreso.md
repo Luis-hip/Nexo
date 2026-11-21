@@ -4,18 +4,20 @@
 
 ## Estado general
 
-*Actualizado el 2026-11-20: Fase 4 completa en producción (tag `fase-4`) y auditoría de pendientes hasta la Fase 5 (ver «Pendientes tras la Fase 5»).*
+*Actualizado el 2026-11-21: pendientes tras la Fase 5 resueltos (P-01 a P-10), WhatsApp real probado con el número de pruebas y cuentas de la semilla en producción (DEC-038). Siguiente: Fase 6 · Cierre.*
 
 | Fase | Estado | Etiqueta | Dónde está |
 |---|---|---|---|
-| 0 · Arranque | Construida; quedan 4 pendientes que son de personas (ver Fase 0) | — | `main` |
+| 0 · Arranque | Terminada (lo de personas que quedaba está `[~]` ignorado hasta nuevo aviso o es la revisión de Docker) | — | `produccion` |
 | 1 · Base, roles y espacio personal | Terminada | `fase-1` | `main` |
 | 2 · Equipos, tablero y estados | Terminada | `fase-2` | `main` y `produccion` |
 | 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
 | 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
-| 3.5 · Despliegue | En línea con las Fases 0–5; prueba de humo hecha (Fase 5). Faltan copias, raíz `nexo.lol` y plan de pago (personas) | — | `produccion` |
-| 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp en modo simulado; envío real por el número de pruebas, DEC-WA-2) | `fase-4` | `produccion` |
+| 3.5 · Despliegue | En línea con las Fases 0–5; prueba de humo hecha. Copias, raíz `nexo.lol` y plan de pago: `[~]` ignorados hasta nuevo aviso | — | `produccion` |
+| 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp en modo simulado; envío real comprobado en local con el número de pruebas, DEC-WA-2) | `fase-4` | `produccion` |
 | 5 · Autenticación, QA y permisos | Terminada y en producción | `fase-5` | `produccion` |
+| Pendientes tras la Fase 5 | Terminados (P-01 a P-10, DEC-037 y DEC-038) | — | `Dev_Luis` → `produccion` |
+| 6 · Cierre | **Siguiente** | — | — |
 
 **`produccion` tiene las Fases 0 a 5** (último: PR #30, `de2f9a1`, 2026-11-19) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
