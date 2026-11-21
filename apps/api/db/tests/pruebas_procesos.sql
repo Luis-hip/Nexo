@@ -2989,3 +2989,242 @@ DO $$ DECLARE u uuid := pg_temp.usuario(); r jsonb; ok int := 0; BEGIN
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P219: % de 2 rechazos', ok; END IF;
   RAISE NOTICE 'OK P219: foto de perfil';
 END $$;
+
+-- =============================================================================================
+-- Spike WhatsApp 1 a 1 (0033, DEC-039). Pruebas P220 a P249.
+-- =============================================================================================
+
+-- Persona con número y consentimiento general y del equipo (número único por prueba).
+CREATE FUNCTION pg_temp.wa_directo(p_equipo uuid, p_usuario uuid, p_num text) RETURNS void AS $$
+BEGIN
+  PERFORM proc_wa_usuario_guardar(p_usuario, jsonb_build_object('numero', p_num, 'consentimiento', true));
+  PERFORM proc_wa_consentimiento(p_usuario, p_equipo, true);
+END $$ LANGUAGE plpgsql;
+
+-- Equipo conectado en modo directo («individual») con un aviso instantáneo en la cola.
+CREATE FUNCTION pg_temp.wa_individual(n int) RETURNS uuid AS $$
+DECLARE e uuid := pg_temp.equipo_con(n);
+BEGIN
+  PERFORM proc_wa_conectar(pg_temp.lider(e), e, '{"proveedor": "cloud_api_directo", "grupo_nombre": "Directo"}');
+  RETURN e;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.wa_aviso(p_equipo uuid, p_texto text DEFAULT 'Aviso de prueba') RETURNS uuid AS $$
+  INSERT INTO whatsapp_mensajes (equipo_id, tipo_evento, texto, tipo_envio) VALUES (p_equipo, 'reunion', p_texto, 'instantaneo') RETURNING id;
+$$ LANGUAGE sql;
+
+-- P220. A1 · modo «individual»: 5 integrantes, 4 con consentimiento → 4 entregas por persona (la
+--       quinta solo recibe el aviso en la app); conectar en directo deja `modo_entrega = individual`.
+DO $$ DECLARE e uuid := pg_temp.wa_individual(5); v jsonb; i int; BEGIN
+  FOR i IN 1..4 LOOP PERFORM pg_temp.wa_directo(e, pg_temp.integrante(e, i), '+52155500002' || lpad(i::text, 2, '0')); END LOOP;
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF (SELECT modo_entrega FROM whatsapp_configuracion WHERE equipo_id = e) <> 'individual'
+     OR jsonb_array_length(v->0->'entregas') <> 4
+     OR EXISTS (SELECT 1 FROM jsonb_array_elements(v->0->'entregas') x WHERE x->>'destino' <> 'persona' OR x->>'numero' IS NULL) THEN
+    RAISE EXCEPTION 'FALLO P220: %', v->0->'entregas';
+  END IF;
+  RAISE NOTICE 'OK P220: modo individual, una entrega por persona con consentimiento';
+END $$;
+
+-- P221. A8 · modo «grupo»: una sola entrega al grupo, ninguna directa (aunque haya consentimiento).
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); v jsonb; BEGIN
+  PERFORM pg_temp.wa_directo(e, pg_temp.integrante(e, 1), '+5215500002201');
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF jsonb_array_length(v->0->'entregas') <> 1 OR v->0->'entregas'->0->>'destino' <> 'grupo' THEN
+    RAISE EXCEPTION 'FALLO P221: %', v->0->'entregas';
+  END IF;
+  RAISE NOTICE 'OK P221: modo grupo, una entrega al grupo';
+END $$;
+
+-- P222. R2 · modo «ambos»: grupo para quien está en él y directo solo para quien no (un canal por persona).
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(2)); i1 uuid := pg_temp.integrante(e, 1); i2 uuid := pg_temp.integrante(e, 2); v jsonb; BEGIN
+  PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"modo_entrega": "ambos"}');
+  PERFORM pg_temp.wa_directo(e, i1, '+5215500002221');
+  PERFORM pg_temp.wa_directo(e, i2, '+5215500002222');
+  UPDATE membresias SET en_grupo_wa = true WHERE equipo_id = e AND usuario_id = i1;
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF jsonb_array_length(v->0->'entregas') <> 2
+     OR NOT EXISTS (SELECT 1 FROM whatsapp_entregas x JOIN whatsapp_mensajes m ON m.id = x.mensaje_id WHERE m.equipo_id = e AND x.destino = 'grupo')
+     OR NOT EXISTS (SELECT 1 FROM whatsapp_entregas x JOIN whatsapp_mensajes m ON m.id = x.mensaje_id WHERE m.equipo_id = e AND x.usuario_id = i2)
+     OR EXISTS (SELECT 1 FROM whatsapp_entregas x JOIN whatsapp_mensajes m ON m.id = x.mensaje_id WHERE m.equipo_id = e AND x.usuario_id = i1) THEN
+    RAISE EXCEPTION 'FALLO P222: %', v->0->'entregas';
+  END IF;
+  RAISE NOTICE 'OK P222: modo ambos sin duplicar';
+END $$;
+
+-- P223. proc_wa_marcar_entrega y estado derivado: una sale, otra falla → el aviso queda «enviado» con el
+--       id del proveedor; si todas fallan, «fallido». Entrega que no se enviaba → NX007.
+DO $$ DECLARE e uuid := pg_temp.wa_individual(2); v jsonb; m uuid; ok int := 0; BEGIN
+  PERFORM pg_temp.wa_directo(e, pg_temp.integrante(e, 1), '+5215500002231');
+  PERFORM pg_temp.wa_directo(e, pg_temp.integrante(e, 2), '+5215500002232');
+  m := pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  PERFORM proc_wa_marcar_entrega((v->0->'entregas'->0->>'id')::uuid, '{"ok": true, "proveedor_id": "wamid.P223"}');
+  IF (SELECT estado FROM whatsapp_mensajes WHERE id = m) <> 'enviando' THEN RAISE EXCEPTION 'FALLO P223: derivó antes de tiempo'; END IF;
+  PERFORM proc_wa_marcar_entrega((v->0->'entregas'->1->>'id')::uuid, '{"ok": false, "error": "No está en la lista"}');
+  IF (SELECT estado::text || proveedor_mensaje_id FROM whatsapp_mensajes WHERE id = m) <> 'enviadowamid.P223' THEN
+    RAISE EXCEPTION 'FALLO P223: %', (SELECT row_to_json(x) FROM whatsapp_mensajes x WHERE id = m);
+  END IF;
+  BEGIN PERFORM proc_wa_marcar_entrega((v->0->'entregas'->0->>'id')::uuid, '{"ok": true}'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P223: marcó dos veces'; END IF;
+  -- Todas fallan.
+  m := pg_temp.wa_aviso(e, 'Otro');
+  v := proc_wa_enviar(pg_temp.lider(e), e, ARRAY[m]);
+  PERFORM proc_wa_marcar_entrega((x->>'id')::uuid, '{"ok": false, "error": "x"}') FROM jsonb_array_elements(v->0->'entregas') x;
+  IF (SELECT estado FROM whatsapp_mensajes WHERE id = m) <> 'fallido' THEN RAISE EXCEPTION 'FALLO P223: no quedó fallido'; END IF;
+  RAISE NOTICE 'OK P223: proc_wa_marcar_entrega y estado derivado';
+END $$;
+
+-- P224. A3 + P-8 · bajo demanda: el aviso corto deja la entrega en `pendiente_ventana` (caduca en 7
+--       días) y anota la hora del aviso; el siguiente aviso ve `aviso_corto_reciente`.
+DO $$ DECLARE e uuid := pg_temp.wa_individual(1); i1 uuid := pg_temp.integrante(e, 1); v jsonb; x whatsapp_entregas; BEGIN
+  PERFORM pg_temp.wa_directo(e, i1, '+5215500002241');
+  PERFORM proc_wa_formato_guardar(i1, 'bajo_demanda');
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF v->0->'entregas'->0->>'formato' <> 'bajo_demanda' OR (v->0->'entregas'->0->>'ventana_abierta')::boolean
+     OR (v->0->'entregas'->0->>'aviso_corto_reciente')::boolean THEN
+    RAISE EXCEPTION 'FALLO P224: %', v->0->'entregas'->0;
+  END IF;
+  PERFORM proc_wa_marcar_entrega((v->0->'entregas'->0->>'id')::uuid,
+    '{"ok": true, "proveedor_id": "wamid.P224", "pendiente_ventana": true, "aviso_corto": true, "plantilla": "nx_aviso_ver"}');
+  SELECT * INTO x FROM whatsapp_entregas WHERE id = (v->0->'entregas'->0->>'id')::uuid;
+  IF x.estado <> 'pendiente_ventana' OR x.caduca_en < now() + interval '6 days' OR x.plantilla <> 'nx_aviso_ver'
+     OR (SELECT ultimo_teaser_en FROM whatsapp_usuario WHERE usuario_id = i1) IS NULL THEN
+    RAISE EXCEPTION 'FALLO P224: %', row_to_json(x);
+  END IF;
+  PERFORM pg_temp.wa_aviso(e, 'Segundo');
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF NOT (v->0->'entregas'->0->>'aviso_corto_reciente')::boolean THEN RAISE EXCEPTION 'FALLO P224: sin aviso reciente'; END IF;
+  RAISE NOTICE 'OK P224: bajo demanda en espera de ventana';
+END $$;
+
+-- P225. A4 · un mensaje entrante abre la ventana y devuelve TODO lo pendiente (ya `enviando`); al
+--       entregarlo queda `enviado`. Número de México con el «1» (wa_id) se reconoce (P-13).
+DO $$ DECLARE e uuid := pg_temp.wa_individual(1); i1 uuid := pg_temp.integrante(e, 1); v jsonb; r jsonb; BEGIN
+  PERFORM pg_temp.wa_directo(e, i1, '+522331360025');
+  PERFORM proc_wa_formato_guardar(i1, 'bajo_demanda');
+  PERFORM pg_temp.wa_aviso(e, 'Uno'); PERFORM pg_temp.wa_aviso(e, 'Dos');
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  PERFORM proc_wa_marcar_entrega((x->'entregas'->0->>'id')::uuid, '{"ok": true, "pendiente_ventana": true}') FROM jsonb_array_elements(v) x;
+  r := proc_wa_registrar_entrante('5212331360025', 'hola');
+  IF NOT (r->>'conocido')::boolean OR jsonb_array_length(r->'entregas') <> 2 OR r->>'respuesta' IS NOT NULL
+     OR (SELECT ultimo_entrante_en FROM whatsapp_usuario WHERE usuario_id = i1) IS NULL THEN
+    RAISE EXCEPTION 'FALLO P225: %', r;
+  END IF;
+  PERFORM proc_wa_entrega_tras_ventana((x->>'id')::uuid, true, 'wamid.P225', NULL) FROM jsonb_array_elements(r->'entregas') x;
+  IF EXISTS (SELECT 1 FROM whatsapp_entregas WHERE usuario_id = i1 AND estado <> 'enviado') THEN RAISE EXCEPTION 'FALLO P225: quedaron pendientes'; END IF;
+  r := proc_wa_registrar_entrante('5212331360025', 'otra vez');
+  IF r->>'respuesta' NOT LIKE 'No tienes avisos pendientes%' THEN RAISE EXCEPTION 'FALLO P225: %', r; END IF;
+  IF (proc_wa_registrar_entrante('5219999999999', 'hola')->>'conocido')::boolean THEN RAISE EXCEPTION 'FALLO P225: desconocido'; END IF;
+  RAISE NOTICE 'OK P225: proc_wa_registrar_entrante entrega lo pendiente';
+END $$;
+
+-- P226. A6 · caducidad: lo pendiente de ventana vencido pasa a `caducado` y se borra su contenido.
+DO $$ DECLARE e uuid := pg_temp.wa_individual(1); i1 uuid := pg_temp.integrante(e, 1); v jsonb; r jsonb; BEGIN
+  PERFORM pg_temp.wa_directo(e, i1, '+5215500002261');
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  PERFORM proc_wa_marcar_entrega((v->0->'entregas'->0->>'id')::uuid, '{"ok": true, "pendiente_ventana": true}');
+  r := proc_wa_caducar_pendientes(now() + interval '8 days');
+  IF (r->>'caducadas')::int < 1 OR (SELECT estado::text || coalesce(contenido, '∅') FROM whatsapp_entregas WHERE usuario_id = i1) <> 'caducado∅' THEN
+    RAISE EXCEPTION 'FALLO P226: %', r;
+  END IF;
+  RAISE NOTICE 'OK P226: proc_wa_caducar_pendientes';
+END $$;
+
+-- P227. A7 · «BAJA» retira el consentimiento, cancela lo pendiente y ya no se crean entregas.
+DO $$ DECLARE e uuid := pg_temp.wa_individual(1); i1 uuid := pg_temp.integrante(e, 1); v jsonb; r jsonb; BEGIN
+  PERFORM pg_temp.wa_directo(e, i1, '+5215500002271');
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  PERFORM proc_wa_marcar_entrega((v->0->'entregas'->0->>'id')::uuid, '{"ok": true, "pendiente_ventana": true}');
+  r := proc_wa_registrar_entrante('+5215500002271', 'baja');
+  IF NOT (r->>'baja')::boolean OR (SELECT consentimiento_revocado_en FROM whatsapp_usuario WHERE usuario_id = i1) IS NULL
+     OR (SELECT estado FROM whatsapp_entregas WHERE usuario_id = i1) <> 'cancelado' THEN
+    RAISE EXCEPTION 'FALLO P227: %', r;
+  END IF;
+  PERFORM pg_temp.wa_aviso(e, 'Después de la baja');
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  IF jsonb_array_length(v->0->'entregas') <> 0 THEN RAISE EXCEPTION 'FALLO P227: hubo entrega'; END IF;
+  RAISE NOTICE 'OK P227: BAJA';
+END $$;
+
+-- P228. B6 en la base · verificación: el código correcto verifica; uno malo o caducado no.
+DO $$ DECLARE u uuid := pg_temp.usuario(); c jsonb; r jsonb; BEGIN
+  INSERT INTO preferencias_usuario (usuario_id) VALUES (u);
+  c := proc_wa_solicitar_verificacion(u, '+5215500002281');
+  r := proc_wa_registrar_entrante('+5215500002281', 'VERIFICAR 000000');
+  IF (r->>'verificado')::boolean AND c->>'codigo' <> '000000' THEN RAISE EXCEPTION 'FALLO P228: código malo verificó'; END IF;
+  r := proc_wa_registrar_entrante('+5215500002281', 'verificar ' || (c->>'codigo'));
+  IF NOT (r->>'verificado')::boolean OR (SELECT verificado_en FROM whatsapp_usuario WHERE usuario_id = u) IS NULL
+     OR (SELECT codigo_hash FROM whatsapp_usuario WHERE usuario_id = u) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P228: %', r;
+  END IF;
+  c := proc_wa_solicitar_verificacion(u, '+5215500002281');
+  r := proc_wa_registrar_entrante('+5215500002281', 'VERIFICAR ' || (c->>'codigo'), now() + interval '1 hour');
+  IF (r->>'verificado')::boolean THEN RAISE EXCEPTION 'FALLO P228: código caducado verificó'; END IF;
+  RAISE NOTICE 'OK P228: verificación del número';
+END $$;
+
+-- P229. A9 · reporte personal de una persona SIN equipo: aviso con `equipo_id` nulo y una entrega
+--       directa lista para enviar; sin número es NX010 y hay tope de 5 por hora (NX007).
+DO $$ DECLARE u uuid := pg_temp.usuario('Paola Sola'); v jsonb; ok int := 0; i int; BEGIN
+  INSERT INTO preferencias_usuario (usuario_id) VALUES (u);
+  BEGIN PERFORM proc_wa_crear_reporte_personal(u); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_wa_usuario_guardar(u, '{"numero": "+5215500002291", "consentimiento": true}');
+  INSERT INTO tareas (dueno_id, codigo, titulo, estado, vence_en) VALUES (u, 1, 'Entregar ensayo', 'en_curso', now() + interval '2 days');
+  v := proc_wa_crear_reporte_personal(u);
+  IF v->>'equipo_id' IS NOT NULL OR jsonb_array_length(v->'entregas') <> 1
+     OR v->'entregas'->0->>'contenido' NOT LIKE '📋 Tu reporte de Nexo%Entregar ensayo%'
+     OR (SELECT equipo_id FROM whatsapp_mensajes WHERE id = (v->>'id')::uuid) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P229: %', v;
+  END IF;
+  FOR i IN 2..5 LOOP PERFORM proc_wa_crear_reporte_personal(u); END LOOP;
+  BEGIN PERFORM proc_wa_crear_reporte_personal(u); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P229: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P229: proc_wa_crear_reporte_personal';
+END $$;
+
+-- P230. Configuración y formato: el líder cambia modo y formato del equipo (valor inválido NX010); la
+--       persona elige su formato; el panel muestra solo los últimos 4 dígitos (R4) y la verificación.
+DO $$ DECLARE e uuid := pg_temp.wa_conectar(pg_temp.equipo_con(1)); i1 uuid := pg_temp.integrante(e, 1); c jsonb; p jsonb; ok int := 0; BEGIN
+  c := proc_wa_configurar(pg_temp.lider(e), e, '{"modo_entrega": "individual", "formato_defecto": "pdf"}');
+  IF c->>'modo_entrega' <> 'individual' OR c->>'formato_defecto' <> 'pdf' THEN RAISE EXCEPTION 'FALLO P230: %', c; END IF;
+  BEGIN PERFORM proc_wa_configurar(pg_temp.lider(e), e, '{"modo_entrega": "todos"}'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM pg_temp.wa_directo(e, i1, '+5215500002301');
+  c := proc_wa_formato_guardar(i1, 'bajo_demanda');
+  IF c->>'formato' <> 'bajo_demanda' OR fn_wa_formato_de(i1, e) <> 'bajo_demanda' THEN
+    RAISE EXCEPTION 'FALLO P230: formato personal';
+  END IF;
+  PERFORM proc_wa_formato_guardar(i1, NULL);
+  IF fn_wa_formato_de(i1, e) <> 'pdf' THEN RAISE EXCEPTION 'FALLO P230: no volvió al del equipo'; END IF;
+  BEGIN PERFORM proc_wa_formato_guardar(i1, 'video'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  p := (SELECT x FROM jsonb_array_elements(proc_wa_panel(pg_temp.lider(e), e)->'personas') x WHERE x->>'usuario_id' = i1::text);
+  IF p->>'numero_fin' <> '•••• 2301' OR p::text LIKE '%5215500002301%' OR (p->>'verificado')::boolean THEN
+    RAISE EXCEPTION 'FALLO P230: %', p;
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P230: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P230: modo, formato y panel sin números completos';
+END $$;
+
+-- P231. Webhook por entrega: `delivered` y `read` llegan a la entrega con ese id; el historial del
+--       líder muestra el reparto con los últimos 4 dígitos.
+DO $$ DECLARE e uuid := pg_temp.wa_individual(1); i1 uuid := pg_temp.integrante(e, 1); v jsonb; h jsonb; BEGIN
+  PERFORM pg_temp.wa_directo(e, i1, '+5215500002311');
+  PERFORM pg_temp.wa_aviso(e);
+  v := proc_wa_enviar(pg_temp.lider(e), e, NULL);
+  PERFORM proc_wa_marcar_entrega((v->0->'entregas'->0->>'id')::uuid, '{"ok": true, "proveedor_id": "wamid.P231"}');
+  PERFORM proc_wa_webhook_registrar('evt-P231', 'statuses', '{"statuses": [{"id": "wamid.P231", "status": "delivered"}, {"id": "wamid.P231", "status": "read"}]}');
+  IF (SELECT estado::text || (leido_en IS NOT NULL)::text FROM whatsapp_entregas WHERE proveedor_mensaje_id = 'wamid.P231') <> 'leidotrue' THEN
+    RAISE EXCEPTION 'FALLO P231: entrega no actualizada';
+  END IF;
+  h := proc_wa_historial(pg_temp.lider(e), e, NULL, NULL, 10);
+  IF h->'items'->0->'entregas'->0->>'numero_fin' <> '•••• 2311' OR h->'items'->0->'entregas'->0->>'estado' <> 'leido' THEN
+    RAISE EXCEPTION 'FALLO P231: %', h->'items'->0->'entregas';
+  END IF;
+  RAISE NOTICE 'OK P231: estados por entrega y reparto en el historial';
+END $$;
