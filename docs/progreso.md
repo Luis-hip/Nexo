@@ -361,7 +361,7 @@ Según `03`, Fase 6. Plan:
 
 Se harán después del spike de WhatsApp 1 a 1 (`docs/11_Plan_Spike_WhatsApp_1a1.md`):
 
-- [ ] **Token permanente de WhatsApp y webhook en producción**, para que los avisos reales salgan desde `app.nexo.lol` (usuario del sistema en Business Manager; `WHATSAPP_PROVIDER=real` y las variables en Render; webhook a `https://api.nexo.lol/whatsapp/webhook`).
+- [x] **Token permanente de WhatsApp y webhook en producción** (2026-11-21): usuario del sistema `nexo-api`, `WHATSAPP_PROVIDER=real` y las variables en Render, webhook en `https://api.nexo.lol/whatsapp/webhook` con el campo `messages` (`operacion.md` §15). Con el número de pruebas solo reciben los destinatarios dados de alta en Meta (hasta 5).
 - [ ] **Adjuntos en el chat** (la tabla `archivos` ya tiene `mensaje_id`).
 - [ ] **2FA o entrar con Google** (AUTH-07; tablas `credenciales_2fa` y `codigos_respaldo_2fa` y `usuarios.google_sub` ya existen).
 
@@ -372,5 +372,7 @@ Plan y reporte: `docs/11_Plan_Spike_WhatsApp_1a1.md` (secciones 15 y 16), DEC-03
 - **Hecho (2026-11-21):** migración `0033` (entregas por persona, `modo_entrega` individual/grupo/ambos, tres formatos, ventana de 24 h, verificación del número, reporte personal, caducidad), 7 procesos nuevos y 9 ajustados, despachador por entregas con PDF (`pdf-lib`), mensajes entrantes (verificar, BAJA, REPORTE), y las pantallas del plan §9.
 - **Pruebas:** SQL **180 OK** (P220–P231), API **209** (`spike.test.ts`, `integracion.test.ts`), web 100, E2E 8/8 con axe, `procesos:verificar` **160**.
 - **Decisión:** go técnico; la pista B espera a Meta (plantillas en revisión, dos reclasificadas como marketing) y al token permanente con webhook en producción.
-- [ ] Pista B: B2 (aprobación de plantillas), B3, B4, B5 y B6 (16.2 del plan).
+- **En producción (2026-11-21, PR #34 a #42):** spike desplegado con las migraciones `0033`–`0035`, `WHATSAPP_PROVIDER=real`, token permanente y webhook. Prueba real con el número de Luis: verificación (B6), «REPORTE» por texto dentro de la ventana (B3) y estados entregado/leído por webhook (B5). Correcciones del día: el código solo verifica, el texto entrante se limpia, «REPORTE» con la ventana abierta no usa plantillas y el paso de verificación se rediseñó (plan §16.2).
+- [x] Pista B: B1, B3, B5 y B6.
+- [ ] Pista B: B2 y B4 (esperan la aprobación de las plantillas en Meta).
 
