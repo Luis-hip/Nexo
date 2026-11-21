@@ -1163,7 +1163,7 @@ export function Privacidad() {
       secciones={[
         [
           '1. Datos que recopilamos',
-          'Nombre, correo, zona horaria, preferencias y el contenido que creas en tus equipos. Si conectas WhatsApp, el número que verifiques.',
+          'Nombre, correo, zona horaria, preferencias y el contenido que creas en tus equipos. Si conectas WhatsApp, el número que verifiques. Si entras con Google, el identificador de tu cuenta de Google, tu correo y tu nombre (no tu contraseña). Si activas la verificación en dos pasos, una clave cifrada y tus códigos de respaldo solo como huella (hash). Si nos escribes desde Contacto, tu nombre, correo, mensaje y, en los reportes de error, la página anterior, el navegador y la versión de la app; tu IP solo como huella (HMAC), nunca en claro.',
         ],
         [
           '2. Para qué los usamos',
@@ -1183,11 +1183,11 @@ export function Privacidad() {
         ],
         [
           '6. Conservación',
-          'Conservamos tus datos mientras tu cuenta esté activa. Al eliminarla, los borramos en un plazo máximo de 30 días.',
+          'Conservamos tus datos mientras tu cuenta esté activa. Al eliminarla, los borramos en un plazo máximo de 30 días. Los mensajes de Contacto se anonimizan 12 meses después de resolverse, o antes si lo pides desde Contacto.',
         ],
         [
           '7. Seguridad',
-          'Cifrado en tránsito, verificación en dos pasos opcional y control de sesiones activas.',
+          'Cifrado en tránsito, verificación en dos pasos opcional (app de autenticación y códigos de respaldo), acceso con Google opcional y control de sesiones activas.',
         ],
         ['8. Contacto', 'Para dudas de privacidad, escríbenos desde la página de Contacto.'],
       ]}

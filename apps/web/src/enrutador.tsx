@@ -298,6 +298,21 @@ const rutas: RouteObject[] = [
             ],
           },
           {
+            // Panel de contacto y soporte (docs/12 §8.4): permiso de sistema contacto.ver.
+            path: 'admin/contacto',
+            lazy: diferida(
+              () => import('./pages/admin/Contacto'),
+              (m) => m.PanelContacto,
+            ),
+          },
+          {
+            path: 'admin/contacto/:id',
+            lazy: diferida(
+              () => import('./pages/admin/Contacto'),
+              (m) => m.DetalleContactoPagina,
+            ),
+          },
+          {
             // Fase 3.6: ajustes de la persona (PF-01 a PF-09).
             path: 'ajustes',
             lazy: diferida(ajustes, (m) => m.AjustesLayout),

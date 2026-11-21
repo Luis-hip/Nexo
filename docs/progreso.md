@@ -363,7 +363,13 @@ Se harán después del spike de WhatsApp 1 a 1 (`docs/11_Plan_Spike_WhatsApp_1a1
 
 - [x] **Token permanente de WhatsApp y webhook en producción** (2026-11-21): usuario del sistema `nexo-api`, `WHATSAPP_PROVIDER=real` y las variables en Render, webhook en `https://api.nexo.lol/whatsapp/webhook` con el campo `messages` (`operacion.md` §15). Con el número de pruebas solo reciben los destinatarios dados de alta en Meta (hasta 5).
 - [ ] **Adjuntos en el chat** (la tabla `archivos` ya tiene `mensaje_id`).
-- [ ] **2FA o entrar con Google** (AUTH-07; tablas `credenciales_2fa` y `codigos_respaldo_2fa` y `usuarios.google_sub` ya existen).
+- [x] **Verificación en dos pasos** (2026-11-21, `0037`): TOTP compatible con Google Authenticator, 10 códigos de respaldo, segundo paso al entrar (también con Google). P235–P238, `dosPasos.test.ts`.
+- [x] **Entrar con Google** (2026-11-21, `0038`): OAuth 2.0 con PKCE en la API; correo verificado cuando Google lo verifica (con otro correo, el de verificación de siempre); una cuenta con correo sin verificar no se vincula sola. P239–P241, `google.test.ts`. **Falta:** crear el cliente OAuth en Google Cloud y poner `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` en Render.
+
+## Pendientes del 2026-11-21 (docs/13_Plan_Integrado_Pendientes.md)
+
+- [x] **WhatsApp al empezar** (`0036`): paso 4 opcional en la bienvenida, aviso «activa WhatsApp» al unirse a un equipo (con número verificado queda activo solo), «Enviarme mi reporte» sin verificar lleva al registro y envía al terminar. P234.
+- [x] **Módulo de contacto** (`0039`, docs/12 y docs/14): formulario con trampa, captcha opcional, límites, folio y seguimiento; panel `/admin/contacto` con bandeja, detalle, notas, respuestas, asignación, métricas, CSV y anonimización; correos por outbox con reintentos; retención de 12 meses; `pnpm db:permiso`. P242–P249, `contacto.test.ts`. **Falta:** claves de Turnstile, `CONTACTO_EQUIPO_DESTINO`, quién tendrá el permiso, y Resend con su DNS (ignorado hasta nuevo aviso).
 
 ## Spike: WhatsApp 1 a 1
 
