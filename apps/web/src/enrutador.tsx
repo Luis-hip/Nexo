@@ -38,6 +38,7 @@ const rutas: RouteObject[] = [
           { path: 'ayuda', lazy: diferida(publico, (m) => m.AyudaCentro) },
           { path: 'ayuda/:articulo', lazy: diferida(publico, (m) => m.AyudaArticulo) },
           { path: 'contacto', lazy: diferida(publico, (m) => m.Contacto) },
+          { path: 'contacto/seguimiento', lazy: diferida(publico, (m) => m.SeguimientoContacto) },
           { path: 'acerca', lazy: diferida(publico, (m) => m.Acerca) },
           { path: 'terminos', lazy: diferida(publico, (m) => m.Terminos) },
           { path: 'privacidad', lazy: diferida(publico, (m) => m.Privacidad) },
