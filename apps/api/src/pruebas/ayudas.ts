@@ -1,6 +1,6 @@
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { crearApp } from '../app';
-import { cargarConfig } from '../config';
+import { cargarConfig, type Config } from '../config';
 import { correoEnMemoria, type MensajeCorreo } from '../correo';
 import { crearBaseDatos, type BaseDatos } from '../db/conexion';
 import { COOKIE_SESION } from '../sesiones';
@@ -25,6 +25,8 @@ export type Cookies = Record<string, string>;
 
 export interface Entorno {
   db: BaseDatos;
+  /** Configuración con la que se creó la app. */
+  config: Config;
   app: FastifyInstance;
   /** Inicia sesión con el acceso de desarrollo y devuelve la cookie. */
   entrar: (email: string) => Promise<Cookies>;
@@ -55,6 +57,7 @@ export async function crearEntorno(extra: Record<string, string> = {}): Promise<
   const app = await crearApp(config, db, { correo });
   return {
     db,
+    config,
     app,
     correos: correo.enviados,
     async entrar(email) {

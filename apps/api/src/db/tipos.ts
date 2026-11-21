@@ -3,47 +3,67 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from "kysely";
+import type { ColumnType } from 'kysely';
 
-export type CategoriaNotificacion = "equipo" | "menciones" | "tareas";
+export type CategoriaNotificacion = 'equipo' | 'menciones' | 'tareas';
 
-export type ColumnaRetro = "acciones" | "bien" | "mejorar";
+export type ColumnaRetro = 'acciones' | 'bien' | 'mejorar';
 
-export type DensidadUi = "comoda" | "compacta";
+export type DensidadUi = 'comoda' | 'compacta';
 
-export type DestinoWa = "grupo" | "persona";
+export type DestinoWa = 'grupo' | 'persona';
 
-export type EstadoEntregaWa = "caducado" | "cancelado" | "entregado" | "enviado" | "enviando" | "fallido" | "leido" | "pendiente" | "pendiente_ventana";
+export type EstadoEntregaWa =
+  | 'caducado'
+  | 'cancelado'
+  | 'entregado'
+  | 'enviado'
+  | 'enviando'
+  | 'fallido'
+  | 'leido'
+  | 'pendiente'
+  | 'pendiente_ventana';
 
-export type EstadoEquipo = "activo" | "archivado";
+export type EstadoEquipo = 'activo' | 'archivado';
 
-export type EstadoExportacion = "expirada" | "lista" | "preparando";
+export type EstadoExportacion = 'expirada' | 'lista' | 'preparando';
 
-export type EstadoInvitacion = "aceptada" | "caducada" | "pendiente" | "revocada";
+export type EstadoInvitacion = 'aceptada' | 'caducada' | 'pendiente' | 'revocada';
 
-export type EstadoMembresia = "activa" | "caducada" | "expulsada" | "salio";
+export type EstadoMembresia = 'activa' | 'caducada' | 'expulsada' | 'salio';
 
-export type EstadoMensajeWa = "cancelado" | "enviado" | "enviando" | "fallido" | "pendiente" | "programado";
+export type EstadoMensajeWa =
+  'cancelado' | 'enviado' | 'enviando' | 'fallido' | 'pendiente' | 'programado';
 
-export type EstadoSolicitud = "aprobada" | "pendiente" | "rechazada";
+export type EstadoSolicitud = 'aprobada' | 'pendiente' | 'rechazada';
 
-export type EstadoSprint = "activo" | "cerrado" | "planificado";
+export type EstadoSprint = 'activo' | 'cerrado' | 'planificado';
 
-export type EstadoTarea = "aceptada" | "atascada" | "backlog" | "cancelada" | "completada" | "en_curso" | "habilitada" | "propuesta" | "rechazada";
+export type EstadoTarea =
+  | 'aceptada'
+  | 'atascada'
+  | 'backlog'
+  | 'cancelada'
+  | 'completada'
+  | 'en_curso'
+  | 'habilitada'
+  | 'propuesta'
+  | 'rechazada';
 
-export type EstadoTransferencia = "aceptada" | "cancelada" | "pendiente" | "rechazada";
+export type EstadoTransferencia = 'aceptada' | 'cancelada' | 'pendiente' | 'rechazada';
 
-export type EstadoWhatsapp = "conectado" | "error" | "pausado" | "sin_configurar";
+export type EstadoWhatsapp = 'conectado' | 'error' | 'pausado' | 'sin_configurar';
 
-export type FaseEleccion = "empate" | "postulacion" | "resultado" | "sin_votos" | "votacion";
+export type FaseEleccion = 'empate' | 'postulacion' | 'resultado' | 'sin_votos' | 'votacion';
 
-export type FormatoWa = "bajo_demanda" | "pdf" | "resumen_enlace";
+export type FormatoWa = 'bajo_demanda' | 'pdf' | 'resumen_enlace';
 
-export type FrecuenciaReporte = "diario" | "semanal";
+export type FrecuenciaReporte = 'diario' | 'semanal';
 
-export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
-  ? ColumnType<S, I | undefined, U>
-  : ColumnType<T, T | undefined, T>;
+export type Generated<T> =
+  T extends ColumnType<infer S, infer I, infer U>
+    ? ColumnType<S, I | undefined, U>
+    : ColumnType<T, T | undefined, T>;
 
 export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
@@ -59,49 +79,49 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
-export type ModoEntregaWa = "ambos" | "grupo" | "individual";
+export type ModoEntregaWa = 'ambos' | 'grupo' | 'individual';
 
-export type ModoReglaWa = "apagado" | "instantaneo" | "reporte";
+export type ModoReglaWa = 'apagado' | 'instantaneo' | 'reporte';
 
-export type OrigenTarea = "directa" | "propuesta";
+export type OrigenTarea = 'directa' | 'propuesta';
 
-export type PoliticaPropuestas = "libre" | "triaje" | "votacion";
+export type PoliticaPropuestas = 'libre' | 'triaje' | 'votacion';
 
-export type PrioridadTarea = "alta" | "baja" | "media";
+export type PrioridadTarea = 'alta' | 'baja' | 'media';
 
-export type ProveedorWhatsapp = "cloud_api_directo" | "cloud_api_grupos" | "simulado";
+export type ProveedorWhatsapp = 'cloud_api_directo' | 'cloud_api_grupos' | 'simulado';
 
-export type RechazoPor = "lider" | "responsable" | "votacion";
+export type RechazoPor = 'lider' | 'responsable' | 'votacion';
 
-export type RepeticionReunion = "diaria_lv" | "ninguna" | "semanal";
+export type RepeticionReunion = 'diaria_lv' | 'ninguna' | 'semanal';
 
-export type RespuestaAsistencia = "no" | "pendiente" | "quiza" | "si";
+export type RespuestaAsistencia = 'no' | 'pendiente' | 'quiza' | 'si';
 
-export type ResultadoTarea = "a_tiempo" | "con_retraso";
+export type ResultadoTarea = 'a_tiempo' | 'con_retraso';
 
-export type RolMembresia = "integrante" | "invitado" | "lider";
+export type RolMembresia = 'integrante' | 'invitado' | 'lider';
 
-export type TamanoTextoUi = "grande" | "normal" | "pequeno";
+export type TamanoTextoUi = 'grande' | 'normal' | 'pequeno';
 
-export type TemaUi = "claro" | "oscuro" | "sistema";
+export type TemaUi = 'claro' | 'oscuro' | 'sistema';
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
-export type TipoArchivo = "doc" | "hoja" | "imagen" | "otro" | "pdf";
+export type TipoArchivo = 'doc' | 'hoja' | 'imagen' | 'otro' | 'pdf';
 
-export type TipoConversacion = "dm" | "equipo" | "invitados" | "tarea";
+export type TipoConversacion = 'dm' | 'equipo' | 'invitados' | 'tarea';
 
-export type TipoEnvioWa = "instantaneo" | "reporte";
+export type TipoEnvioWa = 'instantaneo' | 'reporte';
 
-export type TipoPlantilla = "proyecto" | "retro" | "sprint";
+export type TipoPlantilla = 'proyecto' | 'retro' | 'sprint';
 
-export type TipoReaccion = "corazon" | "fiesta" | "hecho" | "ok" | "risa" | "visto";
+export type TipoReaccion = 'corazon' | 'fiesta' | 'hecho' | 'ok' | 'risa' | 'visto';
 
-export type TipoSolicitudInvitado = "ampliacion" | "conversion";
+export type TipoSolicitudInvitado = 'ampliacion' | 'conversion';
 
-export type TipoToken = "restablecer_contrasena" | "verificar_correo";
+export type TipoToken = 'restablecer_contrasena' | 'verificar_correo';
 
-export type VotoPropuesta = "aceptar" | "rechazar";
+export type VotoPropuesta = 'aceptar' | 'rechazar';
 
 export interface Actividad {
   accion: string;
@@ -154,14 +174,60 @@ export interface ComentariosTarea {
   texto: string;
 }
 
-export interface ContactoMensajes {
-  asunto: string;
-  atendido_en: Timestamp | null;
-  correo: string;
+export interface ContactoEventos {
+  autor_id: string | null;
+  contenido: string | null;
   creado_en: Generated<Timestamp>;
   id: Generated<string>;
+  mensaje_id: string;
+  metadatos: Generated<Json>;
+  tipo_evento: string;
+}
+
+export interface ContactoIntentos {
+  clave_hash: string;
+  creado_en: Generated<Timestamp>;
+  id: Generated<string>;
+  tipo_clave: string;
+}
+
+export interface ContactoMensajes {
+  actualizado_en: Generated<Timestamp>;
+  anonimizado: Generated<boolean>;
+  asignado_a: string | null;
+  asunto: string;
+  atendido_en: Timestamp | null;
+  contexto: Generated<Json>;
+  correo: string;
+  creado_en: Generated<Timestamp>;
+  estado: Generated<string>;
+  folio: string;
+  id: Generated<string>;
+  ip_hash: string | null;
   mensaje: string;
   nombre: string;
+  prioridad: Generated<string>;
+  resuelto_en: Timestamp | null;
+  tipo: string;
+  token_seguimiento_hash: string;
+  user_agent: string | null;
+  usuario_id: string | null;
+}
+
+export interface ContactoOutbox {
+  canal: Generated<string>;
+  creado_en: Generated<Timestamp>;
+  datos: Generated<Json>;
+  destinatario: string;
+  enviado_en: Timestamp | null;
+  estado: Generated<string>;
+  evento_id: string | null;
+  id: Generated<string>;
+  intentos: Generated<number>;
+  mensaje_id: string;
+  plantilla: string;
+  proximo_intento: Generated<Timestamp>;
+  ultimo_error: string | null;
 }
 
 export interface Conversaciones {
@@ -348,6 +414,12 @@ export interface Notificaciones {
   leida_en: Timestamp | null;
   texto: Generated<string>;
   titulo: string;
+  usuario_id: string;
+}
+
+export interface PermisosSistema {
+  otorgado_en: Generated<Timestamp>;
+  permiso: string;
   usuario_id: string;
 }
 
@@ -745,7 +817,10 @@ export interface DB {
   archivos: Archivos;
   codigos_respaldo_2fa: CodigosRespaldo2fa;
   comentarios_tarea: ComentariosTarea;
+  contacto_eventos: ContactoEventos;
+  contacto_intentos: ContactoIntentos;
   contacto_mensajes: ContactoMensajes;
+  contacto_outbox: ContactoOutbox;
   conversacion_lecturas: ConversacionLecturas;
   conversaciones: Conversaciones;
   credenciales_2fa: Credenciales2fa;
@@ -763,6 +838,7 @@ export interface DB {
   mensaje_reacciones: MensajeReacciones;
   mensajes: Mensajes;
   notificaciones: Notificaciones;
+  permisos_sistema: PermisosSistema;
   plantilla_elementos: PlantillaElementos;
   plantillas: Plantillas;
   preferencias_notificacion: PreferenciasNotificacion;

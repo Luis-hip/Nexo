@@ -16,6 +16,7 @@
     "procesos:verificar": "tsx scripts/verificar-procesos-doc.ts",
     "db:reset": "tsx --env-file-if-exists=.env scripts/reiniciar.ts",
     "db:rol-app": "tsx scripts/habilitar-rol-app.ts",
+    "db:permiso": "tsx --env-file-if-exists=.env scripts/permiso.ts",
     "db:volumen": "tsx --env-file-if-exists=.env scripts/volumen.ts",
     "db:explain": "tsx --env-file-if-exists=.env scripts/explain.ts",
     "wa:probar": "tsx --env-file-if-exists=.env scripts/wa-probar.ts",

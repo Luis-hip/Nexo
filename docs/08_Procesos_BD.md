@@ -2758,3 +2758,317 @@ Migración `0038_google.sql` (docs/13_Plan_Integrado_Pendientes.md, 1.2). Prueba
 - **Pruebas:** P241.
 - **Ejemplo de llamada:** `select proc_2fa_verificar($1, NULL, 'hash…')`
 - **Historial:** 2026-11-21 · creación · `0038`.
+
+---
+
+## Contacto
+
+Módulo de contacto y soporte (docs/12_Plan_Contacto.md; ajustes al repo en docs/13, sección 2). Migración `0039_contacto.sql`. Pruebas `P242`–`P249` y `apps/api/src/rutas/contacto.test.ts`.
+
+**Esquema:** `contacto_mensajes` (de 0001) suma folio, tipo, estado, prioridad, `usuario_id`, contexto técnico, `token_seguimiento_hash` (el token solo como SHA-256), `ip_hash` (HMAC), navegador, `asignado_a`, `anonimizado`, `actualizado_en` y `resuelto_en`; los mensajes anteriores recibieron folio. Tablas nuevas: `contacto_eventos` (hilo: creado, nota interna, respuesta, cambios), `contacto_outbox` (correos por enviar, con reintentos), `contacto_intentos` (límites) y `permisos_sistema` (`contacto.ver`, `contacto.gestionar`). Código de error nuevo: `NX013` (429, límite excedido).
+
+Auxiliares: `fn_permiso_sistema_asignar` (otorga o retira un permiso por correo; solo lo usa el script `pnpm db:permiso` con la cadena del dueño: al ser `fn_*`, el rol `nexo_app` de la API no puede ejecutarlo), `fn_permiso_sistema`, `fn_contacto_exigir`, `fn_contacto_transicion_valida`, `fn_contacto_persona_json`, `fn_contacto_json`, `fn_contacto_evento_json`, `fn_contacto_bloquear`, `fn_contacto_estado`, `fn_contacto_filtra`, `fn_contacto_anonimizar`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_contacto_verificar_limite` | Contacto · público | `0039_contacto.sql` | Vigente |
+| `proc_contacto_crear` | Contacto · público | `0039_contacto.sql` | Vigente |
+| `proc_contacto_seguimiento` | Contacto · público | `0039_contacto.sql` | Vigente |
+| `proc_contacto_permisos` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_listar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_obtener` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_cambiar_estado` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_cambiar_prioridad` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_asignar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_agregar_nota` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_responder` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_metricas` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_exportar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_pendientes` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_equipo` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_outbox_reintentar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_anonimizar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_outbox_tomar` | Contacto · sistema | `0039_contacto.sql` | Vigente |
+| `proc_contacto_outbox_resultado` | Contacto · sistema | `0039_contacto.sql` | Vigente |
+| `proc_contacto_purgar` | Contacto · sistema | `0039_contacto.sql` | Vigente |
+
+### proc_contacto_verificar_limite
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Límites del formulario antes de guardar un mensaje (plan §4).
+- **Parámetros:** `p_ip_hash text` (HMAC de la IP). `p_correo_hash text` (HMAC del correo).
+- **Retorno:** `jsonb` `{ permitido: true }`.
+- **Reglas y validaciones:** Por IP 3 por hora y 10 por día; por correo 3 por día; global 200 por hora. Si no se excede, registra el intento.
+- **Errores:** `NX013` (429) · límite excedido; `DETAIL` `{ retry_after }` en segundos (la API lo manda en `Retry-After`).
+- **Tablas que toca:** lectura y escritura `contacto_intentos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/contacto.ts` → `verificarLimite()`; `POST /contacto`.
+- **Pruebas:** P243; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_verificar_limite('hmac-ip', 'hmac-correo')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_crear
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Guarda un mensaje del formulario (visitante o persona con sesión) con su folio.
+- **Parámetros:** `p_datos jsonb` `{ tipo, nombre, correo, asunto, mensaje, contexto }`. `p_usuario_id uuid` (con sesión). `p_token_hash text` (SHA-256 del token de seguimiento). `p_token_cifrado text` (el token cifrado, solo para el correo). `p_ip_hash text`. `p_user_agent text`. `p_destino_equipo text` (correo del equipo o NULL).
+- **Retorno:** `jsonb` `{ id, folio }`.
+- **Reglas y validaciones:** Valida tipo y longitudes; con sesión toma nombre y correo de la cuenta; folio `NX-AAAA-NNNNNN`; evento «creado»; outbox con el aviso al equipo (si hay destino) y la confirmación al remitente. Una transacción.
+- **Errores:** `NX010` · datos inválidos.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/contacto.ts` → `crear()`; `POST /contacto`.
+- **Pruebas:** P22, P242; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_crear($1::jsonb, NULL, $2, $3, $4, 'Firefox', 'equipo@nexo.lol')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_seguimiento
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Consulta del estado de un mensaje con folio y token, sin cuenta.
+- **Parámetros:** `p_folio text`. `p_token_hash text`.
+- **Retorno:** `jsonb` `{ folio, tipo, asunto, estado, creado_en, actualizado_en, respuestas[] }`.
+- **Reglas y validaciones:** Solo las respuestas del equipo, nunca notas internas ni datos de contacto. Folio inexistente y token incorrecto dan el mismo error.
+- **Errores:** `NX006` · `seguimiento_no_encontrado`.
+- **Tablas que toca:** lectura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/contacto.ts` → `seguimiento()`; `GET /contacto/seguimiento`.
+- **Pruebas:** P246; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_seguimiento('NX-2026-000123', $1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_permisos
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Qué puede hacer la persona en el panel (para mostrar u ocultar controles).
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ ver, gestionar }`.
+- **Reglas y validaciones:** `contacto.gestionar` incluye `contacto.ver`. La API y los procesos lo vuelven a exigir.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `permisos_sistema`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/permisos`.
+- **Pruebas:** P244.
+- **Ejemplo de llamada:** `select proc_contacto_permisos($1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_listar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Bandeja con filtros, búsqueda y paginación del lado del servidor.
+- **Parámetros:** `p_actor_id uuid`. `p_filtros jsonb` `{ estado[], tipo[], prioridad[], asignado (yo | sin_asignar | uuid), q, desde, hasta, orden (reciente | antiguo | prioridad), pagina, por_pagina ≤ 100 }`.
+- **Retorno:** `jsonb` `{ datos[], total, pagina, por_pagina }`; cada fila con extracto de 160 caracteres.
+- **Reglas y validaciones:** Búsqueda en español (`to_tsvector`) más coincidencia exacta por folio o correo. Exige `contacto.ver`.
+- **Errores:** `NX005` · sin permiso.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto`.
+- **Pruebas:** P244, P248.
+- **Ejemplo de llamada:** `select proc_contacto_listar($1, '{"estado":["nuevo"],"q":"tablero"}')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_obtener
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Detalle de un mensaje con su hilo.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`.
+- **Retorno:** `jsonb` mensaje completo + `eventos[]` + `envios_fallidos`.
+- **Reglas y validaciones:** Exige `contacto.ver`. Nunca devuelve hashes de token ni de IP.
+- **Errores:** `NX005`; `NX006` · no existe.
+- **Tablas que toca:** lectura `contacto_mensajes`, `contacto_eventos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/:id`.
+- **Pruebas:** P244.
+- **Ejemplo de llamada:** `select proc_contacto_obtener($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_cambiar_estado
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Cambia el estado según la matriz (plan 4.1).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_estado text`.
+- **Retorno:** `jsonb` mensaje.
+- **Reglas y validaciones:** Registra el evento con `{ de, a }`; fija `atendido_en` la primera vez; `resuelto_en` al resolver y se limpia al reabrir. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX007` · transición inválida; `NX010` · estado desconocido.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `PATCH /admin/contacto/:id/estado`.
+- **Pruebas:** P245.
+- **Ejemplo de llamada:** `select proc_contacto_cambiar_estado($1, $2, 'resuelto')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_cambiar_prioridad
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Cambia la prioridad.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_prioridad text` (baja, normal, alta).
+- **Retorno:** `jsonb` mensaje.
+- **Reglas y validaciones:** Evento con `{ de, a }`. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX010`.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `PATCH /admin/contacto/:id/prioridad`.
+- **Pruebas:** `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_cambiar_prioridad($1, $2, 'alta')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_asignar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Asigna el mensaje a alguien del equipo de soporte (o NULL para desasignar).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_asignado uuid` (o NULL).
+- **Retorno:** `jsonb` mensaje.
+- **Reglas y validaciones:** Solo a quien tiene `contacto.gestionar`. Un mensaje «nuevo» pasa a «en revisión».
+- **Errores:** `NX005`; `NX006`; `NX010` · `asignado_invalido`.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `PATCH /admin/contacto/:id/asignacion`.
+- **Pruebas:** P248.
+- **Ejemplo de llamada:** `select proc_contacto_asignar($1, $2, $3)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_agregar_nota
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Nota interna (solo la ve el equipo).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_contenido text` (1–5000).
+- **Retorno:** `jsonb` evento.
+- **Reglas y validaciones:** Fija `atendido_en` si aplica. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX010`.
+- **Tablas que toca:** escritura `contacto_eventos`, `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `POST /admin/contacto/:id/notas`.
+- **Pruebas:** P246.
+- **Ejemplo de llamada:** `select proc_contacto_agregar_nota($1, $2, 'Revisar con el equipo de web')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_responder
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Respuesta al remitente.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_contenido text` (1–5000). `p_estado text` (`esperando_usuario`, `resuelto` o NULL).
+- **Retorno:** `jsonb` evento.
+- **Reglas y validaciones:** Evento «respuesta» (visible en el seguimiento) y correo en el outbox; un «nuevo» pasa antes a «en revisión»; después el estado pedido. Una transacción. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX007` · anonimizado o transición inválida; `NX010`.
+- **Tablas que toca:** escritura `contacto_eventos`, `contacto_outbox`, `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `POST /admin/contacto/:id/respuestas`.
+- **Pruebas:** P246, P249.
+- **Ejemplo de llamada:** `select proc_contacto_responder($1, $2, 'Ya quedó', 'resuelto')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_metricas
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Métricas del panel entre dos fechas (30 días por defecto).
+- **Parámetros:** `p_actor_id uuid`. `p_desde timestamptz`. `p_hasta timestamptz`.
+- **Retorno:** `jsonb` `{ total, abiertos, resueltos, por_tipo, por_estado, primera_respuesta_horas, resolucion_horas, por_dia[], por_persona[] }`.
+- **Reglas y validaciones:** Exige `contacto.ver`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/metricas`.
+- **Pruebas:** P248.
+- **Ejemplo de llamada:** `select proc_contacto_metricas($1, NULL, NULL)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_exportar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Filas para el CSV con los filtros de la bandeja (tope de 10 000).
+- **Parámetros:** `p_actor_id uuid`. `p_filtros jsonb`.
+- **Retorno:** `jsonb` arreglo de filas.
+- **Reglas y validaciones:** Exige `contacto.gestionar` (contiene datos personales). La API neutraliza fórmulas y agrega BOM.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/exportar.csv`.
+- **Pruebas:** P248; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_exportar($1, '{}')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_pendientes
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Indicador del menú.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ nuevos }`.
+- **Reglas y validaciones:** Exige `contacto.ver`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/pendientes/conteo`.
+- **Pruebas:** `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_pendientes($1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_equipo
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** A quién se puede asignar.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `[{ id, nombre }]` de quienes tienen `contacto.gestionar`.
+- **Reglas y validaciones:** Exige `contacto.ver`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `permisos_sistema`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/equipo`.
+- **Pruebas:** `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_equipo($1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_outbox_reintentar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Vuelve a intentar los envíos fallidos de un mensaje.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`.
+- **Retorno:** `jsonb` `{ reintentados }`.
+- **Reglas y validaciones:** Exige `contacto.gestionar`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** escritura `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `POST /admin/contacto/:id/reintentar`.
+- **Pruebas:** P247.
+- **Ejemplo de llamada:** `select proc_contacto_outbox_reintentar($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_anonimizar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Elimina los datos personales de un mensaje (solicitud de eliminación).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`.
+- **Retorno:** `jsonb` `{ anonimizado: true }`.
+- **Reglas y validaciones:** Reemplaza nombre, correo, IP, navegador, mensaje, contexto y contenido de eventos; cancela envíos pendientes; deja un evento de sistema. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `DELETE /admin/contacto/:id/datos`.
+- **Pruebas:** P249.
+- **Ejemplo de llamada:** `select proc_contacto_anonimizar($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_outbox_tomar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Toma envíos pendientes para el ciclo de trabajos.
+- **Parámetros:** `p_limite int`.
+- **Retorno:** `jsonb` arreglo con lo necesario para armar cada correo.
+- **Reglas y validaciones:** `FOR UPDATE SKIP LOCKED` (dos instancias no duplican); marca `procesando` y suma el intento; recupera los `procesando` de más de 10 minutos.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `contacto_outbox`; lectura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `trabajos/contacto.ts` → `cicloContacto()`.
+- **Pruebas:** P247; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_outbox_tomar(10)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_outbox_resultado
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Resultado de un envío.
+- **Parámetros:** `p_id uuid`. `p_ok boolean`. `p_error text`.
+- **Retorno:** `jsonb` `{ estado, intentos }`.
+- **Reglas y validaciones:** Bien: `enviado` y se borran sus datos (el token cifrado). Mal: espera 1, 5, 15, 60 y 180 minutos; al quinto intento, `fallido`.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `trabajos/contacto.ts`.
+- **Pruebas:** P247.
+- **Ejemplo de llamada:** `select proc_contacto_outbox_resultado($1, false, 'Resend 500')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_purgar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Retención diaria (plan §9).
+- **Parámetros:** `p_meses int` (12 por defecto, `CONTACTO_RETENCION_MESES`).
+- **Retorno:** `jsonb` `{ anonimizados, intentos_borrados, envios_borrados }`.
+- **Reglas y validaciones:** Anonimiza lo resuelto o descartado de hace más de N meses; borra intentos de más de 7 días y envíos hechos de más de 90.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`, `contacto_intentos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `trabajos/contacto.ts` (una vez al día).
+- **Pruebas:** P249.
+- **Ejemplo de llamada:** `select proc_contacto_purgar(12)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+

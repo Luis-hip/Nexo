@@ -89,22 +89,4 @@ export const esquemaPerfil = z
   .partial();
 export type CambiosPerfil = z.infer<typeof esquemaPerfil>;
 
-export const TIPOS_CONTACTO = ['duda', 'error', 'sugerencia'] as const;
-
-/** Cuerpo de POST /contacto (formulario público). */
-export const esquemaContacto = z.object({
-  nombre: z.string().trim().min(1, 'Escribe tu nombre.').max(80, 'Usa 80 caracteres como máximo.'),
-  correo: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .max(254)
-    .email('Escribe un correo válido, por ejemplo nombre@dominio.com.'),
-  tipo: z.enum(TIPOS_CONTACTO),
-  mensaje: z
-    .string()
-    .trim()
-    .min(10, 'Cuéntanos un poco más (mínimo 10 caracteres).')
-    .max(4000, 'El mensaje admite hasta 4000 caracteres.'),
-});
-export type Contacto = z.infer<typeof esquemaContacto>;
+// El formulario de contacto vive en contacto.ts (módulo completo, docs/12).

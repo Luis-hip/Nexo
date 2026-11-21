@@ -57,6 +57,16 @@ const esquemaEntorno = z.object({
   GOOGLE_CLIENT_SECRET: textoOpcional,
   GOOGLE_AUTH_URL: z.url().default('https://accounts.google.com/o/oauth2/v2/auth'),
   GOOGLE_TOKEN_URL: z.url().default('https://oauth2.googleapis.com/token'),
+  /**
+   * Módulo de contacto (docs/12, docs/13 sección 2). Todo opcional: sin TURNSTILE_SECRET_KEY no hay
+   * captcha (quedan la trampa para bots y los límites); sin CONTACTO_EQUIPO_DESTINO no se avisa al
+   * equipo por correo (los mensajes se ven en el panel). IP_HASH_SALT: si falta, se deriva de
+   * ENCRYPTION_KEY (la IP nunca se guarda en claro).
+   */
+  TURNSTILE_SECRET_KEY: textoOpcional,
+  CONTACTO_EQUIPO_DESTINO: z.preprocess((v) => (v === '' ? undefined : v), z.email().optional()),
+  CONTACTO_RETENCION_MESES: z.coerce.number().int().min(1).max(120).default(12),
+  IP_HASH_SALT: textoOpcional,
   /** Spike 1 a 1: número de WhatsApp de Nexo (para el enlace `wa.me` de la verificación). */
   WHATSAPP_NUMERO_NEXO: z
     .string()

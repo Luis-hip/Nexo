@@ -77,6 +77,11 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # Módulo de contacto (docs/12): captcha (opcional) y correo del equipo que recibe los avisos.
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: CONTACTO_EQUIPO_DESTINO
+        sync: false
 
 databases:
   - name: nexo-bd

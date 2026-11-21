@@ -76,7 +76,7 @@ export async function crearApp(
   app.get('/salud', async () => ({ estado: 'ok' }));
   await app.register(rutasYo, { db });
   await app.register(rutasPersonal, { db });
-  await app.register(rutasContacto, { db });
+  await app.register(rutasContacto, { db, config });
   await app.register(rutasEquipos, { db });
   await app.register(rutasTareasEquipo, { db });
   await app.register(rutasSprints, { db });

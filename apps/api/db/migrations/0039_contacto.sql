@@ -625,7 +625,7 @@ BEGIN
 END $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 /** Script `db:permiso`: otorga o retira un permiso de sistema a la cuenta con ese correo. */
-CREATE OR REPLACE FUNCTION proc_permiso_sistema_asignar(p_correo text, p_permiso text, p_otorgar boolean) RETURNS jsonb AS $$
+CREATE OR REPLACE FUNCTION fn_permiso_sistema_asignar(p_correo text, p_permiso text, p_otorgar boolean) RETURNS jsonb AS $$
 DECLARE v_id uuid;
 BEGIN
   SELECT id INTO v_id FROM usuarios WHERE correo = lower(btrim(p_correo)) AND eliminado_en IS NULL;
@@ -651,7 +651,7 @@ SELECT fn_conceder_procesos();
 
 -- Down Migration
 
-DROP FUNCTION IF EXISTS proc_permiso_sistema_asignar(text, text, boolean);
+DROP FUNCTION IF EXISTS fn_permiso_sistema_asignar(text, text, boolean);
 DROP FUNCTION IF EXISTS proc_contacto_purgar(int);
 DROP FUNCTION IF EXISTS proc_contacto_outbox_resultado(uuid, boolean, text);
 DROP FUNCTION IF EXISTS proc_contacto_outbox_tomar(int);
