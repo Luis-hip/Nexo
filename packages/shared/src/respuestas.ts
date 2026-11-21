@@ -771,6 +771,10 @@ export const esquemaCuentaAuth = z.object({
 // Fase 4 · WhatsApp (4.2 y 4.3): respuestas de los procesos `proc_wa_*`
 // =============================================================================================
 import {
+  ESTADOS_ENTREGA_WA,
+  FORMATOS_WA,
+  MODOS_ENTREGA_WA,
+  type EntregaWa,
   ESTADOS_CONEXION_WA,
   ESTADOS_MENSAJE_WA,
   MODOS_REGLA_WA,
@@ -802,7 +806,23 @@ export const esquemaConfiguracionWa = z.object({
   envio_automatico: z.boolean(),
   ultimo_reporte_en: fechaIso.nullable(),
   proximo_reporte: fechaIso.nullable(),
+  modo_entrega: z.enum(MODOS_ENTREGA_WA),
+  formato_defecto: z.enum(FORMATOS_WA),
 }) satisfies z.ZodType<ConfiguracionWa>;
+
+export const esquemaEntregaWa = z.object({
+  id: z.string(),
+  destino: z.enum(['grupo', 'persona']),
+  formato: z.enum(FORMATOS_WA),
+  estado: z.enum(ESTADOS_ENTREGA_WA),
+  persona: esquemaPersonaTarea.nullable(),
+  numero_fin: z.string().nullable(),
+  enviado_en: fechaIso.nullable(),
+  entregado_en: fechaIso.nullable(),
+  leido_en: fechaIso.nullable(),
+  caduca_en: fechaIso.nullable(),
+  ultimo_error: z.string().nullable(),
+}) satisfies z.ZodType<EntregaWa>;
 
 export const esquemaMensajeWa = z.object({
   id: z.string(),
@@ -821,7 +841,8 @@ export const esquemaMensajeWa = z.object({
   ultimo_error: z.string().nullable(),
   reporte_id: z.string().nullable(),
   creado_en: fechaIso,
-}) satisfies z.ZodType<MensajeWa>;
+  entregas: z.array(esquemaEntregaWa).default([]),
+}) satisfies z.ZodType<MensajeWa, unknown>;
 
 export const esquemaPanelWa = z.object({
   configuracion: esquemaConfiguracionWa,
@@ -838,29 +859,47 @@ export const esquemaPanelWa = z.object({
       consentimiento: z.boolean().nullable(),
       en_grupo: z.boolean(),
       tiene_numero: z.boolean(),
+      numero_fin: z.string().nullable(),
+      verificado: z.boolean(),
+      formato: z.enum(FORMATOS_WA),
     }),
   ),
-}) satisfies z.ZodType<PanelWa>;
+}) satisfies z.ZodType<PanelWa, unknown>;
 
 export const esquemaColaWa = z.object({
   instantaneos: z.array(esquemaMensajeWa),
   para_reporte: z.array(esquemaMensajeWa),
   proximo_reporte: fechaIso.nullable(),
-}) satisfies z.ZodType<ColaWa>;
+}) satisfies z.ZodType<ColaWa, unknown>;
 
 export const esquemaHistorialWaRespuesta = z.object({
   items: z.array(esquemaMensajeWa),
   hay_mas: z.boolean(),
-}) satisfies z.ZodType<HistorialWa>;
+}) satisfies z.ZodType<HistorialWa, unknown>;
 
 export const esquemaAvisosParaEnviar = z.array(
   z.object({
     id: z.string(),
-    equipo_id: z.string(),
+    equipo_id: z.string().nullable(),
     texto: z.string(),
     proveedor: z.enum(PROVEEDORES_WA),
     grupo_externo_id: z.string().nullable(),
     destinatarios: z.array(z.string()),
+    usuario_id: z.string().nullable().optional(),
+    entregas: z
+      .array(
+        z.object({
+          id: z.string(),
+          destino: z.enum(['grupo', 'persona']),
+          formato: z.enum(FORMATOS_WA),
+          contenido: z.string().nullable(),
+          numero: z.string().nullable(),
+          nombre: z.string().nullable(),
+          ventana_abierta: z.boolean(),
+          aviso_corto_reciente: z.boolean(),
+        }),
+      )
+      .optional(),
   }),
 ) satisfies z.ZodType<AvisoParaEnviar[]>;
 
@@ -868,6 +907,10 @@ export const esquemaWhatsAppUsuarioRespuesta = z.object({
   numero: z.string().nullable(),
   consentimiento: z.boolean(),
   consentimiento_en: fechaIso.nullable(),
+  verificado: z.boolean(),
+  verificado_en: fechaIso.nullable(),
+  ventana_abierta: z.boolean(),
+  formato: z.enum(FORMATOS_WA).nullable(),
   equipos: z.array(
     z.object({
       equipo_id: z.string(),

@@ -2537,3 +2537,17 @@ Mensajes del formulario público de contacto.
 | `mensaje` | `text NOT NULL CHECK (char_length(mensaje) BETWEEN 10 AND 4000)` |  |
 | `creado_en` | `timestamptz NOT NULL DEFAULT now()` |  |
 | `atendido_en` | `timestamptz` |  |
+
+## Anexo · Spike WhatsApp 1 a 1 (migración 0033, DEC-039)
+
+Cambios aditivos sobre el esquema de la sección de WhatsApp:
+
+- Tipos: `modo_entrega_wa` (`individual`, `grupo`, `ambos`), `formato_wa` (`resumen_enlace`, `pdf`, `bajo_demanda`), `destino_wa` (`grupo`, `persona`) y `estado_entrega_wa` (`pendiente`, `pendiente_ventana`, `enviando`, `enviado`, `entregado`, `leido`, `fallido`, `caducado`, `cancelado`).
+- `whatsapp_configuracion`: `modo_entrega` (por defecto `grupo`) y `formato_defecto` (por defecto `resumen_enlace`).
+- `preferencias_usuario.wa_formato` (nulo = el del equipo).
+- `whatsapp_usuario`: `ultimo_entrante_en` (la ventana de 24 h se calcula, no se guarda), `ultimo_teaser_en`, `codigo_hash`, `codigo_expira_en`.
+- `whatsapp_mensajes`: `equipo_id` admite nulo y se agrega `usuario_id` (reporte personal); `CHECK` de que haya al menos uno.
+- **`whatsapp_entregas`**: una fila por destinatario de cada aviso (o una al grupo): `destino`, `usuario_id`, `formato`, `plantilla`, `variables`, `contenido` (≤ 4000; se borra al caducar), `estado`, `caduca_en`, `intentos`, `ultimo_error`, `proveedor_mensaje_id` (no único: lo pendiente se entrega junto en un texto), `enviado_en`, `entregado_en`, `leido_en`. Únicos: `(mensaje_id, usuario_id)` y una entrega de grupo por aviso.
+
+Pruebas de procesos: P220–P231 (`docs/08`, «Spike WhatsApp 1 a 1»).
+

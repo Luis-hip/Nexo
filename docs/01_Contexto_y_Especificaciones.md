@@ -288,6 +288,8 @@ Interfaz única `ProveedorWhatsApp` con tres implementaciones, que corresponden 
 
 El resto de la aplicación solo conoce la interfaz; cambiar de proveedor es cambiar un valor de configuración.
 
+> **Canal directo (spike 1 a 1, 2026-11-21, DEC-039):** además del grupo existe el envío directo por persona. El canal lo decide `whatsapp_configuracion.modo_entrega` (`individual`, `grupo`, `ambos`) y el destino, no el proveedor (§7.2). Cada aviso se reparte en `whatsapp_entregas` (una por destinatario) con estados `pendiente → enviando → enviado → entregado → leído`, o `pendiente_ventana → caducado` (§7.4). Meta solo entrega texto libre dentro de la ventana de 24 h desde el último mensaje de la persona; fuera de ella se usa una plantilla según el formato de cada persona (resumen con enlace, PDF o bajo demanda). Detalle: `11_Plan_Spike_WhatsApp_1a1.md`.
+
 ### 7.3 WhatsApp: restricciones reales y decisión D-01
 
 > **Ojo: estos datos provienen de un sitio de terceros que dice seguir la documentación de Meta. Se deben verificar contra la documentación oficial en la Fase 0, antes de fijar nada.**

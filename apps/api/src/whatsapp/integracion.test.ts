@@ -207,17 +207,31 @@ describe.skipIf(!DATABASE_URL)('integración de WhatsApp con la API de Meta (imi
     });
     expect(envio.cuerpo).toEqual({ enviados: 1, fallidos: 0 });
 
-    // Dos peticiones a Meta (Ana y Beto); Caro no aceptó los avisos del equipo.
+    // Dos peticiones a Meta (Ana y Beto); Caro no aceptó los avisos del equipo. Spike 1 a 1
+    // (DEC-039): sin formato elegido va el del equipo, «resumen con enlace» (plantilla + botón).
     expect(peticiones.map((p) => p.cuerpo.to).sort()).toEqual(['5212221110001', '5212221110002']);
     for (const p of peticiones) {
       expect(p.url).toBe(`/v21.0/${PHONE_ID}/messages`);
       expect(p.autorizacion).toBe(`Bearer ${TOKEN}`);
-      expect(p.cuerpo).toEqual({
+      expect(p.cuerpo).toMatchObject({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: p.cuerpo.to,
-        type: 'text',
-        text: { body: aviso.texto },
+        type: 'template',
+        template: {
+          name: 'nx_resumen_enlace',
+          language: { code: 'es_MX' },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: 'tu equipo' },
+                { type: 'text', text: expect.stringContaining('Prueba de envío directo') },
+              ],
+            },
+            { type: 'button', sub_type: 'url', index: '0' },
+          ],
+        },
       });
     }
 
@@ -267,21 +281,46 @@ describe.skipIf(!DATABASE_URL)('integración de WhatsApp con la API de Meta (imi
     });
   });
 
-  it('fuera de la ventana de 24 h: Meta rechaza el texto y se manda la plantilla (DEC-WA-2)', async () => {
-    modo = 'ventana';
-    const aviso = await reunion('Prueba fuera de ventana');
+  it('bajo demanda (spike 1 a 1): aviso corto sin ventana, uno solo cada 12 h, y al responder llega todo', async () => {
+    expect(
+      (await e.pedir(cookies.beto, 'PUT', '/yo/whatsapp/formato', { formato: 'bajo_demanda' }))
+        .estado,
+    ).toBe(200);
+    const a1 = await reunion('Bajo demanda uno');
+    const a2 = await reunion('Bajo demanda dos');
     peticiones.length = 0;
     const envio = await e.pedir(cookies.ana, 'POST', `${E}/whatsapp/cola/enviar`, {
-      ids: [aviso.id],
+      ids: [a1.id, a2.id],
     });
-    modo = 'ok';
-    expect(envio.cuerpo).toEqual({ enviados: 1, fallidos: 0 });
-    // Por persona: el texto (rechazado) y después la plantilla.
-    expect(peticiones.map((p) => p.cuerpo.type)).toEqual(['text', 'template', 'text', 'template']);
-    expect(peticiones[1]!.cuerpo.template).toEqual({
-      name: 'hello_world',
-      language: { code: 'en_US' },
+    expect(envio.cuerpo).toEqual({ enviados: 2, fallidos: 0 });
+    const aBeto = peticiones.filter((p) => p.cuerpo.to === '5212221110002');
+    // Un solo aviso corto para Beto (P-8); Ana recibe su resumen de cada aviso.
+    expect(aBeto).toHaveLength(1);
+    expect(aBeto[0]!.cuerpo.template).toMatchObject({
+      name: 'nx_aviso_ver',
+      components: [
+        { type: 'body', parameters: [{ type: 'text', text: 'una actualización de tu equipo' }] },
+      ],
     });
+    expect(peticiones.filter((p) => p.cuerpo.to === '5212221110001')).toHaveLength(2);
+
+    // Beto responde (como lo haría el botón): se abre la ventana y llegan los dos avisos en un texto.
+    peticiones.length = 0;
+    const r = await e.pedir(cookies.ana, 'POST', '/dev/whatsapp/entrante', {
+      numero: '5212221110002',
+      texto: 'Ver actualización',
+    });
+    expect(r.cuerpo).toMatchObject({ conocido: true, entregadas: 2 });
+    expect(peticiones).toHaveLength(1);
+    expect(peticiones[0]!.cuerpo.type).toBe('text');
+    expect(peticiones[0]!.cuerpo.text!.body).toContain('Bajo demanda uno');
+    expect(peticiones[0]!.cuerpo.text!.body).toContain('Bajo demanda dos');
+    const h = await historial();
+    for (const a of [a1, a2]) {
+      const m = h.find((x) => x.id === a.id)!;
+      expect(m.entregas.find((x) => x.numero_fin === '•••• 0002')?.estado).toBe('enviado');
+    }
+    await e.pedir(cookies.beto, 'PUT', '/yo/whatsapp/formato', { formato: null });
   });
 
   it('grupo del equipo: un solo mensaje al id del grupo (API de grupos)', async () => {
