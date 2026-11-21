@@ -16,6 +16,9 @@ import { ErrorMeta } from './proveedor';
  *    que la persona responda (un solo aviso corto cada 12 h, P-8);
  *  - resumen con enlace → plantilla `nx_resumen_enlace` (resumen + botón a la app);
  *  - PDF → documento generado aquí con `pdf-lib` y plantilla `nx_reporte_pdf`.
+ * Con la ventana abierta (la persona escribió hace menos de 24 h) no hace falta plantilla: el
+ * resumen va como texto con el enlace y el PDF como documento (pista B, 2026-11-21: así «REPORTE»
+ * llega aunque Meta no haya aprobado las plantillas).
  */
 
 export const PLANTILLAS_WA = {
@@ -46,6 +49,8 @@ export interface CanalWhatsApp {
   plantilla(numero: string, nombre: string, componentes: Componente[]): Promise<string>;
   grupo(grupoId: string, texto: string): Promise<string>;
   subirPdf(pdf: Uint8Array, nombre: string): Promise<string>;
+  /** Documento ya subido, sin plantilla: solo dentro de la ventana de 24 h. */
+  documento(numero: string, medio: string, nombre: string, pie: string): Promise<string>;
 }
 
 /**
@@ -73,6 +78,9 @@ export function canalSimulado(): CanalWhatsApp {
     },
     async subirPdf() {
       return `sim-medio-${randomUUID()}`;
+    },
+    async documento() {
+      return id();
     },
   };
 }
@@ -114,6 +122,13 @@ export function canalCloud(o: { token: string; phoneId: string; graph: string })
       }),
     grupo: (grupoId, texto) =>
       publicar({ recipient_type: 'group', to: grupoId, type: 'text', text: { body: texto } }),
+    documento: (numero, id, filename, caption) =>
+      publicar({
+        recipient_type: 'individual',
+        to: a(numero),
+        type: 'document',
+        document: { id, filename, caption },
+      }),
     async subirPdf(pdf, nombre) {
       const forma = new FormData();
       forma.append('messaging_product', 'whatsapp');
@@ -226,6 +241,10 @@ async function aPersona(
       await generarPdf(personal ? 'Tu reporte de Nexo' : 'Aviso de tu equipo en Nexo', contenido),
       nombre,
     );
+    if (x.ventana_abierta) {
+      const pie = personal ? `Tu reporte de Nexo · ${fecha}` : `Aviso de tu equipo · ${fecha}`;
+      return { ok: true, proveedor_id: await canal.documento(x.numero, medio, nombre, pie) };
+    }
     const variables = { '1': x.nombre ?? 'hola', '2': fecha };
     const id = await canal.plantilla(x.numero, PLANTILLAS_WA.pdf, [
       {
@@ -244,6 +263,13 @@ async function aPersona(
   }
   // Resumen con enlace (formato 1).
   const ruta = personal ? 'app/personal/reportes' : `app/e/${aviso.equipo_id}/whatsapp/historial`;
+  if (x.ventana_abierta) {
+    const enlace = `${ctx.appUrl.replace(/\/$/, '')}/${ruta}`;
+    const texto = `${contenido.slice(0, 4096 - enlace.length - 20)}
+
+Ábrelo en Nexo: ${enlace}`;
+    return { ok: true, proveedor_id: await canal.texto(x.numero, texto, true) };
+  }
   const variables = {
     '1': personal ? 'tu reporte' : 'tu equipo',
     '2': enLinea(contenido.split('\n')[0] ?? contenido, 180).replace(/[.\s]+$/, ''),
@@ -259,7 +285,6 @@ async function aPersona(
     },
     { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: ruta }] },
   ]);
-  void ctx;
   return { ok: true, proveedor_id: id, plantilla: PLANTILLAS_WA.resumen, variables };
 }
 
