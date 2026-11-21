@@ -89,13 +89,36 @@ export function proveedorCloudApi(o: OpcionesCloudApi): ProveedorWhatsApp {
         language: { code: o.idioma ?? 'en_US' },
         ...(nombre === 'hello_world'
           ? {}
-          : { components: [{ type: 'body', parameters: [{ type: 'text', text: texto }] }] }),
+          : {
+              components: [
+                // Meta no acepta saltos de línea ni 4 espacios seguidos en una variable.
+                {
+                  type: 'body',
+                  parameters: [
+                    {
+                      type: 'text',
+                      text: texto
+                        .replace(/\s*\n\s*/g, ' · ')
+                        .replace(/\s{2,}/g, ' ')
+                        .slice(0, 1000),
+                    },
+                  ],
+                },
+              ],
+            }),
       },
     });
   };
-  /** Un mensaje directo: texto y, si Meta lo rechaza por la ventana de 24 h, la plantilla. */
+  /**
+   * Un mensaje directo. Con plantilla propia (con variable) va **siempre** como plantilla: es lo
+   * único que Meta entrega a quien no escribió al número en 24 h, y ese rechazo del texto libre
+   * llega tarde (por webhook), no en la respuesta. Con `hello_world` (sin variable) se intenta el
+   * texto y, si Meta lo rechaza al momento, la plantilla.
+   */
+  const conPlantillaPropia = (o.plantilla ?? 'hello_world') !== 'hello_world';
   const directo = async (numero: string, texto: string) => {
     const to = numero.replace(/^\+/, '');
+    if (conPlantillaPropia) return plantilla(to, texto);
     try {
       return await publicar({
         recipient_type: 'individual',

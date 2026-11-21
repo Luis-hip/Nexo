@@ -23,7 +23,7 @@ interface PeticionMeta {
     to: string;
     type: string;
     text?: { body: string };
-    template?: { name: string; language: { code: string } };
+    template?: { name: string; language: { code: string }; components?: unknown[] };
   };
 }
 
@@ -330,5 +330,43 @@ describe.skipIf(!DATABASE_URL)('integración de WhatsApp con la API de Meta (imi
     expect(envio.cuerpo).toEqual({ enviados: 1, fallidos: 0 });
     expect(peticiones).toHaveLength(0);
     expect(await idProveedor(aviso.id)).toMatch(/^sim-/);
+  });
+
+  it('con plantilla propia (DEC-WA-2) el aviso directo va siempre como plantilla, en una línea', async () => {
+    const { proveedorCloudApi } = await import('./proveedor');
+    const { port } = meta.address() as AddressInfo;
+    const p = proveedorCloudApi({
+      token: TOKEN,
+      phoneId: PHONE_ID,
+      graph: `http://127.0.0.1:${port}/v21.0`,
+      plantilla: 'nexo_aviso',
+      idioma: 'es_MX',
+    });
+    peticiones.length = 0;
+    await p.enviar({
+      id: 'x',
+      equipo_id: 'x',
+      proveedor: 'cloud_api_directo',
+      grupo_externo_id: null,
+      destinatarios: ['+5215500000000'],
+      texto: '📋 Resumen de hoy\n• T-01 completada\n• T-02    en curso',
+    });
+    expect(peticiones).toHaveLength(1);
+    expect(peticiones[0]!.cuerpo).toMatchObject({
+      type: 'template',
+      to: '5215500000000',
+      template: {
+        name: 'nexo_aviso',
+        language: { code: 'es_MX' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: '📋 Resumen de hoy · • T-01 completada · • T-02 en curso' },
+            ],
+          },
+        ],
+      },
+    });
   });
 });
