@@ -2442,3 +2442,123 @@ Auxiliar nuevo: `fn_solicitud_json`. Sin códigos de error nuevos.
 - **Pruebas:** P219; `pendientes.test.ts`.
 - **Ejemplo de llamada:** `select proc_usuario_foto($1)`
 - **Historial:** 2026-11-20 · creación · `0032`.
+
+---
+
+## Spike WhatsApp 1 a 1
+
+Procesos del canal directo (`11_Plan_Spike_WhatsApp_1a1.md`, DEC-039). Migración `0033_whatsapp_directo.sql`. Pruebas `P220`–`P231` en `pruebas_procesos.sql`, `apps/api/src/whatsapp/spike.test.ts` e `integracion.test.ts`.
+
+**Esquema (solo agrega):** tipos `modo_entrega_wa`, `formato_wa`, `destino_wa`, `estado_entrega_wa`; `whatsapp_configuracion.modo_entrega` (por defecto `grupo`; los equipos con `cloud_api_directo` quedan en `individual`) y `.formato_defecto`; `preferencias_usuario.wa_formato`; `whatsapp_usuario.ultimo_entrante_en`, `.ultimo_teaser_en`, `.codigo_hash`, `.codigo_expira_en`; `whatsapp_mensajes.equipo_id` admite nulo y suma `usuario_id` (reporte personal); tabla **`whatsapp_entregas`** (una fila por destinatario de cada aviso, o una al grupo) con su formato, contenido (≤ 4000), estado, caducidad e id de Meta.
+
+**Procesos de la 0031 que cambian (misma firma):** `proc_wa_enviar` y `proc_wa_por_enviar` reparten el aviso en entregas (`fn_wa_expandir_entregas`) y devuelven también `entregas[]` con el formato, la ventana y si hubo aviso corto reciente; `proc_wa_webhook_registrar` aplica los estados también a la entrega con ese id; `proc_wa_configurar` acepta `modo_entrega` y `formato_defecto`; `proc_wa_conectar` fija `modo_entrega` según el proveedor; `proc_wa_panel` muestra por persona los últimos 4 dígitos, la verificación y el formato (nunca el número completo, R4); `proc_wa_usuario` suma verificación, ventana y formato; `fn_wa_mensaje_json` suma el reparto (`entregas[]`).
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_wa_marcar_entrega` | WhatsApp · sistema | `0033_whatsapp_directo.sql` | Vigente |
+| `proc_wa_solicitar_verificacion` | WhatsApp · persona | `0033_whatsapp_directo.sql` | Vigente |
+| `proc_wa_registrar_entrante` | WhatsApp · sistema | `0033_whatsapp_directo.sql` | Vigente |
+| `proc_wa_entrega_tras_ventana` | WhatsApp · sistema | `0033_whatsapp_directo.sql` | Vigente |
+| `proc_wa_crear_reporte_personal` | WhatsApp · persona | `0033_whatsapp_directo.sql` | Vigente |
+| `proc_wa_caducar_pendientes` | WhatsApp · sistema | `0033_whatsapp_directo.sql` | Vigente |
+| `proc_wa_formato_guardar` | WhatsApp · persona | `0033_whatsapp_directo.sql` | Vigente |
+
+Auxiliares nuevos: `fn_wa_numero_normal` (P-13: México con y sin el `1`), `fn_wa_numero_fin`, `fn_wa_puede_directo`, `fn_wa_formato_de`, `fn_wa_entrega_json`, `fn_wa_expandir_entregas`, `fn_wa_entregas_para_enviar`, `fn_wa_preparar_envio`, `fn_wa_derivar_estado`, `fn_wa_reporte_personal_texto`. Sin códigos de error nuevos.
+
+### proc_wa_marcar_entrega
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** resultado de UNA entrega que el servidor intentó enviar.
+- **Parámetros:** `p_entrega_id uuid`. `p_resultado jsonb` · `{ ok, proveedor_id?, error?, plantilla?, variables?, pendiente_ventana?, aviso_corto? }`.
+- **Retorno:** `jsonb` `EntregaWa`.
+- **Reglas y validaciones:** solo entregas `enviando`. `ok` → `enviado`, o `pendiente_ventana` (caduca en 7 días, P-7) si se mandó el aviso corto de «bajo demanda»; `aviso_corto` anota `ultimo_teaser_en` (P-8). Después deriva el estado del aviso: `enviado` si al menos una salió (con el primer id de Meta), `fallido` si ninguna.
+- **Errores:** `NX007` · la entrega no se estaba enviando.
+- **Tablas que toca:** escritura `whatsapp_entregas`, `whatsapp_usuario`, `whatsapp_mensajes`, `whatsapp_configuracion`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `marcarEntrega()`; `whatsapp/entregas.ts` → `entregarEntregas()`.
+- **Pruebas:** P223, P224; `integracion.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_marcar_entrega($1, '{"ok": true, "proveedor_id": "wamid…"}')`
+- **Historial:** 2026-11-21 · creación · `0033`.
+
+### proc_wa_solicitar_verificacion
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** la persona pide verificar su número por WhatsApp (plan §7.1).
+- **Parámetros:** `p_actor_id uuid`. `p_numero text` (E.164).
+- **Retorno:** `jsonb` `{ codigo, expira_en }`; la API arma el enlace `wa.me/<número de Nexo>?text=VERIFICAR <código>`.
+- **Reglas y validaciones:** guarda número y consentimiento como `proc_wa_usuario_guardar`; código de 6 dígitos del que solo se guarda el hash (SHA-256), válido 30 min.
+- **Errores:** `NX010` · número inválido. `NX012` · número de otra cuenta.
+- **Tablas que toca:** escritura `whatsapp_usuario`, `membresias`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `solicitarVerificacion()`; `POST /yo/whatsapp/verificacion`.
+- **Pruebas:** P228; `spike.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_solicitar_verificacion($1, '+5212221234567')`
+- **Historial:** 2026-11-21 · creación · `0033`.
+
+### proc_wa_registrar_entrante
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** un mensaje que la persona mandó al número de Nexo (webhook, plan §7.2).
+- **Parámetros:** `p_numero text` (el `from` de Meta). `p_texto text`. `p_ahora timestamptz` (opcional).
+- **Retorno:** `jsonb` `{ conocido, usuario_id?, numero?, verificado?, baja?, reporte?, respuesta?, entregas[] }`.
+- **Reglas y validaciones:** número desconocido → `conocido: false` (no se responde). Abre la ventana (`ultimo_entrante_en`). «VERIFICAR <código>» vigente verifica; «BAJA»/«STOP» retira el consentimiento y cancela lo pendiente; «REPORTE» pide el reporte personal; cualquier otro texto (o el botón «Ver actualización») devuelve **todas** las entregas `pendiente_ventana` no caducadas, ya en `enviando`. Sin nada pendiente responde el menú corto.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `whatsapp_usuario`, `membresias`, `whatsapp_entregas`, `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `registrarEntrante()`; `whatsapp/entregas.ts` → `procesarEntrante()` (webhook y `POST /dev/whatsapp/entrante`).
+- **Pruebas:** P225, P227, P228; `spike.test.ts`; `integracion.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_registrar_entrante('5212221234567', 'Ver actualización')`
+- **Historial:** 2026-11-21 · creación · `0033`.
+
+### proc_wa_entrega_tras_ventana
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** resultado de entregar lo pendiente después de un mensaje entrante (texto dentro de la ventana).
+- **Parámetros:** `p_entrega_id uuid`. `p_ok boolean`. `p_proveedor_id text`. `p_error text`.
+- **Retorno:** `jsonb` `EntregaWa`.
+- **Reglas y validaciones:** `ok` → `enviado` (varias entregas pueden compartir el id de Meta: se mandan juntas en un texto); si falla vuelve a `pendiente_ventana`.
+- **Errores:** `NX007` · no se estaba enviando.
+- **Tablas que toca:** escritura `whatsapp_entregas`, `whatsapp_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `entregaTrasVentana()`; `whatsapp/entregas.ts` → `procesarEntrante()`.
+- **Pruebas:** P225; `integracion.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_entrega_tras_ventana($1, true, 'wamid…', null)`
+- **Historial:** 2026-11-21 · creación · `0033`.
+
+### proc_wa_crear_reporte_personal
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** «Enviarme mi reporte por WhatsApp» (plan §9), también con «REPORTE».
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `AvisoParaEnviar` con su entrega lista para enviar.
+- **Reglas y validaciones:** exige número y consentimiento; hasta 5 por hora. El aviso no tiene equipo (A9); el contenido sale de `fn_wa_reporte_personal_texto` (tareas por estado y próximas entregas, ≤ 4000). Ignora las horas de silencio (lo pide la persona).
+- **Errores:** `NX010` · sin número o consentimiento. `NX007` · límite de 5 por hora.
+- **Tablas que toca:** lectura `tareas`, `usuarios`; escritura `whatsapp_mensajes`, `whatsapp_entregas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `crearReportePersonal()`; `POST /yo/whatsapp/reporte` y `procesarEntrante()`.
+- **Pruebas:** P229; `spike.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_crear_reporte_personal($1)`
+- **Historial:** 2026-11-21 · creación · `0033`.
+
+### proc_wa_caducar_pendientes
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** lo que esperaba la ventana y ya caducó (P-7).
+- **Parámetros:** `p_ahora timestamptz` (opcional; las pruebas adelantan el reloj).
+- **Retorno:** `jsonb` `{ caducadas }`.
+- **Reglas y validaciones:** `pendiente_ventana` con `caduca_en` vencido → `caducado` y se borra `contenido` (privacidad); el historial conserva el estado.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `whatsapp_entregas`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `caducarPendientes()`; `trabajos/whatsapp.ts` (cada minuto) y `POST /dev/whatsapp/ciclo?ahora=`.
+- **Pruebas:** P226; `spike.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_caducar_pendientes(now())`
+- **Historial:** 2026-11-21 · creación · `0033`.
+
+### proc_wa_formato_guardar
+- **Migración:** `0033_whatsapp_directo.sql`
+- **Propósito:** la persona elige su formato (P-3).
+- **Parámetros:** `p_actor_id uuid`. `p_formato text` (`resumen_enlace`, `pdf`, `bajo_demanda` o `NULL` = el de cada equipo).
+- **Retorno:** `jsonb` `WhatsAppUsuario`.
+- **Reglas y validaciones:** crea la fila de preferencias si falta.
+- **Errores:** `NX010` · formato inexistente.
+- **Tablas que toca:** escritura `preferencias_usuario`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/whatsapp.ts` → `guardarFormato()`; `PUT /yo/whatsapp/formato`.
+- **Pruebas:** P230; `spike.test.ts`; `integracion.test.ts`.
+- **Ejemplo de llamada:** `select proc_wa_formato_guardar($1, 'bajo_demanda')`
+- **Historial:** 2026-11-21 · creación · `0033`.

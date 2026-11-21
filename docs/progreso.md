@@ -365,7 +365,12 @@ Se harán después del spike de WhatsApp 1 a 1 (`docs/11_Plan_Spike_WhatsApp_1a1
 - [ ] **Adjuntos en el chat** (la tabla `archivos` ya tiene `mensaje_id`).
 - [ ] **2FA o entrar con Google** (AUTH-07; tablas `credenciales_2fa` y `codigos_respaldo_2fa` y `usuarios.google_sub` ya existen).
 
-## Spike: WhatsApp 1 a 1 (en curso)
+## Spike: WhatsApp 1 a 1
 
-Plan: `docs/11_Plan_Spike_WhatsApp_1a1.md`. Se trabaja en `Dev_Luis`.
+Plan y reporte: `docs/11_Plan_Spike_WhatsApp_1a1.md` (secciones 15 y 16), DEC-039. En `Dev_Luis`.
+
+- **Hecho (2026-11-21):** migración `0033` (entregas por persona, `modo_entrega` individual/grupo/ambos, tres formatos, ventana de 24 h, verificación del número, reporte personal, caducidad), 7 procesos nuevos y 9 ajustados, despachador por entregas con PDF (`pdf-lib`), mensajes entrantes (verificar, BAJA, REPORTE), y las pantallas del plan §9.
+- **Pruebas:** SQL **180 OK** (P220–P231), API **209** (`spike.test.ts`, `integracion.test.ts`), web 100, E2E 8/8 con axe, `procesos:verificar` **160**.
+- **Decisión:** go técnico; la pista B espera a Meta (plantillas en revisión, dos reclasificadas como marketing) y al token permanente con webhook en producción.
+- [ ] Pista B: B2 (aprobación de plantillas), B3, B4, B5 y B6 (16.2 del plan).
 

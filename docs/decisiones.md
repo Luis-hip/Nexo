@@ -474,3 +474,5 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - Tres formatos (resumen con enlace, PDF, bajo demanda) con plantillas `nx_resumen_enlace`, `nx_reporte_pdf` y `nx_aviso_ver`; el líder fija el del equipo y cada persona puede cambiar el suyo.
 - Caducidad de 7 días para lo pendiente de ventana, un aviso corto cada 12 h por persona, PDF con `pdf-lib`.
 - Durante el spike la verificación del número no bloquea la entrega; los números se comparan normalizados (México con y sin el `1`).
+- **Resultado (S6):** go técnico (A1–A13 en verde, retrabajo fuera de la capa de WhatsApp de 97 líneas); la pista B queda pendiente de la aprobación de plantillas y del token permanente con webhook en producción. Meta reclasificó `nx_aviso_ver` y `nx_resumen_enlace` como marketing (V1).
+

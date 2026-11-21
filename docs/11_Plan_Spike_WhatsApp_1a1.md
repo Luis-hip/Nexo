@@ -1,6 +1,6 @@
 # Nexo · Plan del spike: WhatsApp 1 a 1 (canal directo)
 
-> **Estado:** en ejecución en `Dev_Luis` (aprobado por Luis el 2026-11-21; S0 hecho, ver sección 15) · **Fecha:** 2026-11-20, actualizado el 2026-11-21
+> **Estado:** pista A terminada y reporte en la sección 16 (go técnico, pista B pendiente de Meta); en `Dev_Luis` (aprobado por Luis el 2026-11-21) · **Fecha:** 2026-11-20, actualizado el 2026-11-21
 > **Base:** `01_Contexto_y_Especificaciones.md` (§7), `02_Base_de_Datos.md`, `03_Plan_de_Accion.md` (Fase 4), `docs/whatsapp-verificacion.md`, `apps/api/db/migrations/0001_esquema.sql` y `apps/api/src/db/tipos.ts`.
 > **Marca `[POR VERIFICAR]`:** dato de Meta o del código que no se confirmó. Se cierra en la pista B del spike (sección 10) o al leer el código (S0).
 > **Numeración:** las decisiones nuevas se llaman `P-1…P-6` (propuestas) para no chocar con `D-01…D-03` de `docs/decisiones.md`; se renumeran al aprobarlas.
@@ -418,13 +418,13 @@ Lista de control:
 
 - [x] S0 · Decisiones ratificadas y numeración de migraciones acordada (DEC-039)
 - [x] S0 · Plantillas enviadas a aprobación (sección 15.3)
-- [ ] S1 · Migración aplicada en local y en CI (los tres scripts SQL más la nueva)
-- [ ] S1 · Procesos documentados y con `EXECUTE` para `nexo_app`
-- [ ] S2 · A1–A13 en verde en el simulado
-- [ ] S3 · Flujo de verificación y entrega bajo demanda funcionando
-- [ ] S4 · Pantallas de la sección 9
-- [ ] S5 · B1, B3 y B5 comprobadas o justificadas
-- [ ] S6 · Reporte del spike con la medición del retrabajo y la decisión
+- [x] S1 · Migración aplicada en local y en CI (los tres scripts SQL más la nueva)
+- [x] S1 · Procesos documentados y con `EXECUTE` para `nexo_app`
+- [x] S2 · A1–A13 en verde en el simulado
+- [x] S3 · Flujo de verificación y entrega bajo demanda funcionando
+- [x] S4 · Pantallas de la sección 9
+- [x] S5 · B1, B3 y B5 comprobadas o justificadas (sección 16.2: B1 parcial; B3 y B5 justificadas, pendientes de token permanente y webhook)
+- [x] S6 · Reporte del spike con la medición del retrabajo y la decisión (sección 16)
 
 ---
 
@@ -496,3 +496,50 @@ Lista de control:
 | `nx_resumen_enlace` | Formato 1: «Resumen de Nexo · {{1}}: {{2}}…» + botón URL a `https://app.nexo.lol/{{1}}` | En revisión |
 | `nx_reporte_pdf` | Formato 2: encabezado de documento + «Hola, {{1}}… del periodo {{2}}…» | En revisión (la primera versión se rechazó porque terminaba en variable) |
 | `nexo_aviso` (DEC-WA-2) | Aviso genérico con el texto completo | En revisión; **Meta la reclasificó como marketing** (V1). Se sustituye por las tres de arriba |
+
+---
+
+## 16. Reporte del spike (S6, 2026-11-21)
+
+### 16.1 Pista A (simulado): A1–A13
+
+| # | Resultado | Dónde |
+|---|---|---|
+| A1 | ✅ 4 entregas; la persona sin consentimiento no recibe | P220 |
+| A2 | ✅ El simulado rechaza texto libre fuera de la ventana | `spike.test.ts` |
+| A3 | ✅ Aviso corto y entrega en `pendiente_ventana` (7 días) | P224, `integracion.test.ts` |
+| A4 | ✅ Al responder se entrega todo lo pendiente y la ventana queda abierta | P225, `integracion.test.ts` |
+| A5 | ✅ Un solo aviso corto aunque haya varios eventos (también dentro de un mismo envío) | P224, `integracion.test.ts` |
+| A6 | ✅ Caducan y se borra `contenido` al adelantar el reloj | P226, `spike.test.ts` |
+| A7 | ✅ «BAJA» retira el consentimiento y ya no se crean entregas | P227, `spike.test.ts` |
+| A8 | ✅ Modo grupo: una sola entrega al grupo | P221 |
+| A9 | ✅ Reporte personal sin equipo | P229, `spike.test.ts` |
+| A10 | ✅ Webhook repetido se ignora | P168, `whatsapp.test.ts` |
+| A11 | ✅ Firma HMAC inválida rechazada | `whatsapp.test.ts`, `integracion.test.ts` |
+| A12 | ✅ Sin acceso de otros equipos; números solo con 4 dígitos | `matriz.test.ts`, P230, `spike.test.ts` |
+| A13 | ✅ Regresión 4.2 sin tocar sus pruebas: P150–P169 y `whatsapp.test.ts` en verde | CI |
+
+Además: modo «ambos» sin duplicar (P222), estado del aviso derivado de sus entregas (P223), estados de Meta por entrega (P231), verificación con código (P228, `spike.test.ts`), PDF con `pdf-lib` y API de medios contra una Meta imitada (`spike.test.ts`).
+
+**Pruebas que sí cambiaron:** dos de `integracion.test.ts` (escritas para DEC-WA-2) comprobaban «texto y, si Meta lo rechaza, plantilla»; el spike sustituye esa regla por los formatos, así que ahora comprueban `nx_resumen_enlace` y el flujo «bajo demanda». No son pruebas de la Fase 4.2.
+
+**Errores encontrados y corregidos durante el spike:** índice único de `proveedor_mensaje_id` incompatible con entregar varios pendientes en un solo texto (ahora índice normal); y, en un envío de varios avisos, la regla de «un aviso corto cada 12 h» se calculaba antes de enviar el primero (ahora se recuerda dentro del lote).
+
+### 16.2 Pista B (número de pruebas de Meta)
+
+| # | Estado | Motivo |
+|---|---|---|
+| B1 | ✅ Parcial | Antes del spike ya llegaron `hello_world` y textos al número de Luis (DEC-WA-2, `operacion.md` §14). Las plantillas propias siguen **en revisión** |
+| B2 | ⏳ | `nx_aviso_ver` y `nx_resumen_enlace` **reclasificadas como marketing** por Meta (V1); `nx_reporte_pdf` como utilidad. Las tres en revisión al cerrar este reporte |
+| B3, B5, B6 | ⏳ | Necesitan el webhook de Meta apuntando a una API con este código. La URL pública existe (`api.nexo.lol`), pero falta desplegar el spike, poner el secreto de la app y un **token permanente** (la mejora pendiente acordada); con el token de 24 h no sirve en producción |
+| B4 | ⏳ | Depende de la aprobación de `nx_reporte_pdf`; en local ya se probó la subida y el mensaje contra una Meta imitada |
+
+### 16.3 Retrabajo medido
+
+- Fuera de la capa de WhatsApp y de la migración: **7 archivos, 97 líneas agregadas y 6 quitadas**, casi todo tipos generados (`tipos.ts`) y esquemas de respuesta. Pantallas ajenas tocadas: **2**, con 2 líneas cada una (Ajustes y Mis reportes reciben un componente).
+- Ninguna pantalla existente se rehízo.
+- Tiempo: S0–S6 en una jornada (frente a ≈ 7 días estimados), porque gran parte de la base (webhook, consentimiento, simulado, despliegue) ya existía.
+
+### 16.4 Decisión
+
+**Go técnico, condicionado a la pista B.** El canal directo convive con el de grupo sin romper nada y el retrabajo es bajo. Para cerrar la pista B falta: (1) que Meta apruebe las plantillas o, si quedan como marketing, aceptar ese costo o reescribirlas como utilidad; (2) token permanente y webhook en producción (mejora pendiente) para B3, B5 y B6.
