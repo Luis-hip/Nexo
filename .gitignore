@@ -14,7 +14,7 @@ coverage/
 !.env.example
 
 # Base de datos local sin Docker (`pnpm db:local`)
-.pglite/
+.pglite*/
 
 # Pruebas extremo a extremo (Playwright)
 test-results/
@@ -39,3 +39,6 @@ test-results/
 
 # Herramientas locales del asistente
 .claude/
+
+# Accesos de las cuentas de demostración en producción (DEC-038)
+.credenciales-demo.md

@@ -2,6 +2,7 @@
  * Prueba real de WhatsApp con el número de pruebas de Meta (DEC-WA-2).
  *
  *   pnpm --filter @nexo/api wa:probar +5215512345678 [+52…]
+ *   (o sin argumentos, con WHATSAPP_NUMERO_PRUEBA=+52… en apps/api/.env)
  *
  * Lee `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_ID` (y opcionalmente `WHATSAPP_PLANTILLA`,
  * `WHATSAPP_PLANTILLA_IDIOMA`, `WHATSAPP_API_URL`) de `apps/api/.env`. A cada número le manda:
@@ -14,11 +15,15 @@
 import { randomUUID } from 'node:crypto';
 import { proveedorCloudApi } from '../src/whatsapp/proveedor';
 
-const numeros = process.argv.slice(2).filter((a) => /^\+?\d{8,15}$/.test(a));
+const numeros = [...process.argv.slice(2), ...(process.env.WHATSAPP_NUMERO_PRUEBA ?? '').split(',')]
+  .map((a) => a.trim().replace(/[\s-]/g, ''))
+  .filter((a) => /^\+?\d{8,15}$/.test(a));
 const { WHATSAPP_TOKEN: token, WHATSAPP_PHONE_ID: phoneId } = process.env;
 
 if (numeros.length === 0) {
-  console.error('Uso: pnpm --filter @nexo/api wa:probar +5215512345678 [+52…]');
+  console.error(
+    'Uso: pnpm --filter @nexo/api wa:probar +5215512345678 [+52…] (o WHATSAPP_NUMERO_PRUEBA en apps/api/.env)',
+  );
   process.exit(2);
 }
 if (!token || !phoneId) {

@@ -19,6 +19,7 @@
     "db:volumen": "tsx --env-file-if-exists=.env scripts/volumen.ts",
     "db:explain": "tsx --env-file-if-exists=.env scripts/explain.ts",
     "wa:probar": "tsx --env-file-if-exists=.env scripts/wa-probar.ts",
+    "db:demo": "tsx --env-file-if-exists=.env scripts/demo-produccion.ts",
     "db:tipos": "kysely-codegen --dialect postgres --exclude-pattern pgmigrations --out-file src/db/tipos.ts"
   },
   "dependencies": {
