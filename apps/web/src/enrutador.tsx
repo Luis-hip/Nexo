@@ -127,6 +127,14 @@ const rutas: RouteObject[] = [
               (m) => m.ReportesPersonales,
             ),
           },
+          {
+            // docs/13 1.1: registro y verificación de WhatsApp con destino (aviso al unirse, reporte).
+            path: 'app/whatsapp/activar',
+            lazy: diferida(
+              () => import('./pages/personal/ActivarWhatsApp'),
+              (m) => m.ActivarWhatsAppPagina,
+            ),
+          },
           { path: 'app/equipos/nuevo', lazy: diferida(equipos, (m) => m.CrearEquipo) },
           { path: 'app/equipos/unirse', lazy: diferida(equipos, (m) => m.Unirse) },
           {

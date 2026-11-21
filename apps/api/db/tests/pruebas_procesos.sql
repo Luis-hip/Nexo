@@ -3260,3 +3260,25 @@ DO $$ DECLARE u uuid := pg_temp.usuario(); c jsonb; r jsonb; BEGIN
   RAISE NOTICE 'OK P233: código solo';
 END $$;
 
+-- P234. WhatsApp al empezar: al aceptar una invitación, quien tiene número verificado queda con los
+--       avisos del equipo aceptados; quien no, queda sin responder y la respuesta lo indica.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); v uuid := pg_temp.usuario('Vera Verificada'); n uuid := pg_temp.usuario('Nico Sin Número');
+               c1 text; c2 text; r jsonb; BEGIN
+  INSERT INTO preferencias_usuario (usuario_id) VALUES (v), (n);
+  PERFORM proc_wa_usuario_guardar(v, '{"numero": "+5215500002341", "consentimiento": true}');
+  UPDATE whatsapp_usuario SET verificado_en = now() WHERE usuario_id = v;
+  c1 := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  c2 := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  r := proc_invitacion_aceptar(v, c1);
+  IF NOT (r->>'whatsapp_activo')::boolean
+     OR (SELECT consentimiento_wa FROM membresias WHERE equipo_id = e AND usuario_id = v) IS NOT TRUE THEN
+    RAISE EXCEPTION 'FALLO P234: verificada: %', r;
+  END IF;
+  r := proc_invitacion_aceptar(n, c2);
+  IF (r->>'whatsapp_activo')::boolean
+     OR (SELECT consentimiento_wa FROM membresias WHERE equipo_id = e AND usuario_id = n) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P234: sin número: %', r;
+  END IF;
+  RAISE NOTICE 'OK P234: consentimiento al unirse con número verificado';
+END $$;
+

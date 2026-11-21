@@ -36,6 +36,7 @@ import { useAccionesWhatsAppYo, useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { FotoPerfil } from '@/components/perfil/FotoPerfil';
 import { toast } from '@/lib/toasts';
 import { DirectoPersonal } from '@/components/whatsapp/Directo';
+import { RegistroWhatsApp } from '@/components/whatsapp/Registro';
 
 const SECCIONES = [
   ['perfil', 'Perfil'],
@@ -466,59 +467,14 @@ function Silencio({ a, onGuardar }: { a: AjustesUsuario; onGuardar: (c: GuardarA
 export function WhatsAppPersonal() {
   const consulta = useWhatsAppYo();
   const acciones = useAccionesWhatsAppYo();
-  const [numero, setNumero] = useState<string | null>(null);
-  const [error, setError] = useState<string>();
   return (
     <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-05-WhatsApp">
       <h2 className="font-semibold">WhatsApp</h2>
       <EstadosDatos consulta={consulta} esqueleto={<EsqueletoTarjetas n={2} />}>
         {(w) => {
-          const valor = numero ?? w.numero ?? '';
-          const guardarNumero = () => {
-            setError(undefined);
-            acciones.guardar.mutate(
-              { numero: valor.trim() },
-              {
-                onSuccess: () => {
-                  setNumero(null);
-                  toast(valor.trim() ? 'Número guardado.' : 'Número borrado.');
-                },
-                onError: (e) => setError(mensajeDeError(e)),
-              },
-            );
-          };
           return (
             <>
-              <Campo
-                etiqueta="Tu número de WhatsApp"
-                error={error}
-                ayuda="Con lada internacional, por ejemplo +5212221234567. Solo se usa para los avisos de tus equipos."
-              >
-                <Entrada
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={valor}
-                  maxLength={16}
-                  onChange={(e) => setNumero(e.target.value)}
-                />
-              </Campo>
-              <Boton
-                cargando={acciones.guardar.isPending}
-                disabled={numero === null}
-                onClick={guardarNumero}
-              >
-                Guardar número
-              </Boton>
-              <Interruptor
-                etiqueta="Acepto recibir avisos de Nexo por WhatsApp"
-                descripcion="Puedes retirarlo cuando quieras; al hacerlo, dejas de aparecer en los avisos de todos tus equipos."
-                checked={w.consentimiento}
-                disabled={!w.numero}
-                onChange={(v) =>
-                  acciones.guardar.mutate({ consentimiento: v }, { onError: avisar })
-                }
-              />
+              <RegistroWhatsApp w={w} variante="ajustes" />
               <DirectoPersonal w={w} />
               {w.equipos.length > 0 && (
                 <div className="border-t border-line pt-3">

@@ -1,5 +1,5 @@
 import type { Yo } from '@nexo/shared';
-import { Crown, KeyRound, User } from 'lucide-react';
+import { Crown, KeyRound, MessageCircle, User } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Logo } from '@/components/shell/Logo';
@@ -19,6 +19,8 @@ import { mensajeDeError } from '@/lib/api';
 import { useGuardarPerfil, useGuardarPreferencias, useYo } from '@/lib/consultas';
 import { AvisoCookies } from '@/pages/publico/AvisoCookies';
 import { FotoPerfil } from '@/components/perfil/FotoPerfil';
+import { ActivarWhatsApp } from '@/components/whatsapp/Registro';
+import { useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { destinoSeguro, Tarjeta } from './comunes';
 
 // Fase 5.1: AUTH-01 a AUTH-06 (registro, entrar, recuperar, restablecer y verificar).
@@ -103,10 +105,14 @@ const DESTINO: Record<Inicio, string> = {
   unirme: '/app/equipos/unirse',
 };
 
+/** Pasos de la bienvenida; el 4 (WhatsApp) es opcional y se puede omitir (docs/13, 1.1). */
+const PASOS = 4;
+
 function PasosBienvenida({ yo }: { yo: Yo }) {
   const nav = useNavigate();
   const { paso } = useParams();
-  const n = Math.min(3, Math.max(1, Number(paso) || 1));
+  const n = Math.min(PASOS, Math.max(1, Number(paso) || 1));
+  const wa = useWhatsAppYo();
   const perfil = useGuardarPerfil();
   const prefs = useGuardarPreferencias();
   const [nombre, setNombre] = useState(yo.usuario.nombre);
@@ -152,7 +158,8 @@ function PasosBienvenida({ yo }: { yo: Yo }) {
     } else if (n === 2) {
       sessionStorage.setItem(CLAVE_INICIO, inicio);
       nav('/bienvenida/3');
-    } else terminar(DESTINO[inicio]);
+    } else if (n === 3) nav('/bienvenida/4');
+    else terminar(DESTINO[inicio]);
   };
 
   return (
@@ -161,7 +168,9 @@ function PasosBienvenida({ yo }: { yo: Yo }) {
       data-name={`NX/ONB-0${n}-Bienvenida`}
     >
       <div className="flex items-center justify-between text-xs text-muted">
-        <span className="tabular">Paso {n} de 3</span>
+        <span className="tabular">
+          Paso {n} de {PASOS}
+        </span>
         <button
           type="button"
           onClick={() => terminar('/app/personal')}
@@ -175,10 +184,10 @@ function PasosBienvenida({ yo }: { yo: Yo }) {
         role="progressbar"
         aria-valuenow={n}
         aria-valuemin={1}
-        aria-valuemax={3}
+        aria-valuemax={PASOS}
         aria-label="Progreso del onboarding"
       >
-        {[1, 2, 3].map((i) => (
+        {Array.from({ length: PASOS }, (_, k) => k + 1).map((i) => (
           <span
             key={i}
             className={cx('h-1.5 flex-1 rounded-full', i <= n ? 'bg-brand' : 'bg-line')}
@@ -289,11 +298,30 @@ function PasosBienvenida({ yo }: { yo: Yo }) {
         </div>
       )}
 
+      {n === 4 && (
+        <div className="mt-6 space-y-4" data-name="NX/ONB-04-WhatsApp">
+          <h1 className="flex items-center gap-2 text-[22px] sm:text-[28px]">
+            <MessageCircle className="size-6 text-brand" aria-hidden /> Avisos por WhatsApp
+          </h1>
+          <p className="text-sm text-muted">
+            Opcional. Recibe en tu WhatsApp los avisos de tus equipos y tu reporte cuando lo pidas.
+            Puedes hacerlo después en Ajustes → WhatsApp.
+          </p>
+          {wa.data ? <ActivarWhatsApp w={wa.data} /> : <EsqueletoLista filas={2} />}
+        </div>
+      )}
+
       <div className="mt-8 flex justify-between gap-2">
         {n > 1 ? <Boton onClick={() => nav(`/bienvenida/${n - 1}`)}>Atrás</Boton> : <span />}
-        <Boton variante="primario" onClick={siguiente} cargando={perfil.isPending}>
-          {n < 3 ? 'Continuar' : 'Terminar'}
-        </Boton>
+        {n === PASOS && !wa.data?.verificado ? (
+          <Boton variante="fantasma" onClick={siguiente}>
+            Omitir este paso
+          </Boton>
+        ) : (
+          <Boton variante="primario" onClick={siguiente} cargando={perfil.isPending}>
+            {n < PASOS ? 'Continuar' : 'Terminar'}
+          </Boton>
+        )}
       </div>
     </div>
   );

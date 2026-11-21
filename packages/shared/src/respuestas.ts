@@ -205,6 +205,8 @@ export const esquemaVistaInvitacion = z.object({
 export const esquemaInvitacionAceptada = z.object({
   equipo_id: z.string(),
   rol: z.enum(['integrante', 'invitado']),
+  /** docs/13 1.1: la persona ya tiene WhatsApp verificado y quedó con los avisos del equipo. */
+  whatsapp_activo: z.boolean().default(false),
 });
 
 // --- Tareas de equipo ---------------------------------------------------------------------------
