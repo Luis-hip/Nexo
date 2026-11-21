@@ -45,6 +45,18 @@ Retención (diaria) ─► proc_contacto_purgar (12 meses)
 
 ## 4. Dar acceso al panel
 
+**Cuenta de soporte (recomendada):** `soporte@nexo.lol` no pertenece a ningún equipo. Tiene el correo verificado y solo el permiso `contacto.gestionar`, así el soporte no se mezcla con el espacio personal de nadie. La crea el script con una contraseña aleatoria, que guarda en `.credenciales-demo.md` (fuera de git):
+
+```
+pnpm --filter @nexo/api db:soporte                    # local
+pnpm --filter @nexo/api db:soporte -- --produccion    # con DATABASE_URL_PRODUCCION, después del despliegue de 0039
+pnpm --filter @nexo/api db:soporte -- --nueva-clave   # cambia la contraseña
+```
+
+Creada en local el 2026-11-21. En producción se crea al desplegar el módulo.
+
+**Permisos a otras cuentas:**
+
 ```
 pnpm --filter @nexo/api db:permiso -- persona@correo contacto.gestionar
 pnpm --filter @nexo/api db:permiso -- persona@correo contacto.ver
