@@ -49,6 +49,11 @@ const esquemaEntorno = z.object({
   /** Plantilla aprobada para mensajes fuera de la ventana de 24 h (DEC-WA-2) y su idioma. */
   WHATSAPP_PLANTILLA: z.string().min(1).default('hello_world'),
   WHATSAPP_PLANTILLA_IDIOMA: z.string().min(2).default('en_US'),
+  /** Spike 1 a 1: número de WhatsApp de Nexo (para el enlace `wa.me` de la verificación). */
+  WHATSAPP_NUMERO_NEXO: z
+    .string()
+    .regex(/^\+[1-9]\d{7,14}$/)
+    .default('+15551833695'),
 });
 
 export type Config = z.infer<typeof esquemaEntorno>;
