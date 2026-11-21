@@ -81,7 +81,10 @@ export const esquemaCodigoDosPasos = z.object({
   codigo: z
     .string()
     .trim()
-    .regex(/^(\d{6}|[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})$/, 'Escribe los 6 dígitos o un código de respaldo.'),
+    .regex(
+      /^(\d{6}|[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})$/,
+      'Escribe los 6 dígitos o un código de respaldo.',
+    ),
 });
 export type CodigoDosPasos = z.infer<typeof esquemaCodigoDosPasos>;
 
