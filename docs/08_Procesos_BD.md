@@ -2503,9 +2503,9 @@ Auxiliares nuevos: `fn_wa_numero_normal` (P-13: México con y sin el `1`), `fn_w
 - **Tablas que toca:** escritura `whatsapp_usuario`, `membresias`, `whatsapp_entregas`, `whatsapp_mensajes`.
 - **Eventos que genera:** ninguno.
 - **Lo llama:** `repositorios/whatsapp.ts` → `registrarEntrante()`; `whatsapp/entregas.ts` → `procesarEntrante()` (webhook y `POST /dev/whatsapp/entrante`).
-- **Pruebas:** P225, P227, P228; `spike.test.ts`; `integracion.test.ts`.
+- **Pruebas:** P225, P227, P228, P232; `spike.test.ts`; `integracion.test.ts`.
 - **Ejemplo de llamada:** `select proc_wa_registrar_entrante('5212221234567', 'Ver actualización')`
-- **Historial:** 2026-11-21 · creación · `0033`.
+- **Historial:** 2026-11-21 · creación · `0033`. 2026-11-21 · el texto se limpia con `fn_wa_texto_comando` antes de leer el comando (espacio duro, marcas invisibles, salto de línea y puntuación de WhatsApp; antes «VERIFICAR» desde el enlace `wa.me` no verificaba en producción) · `0034_wa_texto_entrante.sql`, P232.
 
 ### proc_wa_entrega_tras_ventana
 - **Migración:** `0033_whatsapp_directo.sql`
