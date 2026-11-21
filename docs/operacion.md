@@ -112,3 +112,14 @@ El certificado HTTPS lo gestiona cada plataforma ⚠. La propagación puede tard
 - **Resultado:** la primera vez solo llegó `hello_world`: Meta aceptó los textos pero los descartó porque Luis no había escrito al número en 24 h (sin webhook en local, no se ve). Tras escribirle «hola», los textos llegaron, por script y desde la app («Segunda prueba real (texto libre)»: 1 enviado, 0 fallidos).
 - **Plantilla propia `nexo_aviso`** (es_MX, utilidad) creada en la WABA para que los avisos lleguen sin depender de la ventana. Con `WHATSAPP_PLANTILLA=nexo_aviso` y `WHATSAPP_PLANTILLA_IDIOMA=es_MX`, todo aviso directo sale como esa plantilla (DEC-WA-2). Para producción, además de estas dos variables hace falta el token permanente.
 
+
+## 15. Token permanente y webhook en producción (spike 1 a 1, pista B)
+
+*Agregado el 2026-11-21 (DEC-039).* Sustituye al token de 24 h de la sección 14.
+
+1. **Usuario del sistema `nexo-api`** (Meta Business → Configuración → Usuarios del sistema, portfolio «Nexo app colaborativa», rol *Employee*). Activos asignados: la app «Nexo conexión de equipos» (*Desarrollar app*), la **cuenta de WhatsApp** «Test WhatsApp Account» (acceso total) y la **cuenta de mensajes** «Test Messaging Account» (acceso total, id `2379295805940440`). Meta separó ambas en 2026: la de WhatsApp tiene el número; la de mensajes, las plantillas. Sin la de mensajes el token envía, pero no ve las plantillas ni suscribe la app.
+2. **Token:** «Generar token» → la app → caducidad **Nunca** → permisos `whatsapp_business_messaging` y `whatsapp_business_management`. Meta lo muestra una sola vez: lo copia una persona a `apps/api/.env` y a Render; nunca a git ni al chat. Si se filtra: «Revocar tokens» en el mismo panel y generar otro.
+3. **Render (`nexo-api` → Environment):** `WHATSAPP_PROVIDER=real`, `WHATSAPP_TOKEN` (el permanente), `WHATSAPP_PHONE_ID=1574533925737980`, `WHATSAPP_APP_SECRET` (Meta for Developers → la app → Configuración → Básica → Clave secreta) y `WHATSAPP_VERIFY_TOKEN` (cualquier texto largo; el mismo que se escribe en Meta). En `render.yaml` van con `sync: false` para que el Blueprint no las pise.
+4. **Webhook (Meta for Developers → la app → WhatsApp → Configuración):** URL de devolución `https://api.nexo.lol/whatsapp/webhook`, el mismo token de verificación, y suscribir el campo **`messages`** (trae los mensajes de las personas y los estados enviado/entregado/leído). Además, la app debe estar suscrita a la cuenta de mensajes (`POST /2379295805940440/subscribed_apps` con el token).
+5. **Límites del número de pruebas:** solo recibe quien esté dado de alta como destinatario (hasta 5); a cualquier otro número Meta responde error y la entrega queda `fallido`. Con el plan gratuito de Render la API se duerme: el primer webhook la despierta y Meta reintenta si tarda.
+6. **Volver atrás:** `WHATSAPP_PROVIDER=simulado` en Render y redesplegar; nada sale a Meta.

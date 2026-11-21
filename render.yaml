@@ -57,10 +57,20 @@ services:
       - key: CORREO_REMITENTE
         value: Nexo <no-responder@nexo.lol>
       # Fase 4 · WhatsApp (DEC-WA-1). `simulado` no llama a Meta. `real` envía mensajes de verdad y
-      # exige WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_APP_SECRET y WHATSAPP_VERIFY_TOKEN
-      # (ponerlas a mano en Render): solo cuando el equipo lo decida y haya cuenta OBA.
+      # exige WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_APP_SECRET y WHATSAPP_VERIFY_TOKEN.
+      # Spike 1 a 1, pista B (2026-11-21): se ponen a mano en Render (`sync: false`, así el Blueprint
+      # no las devuelve a `simulado`). El token es el permanente del usuario del sistema
+      # (docs/operacion.md §15); sin la variable, la API arranca en `simulado`.
       - key: WHATSAPP_PROVIDER
-        value: simulado
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
 
 databases:
   - name: nexo-bd
