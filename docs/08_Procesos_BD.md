@@ -57,7 +57,7 @@
 | `proc_usuario_yo` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
 | `proc_usuario_preferencias_guardar` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
 | `proc_usuario_perfil_guardar` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
-| `proc_contacto_enviar` | Contacto | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_contacto_enviar` | Contacto | `0004_procesos_cuenta.sql` | Retirado en `0039` (lo sustituye `proc_contacto_crear`) |
 | `proc_equipo_contexto` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
 | `proc_equipo_crear` | Equipos | `0005_procesos_equipos.sql` | Vigente |
 | `proc_equipo_obtener` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
@@ -371,7 +371,10 @@
 - **Ejemplo de llamada:** `select proc_usuario_perfil_guardar($1, '{"cargo":"QA"}')`
 - **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
 
-### proc_contacto_enviar
+### proc_contacto_enviar (retirado en 0039)
+
+> Sustituido por `proc_contacto_crear` (sección «Contacto»). Se conserva el apartado como historial.
+
 - **Migración:** `0004_procesos_cuenta.sql`
 - **Propósito:** Guarda un mensaje del formulario público de contacto.
 - **Parámetros:** `p_nombre text`. `p_correo text`. `p_asunto text`. `p_mensaje text`. **No hay actor**: la ruta no tiene sesión.

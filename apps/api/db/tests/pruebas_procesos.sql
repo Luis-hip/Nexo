@@ -332,15 +332,18 @@ DO $$ DECLARE u uuid := pg_temp.usuario('Nombre Viejo'); r jsonb; ok boolean := 
   RAISE NOTICE 'OK P21: proc_usuario_perfil_guardar';
 END $$;
 
--- P22. proc_contacto_enviar: guarda el mensaje; uno demasiado corto lo rechaza la tabla.
+-- P22. Formulario de contacto (PUB-08; desde 0039, proc_contacto_crear): guarda el mensaje con
+--      folio; uno demasiado corto se rechaza (NX010).
 DO $$ DECLARE ok boolean := false; BEGIN
-  IF NOT (proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Un mensaje de prueba válido')->>'recibido')::boolean THEN
+  IF (proc_contacto_crear('{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"Un mensaje de prueba válido"}',
+                          NULL, 'hash-P22', 'c', NULL, NULL, NULL)->>'folio') IS NULL THEN
     RAISE EXCEPTION 'FALLO P22';
   END IF;
-  BEGIN PERFORM proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'corto');
-  EXCEPTION WHEN check_violation THEN ok := true; END;
+  BEGIN PERFORM proc_contacto_crear('{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"corto"}',
+                                    NULL, 'hash-P22b', 'c', NULL, NULL, NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := true; END;
   IF NOT ok THEN RAISE EXCEPTION 'FALLO P22: aceptó un mensaje corto'; END IF;
-  RAISE NOTICE 'OK P22: proc_contacto_enviar';
+  RAISE NOTICE 'OK P22: proc_contacto_crear (formulario público)';
 END $$;
 
 -- ---------------------------------------------------------------------------------------------
@@ -775,7 +778,8 @@ DO $$ DECLARE malos text; ok int := 0; BEGIN
   EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
   BEGIN PERFORM proc_dev_usuarios();
   EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
-  IF NOT (proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Mensaje enviado con el rol nexo_app')->>'recibido')::boolean THEN
+  IF (proc_contacto_crear('{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"Mensaje enviado con el rol nexo_app"}',
+                          NULL, 'hash-P52', 'c', NULL, NULL, NULL)->>'folio') IS NULL THEN
     RAISE EXCEPTION 'FALLO P52: nexo_app no pudo ejecutar un proceso';
   END IF;
   RESET ROLE;
@@ -3418,4 +3422,193 @@ DO $$ DECLARE r jsonb; v uuid; ok int := 0; BEGIN
   IF NOT (proc_2fa_verificar(v, NULL, 'h4')->>'valido')::boolean THEN RAISE EXCEPTION 'FALLO P241: respaldo no valió'; END IF;
   IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P241: desvincular sin contraseña'; END IF;
   RAISE NOTICE 'OK P241: Google con dos pasos y desvincular';
+END $$;
+
+-- ===========================================================================================
+-- Contacto (0039, docs/12_Plan_Contacto.md). Auxiliar: una persona con un permiso de sistema.
+-- ===========================================================================================
+CREATE FUNCTION pg_temp.con_permiso(p_nombre text, p_permiso text) RETURNS uuid AS $$
+DECLARE v uuid;
+BEGIN
+  v := pg_temp.usuario(p_nombre);
+  IF p_permiso IS NOT NULL THEN INSERT INTO permisos_sistema (usuario_id, permiso) VALUES (v, p_permiso); END IF;
+  RETURN v;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.mensaje_contacto(p_asunto text DEFAULT 'No carga mi tablero') RETURNS uuid AS $$
+  SELECT (proc_contacto_crear(jsonb_build_object('tipo', 'error', 'nombre', 'Ana Pérez', 'correo', 'Ana@Correo.test',
+            'asunto', p_asunto, 'mensaje', 'Al abrir el tablero aparece en blanco desde ayer.',
+            'contexto', jsonb_build_object('url', '/app/e/1')),
+          NULL, encode(sha256(convert_to('token-' || p_asunto, 'UTF8')), 'hex'), 'v1.cifrado', 'iphash', 'Firefox', 'equipo@nexo.test')->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P242. Contacto · crear: folio NX-AAAA-NNNNNN, evento «creado», aviso al equipo y confirmación
+--       (con el token cifrado) en el outbox; correo en minúsculas; con sesión toma nombre y correo
+--       de la cuenta; datos inválidos → NX010.
+DO $$ DECLARE v uuid := pg_temp.usuario('Rita Registrada'); r jsonb; v_id uuid; ok int := 0; BEGIN
+  v_id := pg_temp.mensaje_contacto('P242 crear');
+  SELECT jsonb_build_object('folio', folio, 'correo', correo::text) INTO r FROM contacto_mensajes WHERE contacto_mensajes.id = v_id;
+  IF r->>'folio' !~ '^NX-\d{4}-\d{6}$' OR r->>'correo' <> 'ana@correo.test' THEN RAISE EXCEPTION 'FALLO P242: %', r; END IF;
+  IF (SELECT count(*) FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento = 'creado') <> 1
+     OR (SELECT string_agg(plantilla || ':' || destinatario, ',' ORDER BY plantilla) FROM contacto_outbox WHERE mensaje_id = v_id)
+        <> 'aviso_equipo:equipo@nexo.test,confirmacion_remitente:ana@correo.test'
+     OR (SELECT datos->>'token_cifrado' FROM contacto_outbox WHERE mensaje_id = v_id AND plantilla = 'confirmacion_remitente') <> 'v1.cifrado' THEN
+    RAISE EXCEPTION 'FALLO P242: evento u outbox';
+  END IF;
+  r := proc_contacto_crear('{"tipo":"duda","nombre":"Otro","correo":"otro@x.test","asunto":"Pregunta","mensaje":"¿Cómo invito a alguien?"}',
+                           v, 'h-P242', 'c', NULL, NULL, NULL);
+  IF (SELECT nombre || '|' || (usuario_id = v)::text FROM contacto_mensajes WHERE folio = r->>'folio') <> 'Rita Registrada|true'
+     OR (SELECT count(*) FROM contacto_outbox o JOIN contacto_mensajes m ON m.id = o.mensaje_id WHERE m.folio = r->>'folio') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P242: con sesión';
+  END IF;
+  BEGIN PERFORM proc_contacto_crear('{"tipo":"queja","nombre":"X Y","correo":"x@y.test","asunto":"Hola","mensaje":"mensaje largo suficiente"}', NULL, 'h', 'c', NULL, NULL, NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_contacto_crear('{"tipo":"duda","nombre":"X Y","correo":"x@y.test","asunto":"Hola","mensaje":"corto"}', NULL, 'h', 'c', NULL, NULL, NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P242: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P242: proc_contacto_crear';
+END $$;
+
+-- P243. Contacto · límites: por IP 3 por hora (el 4.º es NX013 con retry_after) y por correo 3 por día.
+DO $$ DECLARE i int; ok int := 0; d text; BEGIN
+  FOR i IN 1..3 LOOP PERFORM proc_contacto_verificar_limite('ip-P243', 'correo-P243-' || i); END LOOP;
+  BEGIN PERFORM proc_contacto_verificar_limite('ip-P243', 'correo-P243-x');
+  EXCEPTION WHEN SQLSTATE 'NX013' THEN GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL; ok := ok + 1; END;
+  IF (d::jsonb->>'retry_after')::int NOT BETWEEN 1 AND 3600 THEN RAISE EXCEPTION 'FALLO P243: retry_after %', d; END IF;
+  FOR i IN 1..3 LOOP PERFORM proc_contacto_verificar_limite('ip-P243-' || i, 'correo-P243-mismo'); END LOOP;
+  BEGIN PERFORM proc_contacto_verificar_limite('ip-P243-4', 'correo-P243-mismo');
+  EXCEPTION WHEN SQLSTATE 'NX013' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P243: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P243: límites por IP y por correo';
+END $$;
+
+-- P244. Contacto · permisos: sin permiso NX005; con «ver» lista pero no gestiona; «gestionar» incluye ver.
+DO $$ DECLARE nadie uuid := pg_temp.con_permiso('Sin Permiso', NULL); ve uuid := pg_temp.con_permiso('Solo Ve', 'contacto.ver');
+               ge uuid := pg_temp.con_permiso('Gestiona', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P244'); ok int := 0; BEGIN
+  BEGIN PERFORM proc_contacto_listar(nadie, '{}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_contacto_listar(ve, '{}');
+  BEGIN PERFORM proc_contacto_cambiar_estado(ve, v_id, 'en_revision'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF NOT (proc_contacto_permisos(ge)->>'ver')::boolean OR (proc_contacto_permisos(ve)->>'gestionar')::boolean THEN
+    RAISE EXCEPTION 'FALLO P244: permisos %', proc_contacto_permisos(ge);
+  END IF;
+  PERFORM proc_contacto_obtener(ge, v_id);
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P244: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P244: permisos de sistema del panel';
+END $$;
+
+-- P245. Contacto · matriz de transiciones: las válidas pasan, las inválidas son NX007; atendido_en se
+--       fija una vez; resuelto_en se fija al resolver y se limpia al reabrir.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Gestor Estados', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P245');
+               a1 timestamptz; ok int := 0; m jsonb; BEGIN
+  BEGIN PERFORM proc_contacto_cambiar_estado(ge, v_id, 'esperando_usuario'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  PERFORM proc_contacto_cambiar_estado(ge, v_id, 'en_revision');
+  SELECT atendido_en INTO a1 FROM contacto_mensajes WHERE contacto_mensajes.id = v_id;
+  PERFORM proc_contacto_cambiar_estado(ge, v_id, 'esperando_usuario');
+  m := proc_contacto_cambiar_estado(ge, v_id, 'resuelto');
+  IF m->>'resuelto_en' IS NULL OR (SELECT atendido_en FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) <> a1 THEN
+    RAISE EXCEPTION 'FALLO P245: fechas %', m;
+  END IF;
+  BEGIN PERFORM proc_contacto_cambiar_estado(ge, v_id, 'descartado'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  m := proc_contacto_cambiar_estado(ge, v_id, 'en_revision');
+  IF m->>'resuelto_en' IS NOT NULL THEN RAISE EXCEPTION 'FALLO P245: reabrir no limpió resuelto_en'; END IF;
+  IF (SELECT metadatos FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento = 'cambio_estado' ORDER BY creado_en DESC LIMIT 1)
+     <> '{"de": "resuelto", "a": "en_revision"}'::jsonb THEN
+    RAISE EXCEPTION 'FALLO P245: evento sin de/a';
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P245: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P245: transiciones de estado';
+END $$;
+
+-- P246. Contacto · responder y seguimiento: responder desde «nuevo» lo pasa a «en revisión» y luego al
+--       estado pedido, encola el correo al remitente; el seguimiento con el token correcto ve solo las
+--       respuestas (nunca la nota interna); token malo y folio inexistente dan el MISMO error.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Gestor Respuestas', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P246');
+               f text; s jsonb; e1 text; e2 text; BEGIN
+  SELECT folio INTO f FROM contacto_mensajes WHERE contacto_mensajes.id = v_id;
+  PERFORM proc_contacto_agregar_nota(ge, v_id, 'Nota secreta del equipo');
+  PERFORM proc_contacto_responder(ge, v_id, 'Ya lo revisamos: borra la caché.', 'esperando_usuario');
+  IF (SELECT estado FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) <> 'esperando_usuario'
+     OR NOT EXISTS (SELECT 1 FROM contacto_outbox WHERE mensaje_id = v_id AND plantilla = 'respuesta_remitente') THEN
+    RAISE EXCEPTION 'FALLO P246: responder';
+  END IF;
+  s := proc_contacto_seguimiento(lower(f), encode(sha256(convert_to('token-P246', 'UTF8')), 'hex'));
+  IF jsonb_array_length(s->'respuestas') <> 1 OR s::text LIKE '%Nota secreta%' OR s ? 'correo' THEN
+    RAISE EXCEPTION 'FALLO P246: seguimiento %', s;
+  END IF;
+  BEGIN PERFORM proc_contacto_seguimiento(f, 'malo'); EXCEPTION WHEN SQLSTATE 'NX006' THEN GET STACKED DIAGNOSTICS e1 = MESSAGE_TEXT; END;
+  BEGIN PERFORM proc_contacto_seguimiento('NX-1999-999999', 'malo'); EXCEPTION WHEN SQLSTATE 'NX006' THEN GET STACKED DIAGNOSTICS e2 = MESSAGE_TEXT; END;
+  IF e1 IS NULL OR e1 <> e2 THEN RAISE EXCEPTION 'FALLO P246: errores distintos «%» «%»', e1, e2; END IF;
+  RAISE NOTICE 'OK P246: responder y seguimiento público';
+END $$;
+
+-- P247. Contacto · outbox: tomar marca «procesando» y suma el intento; un fallo reprograma con espera;
+--       al quinto intento queda «fallido»; reintentar lo devuelve a pendiente; ok borra los datos;
+--       los «procesando» de más de 10 min se recuperan.
+DO $$ DECLARE v_id uuid := pg_temp.mensaje_contacto('P247'); o uuid; t jsonb; r jsonb; i int; BEGIN
+  UPDATE contacto_outbox SET proximo_intento = now() + interval '1 day' WHERE estado = 'pendiente' AND mensaje_id <> v_id;
+  SELECT x.id INTO o FROM contacto_outbox x WHERE mensaje_id = v_id AND plantilla = 'confirmacion_remitente';
+  t := proc_contacto_outbox_tomar(50);
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(t) e WHERE (e->>'id')::uuid = o AND (e->>'intentos')::int = 1 AND e->>'folio' LIKE 'NX-%') THEN
+    RAISE EXCEPTION 'FALLO P247: tomar %', t;
+  END IF;
+  r := proc_contacto_outbox_resultado(o, false, 'Resend 500');
+  IF r->>'estado' <> 'pendiente' OR (SELECT proximo_intento FROM contacto_outbox WHERE contacto_outbox.id = o) < now() + interval '50 seconds' THEN
+    RAISE EXCEPTION 'FALLO P247: backoff %', r;
+  END IF;
+  FOR i IN 2..5 LOOP
+    UPDATE contacto_outbox SET proximo_intento = now() - interval '1 second' WHERE contacto_outbox.id = o;
+    PERFORM proc_contacto_outbox_tomar(50);
+    r := proc_contacto_outbox_resultado(o, false, 'Resend 500');
+  END LOOP;
+  IF r->>'estado' <> 'fallido' THEN RAISE EXCEPTION 'FALLO P247: no quedó fallido %', r; END IF;
+  PERFORM proc_contacto_outbox_reintentar(pg_temp.con_permiso('Reintenta', 'contacto.gestionar'), v_id);
+  PERFORM proc_contacto_outbox_tomar(50);
+  UPDATE contacto_outbox SET proximo_intento = now() - interval '11 minutes' WHERE contacto_outbox.id = o;
+  t := proc_contacto_outbox_tomar(50);
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(t) e WHERE (e->>'id')::uuid = o) THEN RAISE EXCEPTION 'FALLO P247: no se recuperó'; END IF;
+  r := proc_contacto_outbox_resultado(o, true, NULL);
+  IF r->>'estado' <> 'enviado' OR (SELECT datos FROM contacto_outbox WHERE contacto_outbox.id = o) <> '{}'::jsonb THEN
+    RAISE EXCEPTION 'FALLO P247: ok %', r;
+  END IF;
+  RAISE NOTICE 'OK P247: outbox con reintentos y recuperación';
+END $$;
+
+-- P248. Contacto · asignar (solo a quien gestiona; «nuevo» pasa a «en revisión»), bandeja con
+--       filtros y búsqueda en español, exportar y métricas.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Asigna', 'contacto.gestionar'); otro uuid := pg_temp.con_permiso('No Gestiona', 'contacto.ver');
+               v_id uuid := pg_temp.mensaje_contacto('Problema con tableros P248'); l jsonb; ok int := 0; met jsonb; BEGIN
+  BEGIN PERFORM proc_contacto_asignar(ge, v_id, otro); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_contacto_asignar(ge, v_id, ge);
+  IF (SELECT estado FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) <> 'en_revision' THEN RAISE EXCEPTION 'FALLO P248: asignar no pasó a revisión'; END IF;
+  l := proc_contacto_listar(ge, '{"asignado":"yo","q":"tablero"}');
+  IF (l->>'total')::int < 1 OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(l->'datos') d WHERE (d->>'id')::uuid = v_id AND d ? 'extracto' AND NOT d ? 'mensaje') THEN
+    RAISE EXCEPTION 'FALLO P248: bandeja %', l;
+  END IF;
+  l := proc_contacto_listar(ge, jsonb_build_object('q', (SELECT folio FROM contacto_mensajes WHERE contacto_mensajes.id = v_id)));
+  IF (l->>'total')::int <> 1 THEN RAISE EXCEPTION 'FALLO P248: buscar por folio %', l->>'total'; END IF;
+  IF (proc_contacto_listar(ge, '{"estado":["descartado"],"asignado":"yo"}')->>'total')::int <> 0 THEN RAISE EXCEPTION 'FALLO P248: filtro estado'; END IF;
+  IF jsonb_array_length(proc_contacto_exportar(ge, '{"asignado":"yo"}')) < 1 THEN RAISE EXCEPTION 'FALLO P248: exportar'; END IF;
+  met := proc_contacto_metricas(ge, now() - interval '1 day', now() + interval '1 day');
+  IF (met->>'total')::int < 1 OR NOT met ? 'por_tipo' OR NOT met ? 'primera_respuesta_horas' THEN RAISE EXCEPTION 'FALLO P248: métricas %', met; END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P248: asignar a quien no gestiona'; END IF;
+  RAISE NOTICE 'OK P248: asignar, bandeja, exportar y métricas';
+END $$;
+
+-- P249. Contacto · anonimizar borra nombre, correo, mensaje y contenido de eventos y cancela envíos;
+--       purgar anonimiza lo resuelto de hace más de N meses.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Anonimiza', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P249a');
+               viejo uuid := pg_temp.mensaje_contacto('P249b'); r jsonb; BEGIN
+  PERFORM proc_contacto_responder(ge, v_id, 'Respuesta con datos', NULL);
+  PERFORM proc_contacto_anonimizar(ge, v_id);
+  IF (SELECT nombre || correo::text || mensaje FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) LIKE '%Ana%'
+     OR EXISTS (SELECT 1 FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento <> 'sistema' AND contenido LIKE '%datos%')
+     OR EXISTS (SELECT 1 FROM contacto_outbox WHERE mensaje_id = v_id AND estado = 'pendiente') THEN
+    RAISE EXCEPTION 'FALLO P249: anonimizar';
+  END IF;
+  UPDATE contacto_mensajes SET estado = 'resuelto', resuelto_en = now() - interval '13 months' WHERE contacto_mensajes.id = viejo;
+  r := proc_contacto_purgar(12);
+  IF (r->>'anonimizados')::int < 1 OR NOT (SELECT anonimizado FROM contacto_mensajes WHERE contacto_mensajes.id = viejo) THEN
+    RAISE EXCEPTION 'FALLO P249: purgar %', r;
+  END IF;
+  RAISE NOTICE 'OK P249: anonimizar y purgar';
 END $$;
