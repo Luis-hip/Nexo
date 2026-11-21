@@ -189,7 +189,17 @@ export async function entregar(
 ): Promise<{ enviados: number; fallidos: number }> {
   let enviados = 0;
   let fallidos = 0;
+  const avisados = new Set<string>();
   for (const aviso of avisos) {
+    // Spike 1 a 1 (DEC-039): con entregas, cada destinatario lleva su formato y su estado; el aviso
+    // cuenta como enviado si al menos una entrega salió.
+    if (aviso.entregas && aviso.entregas.length > 0) {
+      const { canalPara, entregarEntregas } = await import('./entregas');
+      const r = await entregarEntregas(db, config, aviso, canalPara(config, aviso), avisados);
+      if (r.enviados > 0) enviados++;
+      else fallidos++;
+      continue;
+    }
     try {
       const id = await elegir(aviso).enviar(aviso);
       await repo.resultadoEnvio(db, aviso.id, true, id, null);

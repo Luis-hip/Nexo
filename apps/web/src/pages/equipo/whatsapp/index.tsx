@@ -4,6 +4,10 @@ import {
   MODOS_REGLA_WA,
   NOMBRE_MODO_WA,
   NOMBRE_REGLA_WA,
+  FORMATOS_WA,
+  MODOS_ENTREGA_WA,
+  NOMBRE_FORMATO_WA,
+  NOMBRE_MODO_ENTREGA_WA,
   type ConfiguracionWa,
   type MensajeWa,
   type PanelWa,
@@ -40,6 +44,7 @@ import {
   EstadosDatos,
   Insignia,
   Interruptor,
+  Radios,
   Segmentado,
   Selector,
   Tarjeta,
@@ -54,6 +59,7 @@ import { fechaCorta, hora } from '@/lib/fechas';
 import { toast } from '@/lib/toasts';
 import { primerError } from '@/lib/validacion';
 import { useEquipoActual } from '../contexto';
+import { RepartoEntregas } from '@/components/whatsapp/Directo';
 
 const avisar = (e: unknown) => toast(mensajeDeError(e), 'danger');
 const cuando = (iso: string | null) => (iso ? `${fechaCorta(iso)} · ${hora(iso)}` : '—');
@@ -453,6 +459,7 @@ function AvisoEnCola({ m }: { m: MensajeWa }) {
           ) : (
             <p className="text-sm break-words whitespace-pre-wrap">{m.texto}</p>
           )}
+          <RepartoEntregas entregas={m.entregas} />
           {m.estado === 'pendiente' && !editando && (
             <div className="flex gap-1">
               <Boton
@@ -544,6 +551,7 @@ export function HistorialWhatsApp() {
                     {m.ultimo_error && m.estado !== 'enviado' && (
                       <p className="text-xs text-danger">{m.ultimo_error}</p>
                     )}
+                    <RepartoEntregas entregas={m.entregas} />
                   </div>
                   <BurbujaWA texto={m.texto} hora={m.enviado_en ? hora(m.enviado_en) : undefined} />
                 </Tarjeta>
@@ -656,6 +664,41 @@ function FormReglas({ panel: p }: { panel: PanelWa }) {
             </li>
           ))}
         </ul>
+      </Tarjeta>
+      <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/WA-05-Canal">
+        <h2 className="font-semibold">¿A quién y cómo llega?</h2>
+        <Radios
+          nombre="modo-entrega"
+          etiqueta="Canal de los avisos del equipo"
+          valor={c.modo_entrega}
+          onChange={(v) =>
+            acciones.configurar.mutate(
+              { modo_entrega: v },
+              { onSuccess: () => toast('Canal guardado.'), onError: avisar },
+            )
+          }
+          opciones={MODOS_ENTREGA_WA.map((m) => ({
+            valor: m,
+            etiqueta: NOMBRE_MODO_ENTREGA_WA[m].nombre,
+            descripcion: NOMBRE_MODO_ENTREGA_WA[m].descripcion,
+          }))}
+        />
+        <Radios
+          nombre="formato-equipo"
+          etiqueta="Formato predeterminado (cada persona puede cambiar el suyo)"
+          valor={c.formato_defecto}
+          onChange={(v) =>
+            acciones.configurar.mutate(
+              { formato_defecto: v },
+              { onSuccess: () => toast('Formato guardado.'), onError: avisar },
+            )
+          }
+          opciones={FORMATOS_WA.map((f) => ({
+            valor: f,
+            etiqueta: NOMBRE_FORMATO_WA[f].nombre,
+            descripcion: NOMBRE_FORMATO_WA[f].descripcion,
+          }))}
+        />
       </Tarjeta>
       <Tarjeta as="section" className="space-y-4 p-4 sm:p-5">
         <h2 className="font-semibold">Reporte programado y horas de silencio</h2>
@@ -898,7 +941,15 @@ export function PersonasWhatsApp() {
             {p.personas.map((x) => (
               <li key={x.usuario_id} className="flex items-center gap-3 py-2.5">
                 <Avatar persona={{ nombre: x.nombre, colorIdx: x.color_idx }} tamano={32} />
-                <span className="min-w-0 flex-1 truncate text-sm">{x.nombre}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{x.nombre}</span>
+                  <span className="text-xs text-muted tabular">
+                    {x.numero_fin ?? 'Sin número'}
+                    {x.tiene_numero && (x.verificado ? ' · verificado' : ' · sin verificar')}
+                    {' · '}
+                    {NOMBRE_FORMATO_WA[x.formato].nombre}
+                  </span>
+                </span>
                 {x.consentimiento === true ? (
                   <Insignia tono="ok">
                     <UserCheck className="size-3.5" aria-hidden /> Acepta

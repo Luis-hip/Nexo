@@ -150,3 +150,70 @@ export const consentimiento = (db: Ejecutor, actor: string, equipo: string, acep
     [actor, equipo, acepta],
     esquemaWhatsAppUsuarioRespuesta,
   );
+
+// --- Spike WhatsApp 1 a 1 (0033, DEC-039) -------------------------------------------------------
+
+const esquemaEntregaJson = z.object({ id: z.string(), estado: z.string() }).passthrough();
+
+/** `proc_wa_marcar_entrega`: resultado de una entrega (el estado del aviso se deriva). */
+export const marcarEntrega = (db: Ejecutor, entrega: string, resultado: object) =>
+  llamarProceso(db, 'proc_wa_marcar_entrega', [entrega, json(resultado)], esquemaEntregaJson);
+
+/** `proc_wa_registrar_entrante`: mensaje de la persona al número de Nexo. */
+export const registrarEntrante = (db: Ejecutor, numero: string, texto: string, ahora?: string) =>
+  llamarProceso(
+    db,
+    'proc_wa_registrar_entrante',
+    [numero, texto, ahora ?? new Date().toISOString()],
+    z.object({
+      conocido: z.boolean(),
+      usuario_id: z.string().optional(),
+      numero: z.string().optional(),
+      verificado: z.boolean().optional(),
+      baja: z.boolean().optional(),
+      reporte: z.boolean().optional(),
+      respuesta: z.string().nullable().optional(),
+      entregas: z.array(z.object({ id: z.string(), contenido: z.string().nullable() })).optional(),
+    }),
+  );
+
+/** `proc_wa_entrega_tras_ventana`: resultado de entregar lo pendiente tras un mensaje entrante. */
+export const entregaTrasVentana = (
+  db: Ejecutor,
+  entrega: string,
+  ok: boolean,
+  proveedorId: string | null,
+  error: string | null,
+) =>
+  llamarProceso(
+    db,
+    'proc_wa_entrega_tras_ventana',
+    [entrega, ok, proveedorId, error],
+    esquemaEntregaJson,
+  );
+
+/** `proc_wa_solicitar_verificacion`: número, consentimiento y código de 6 dígitos. */
+export const solicitarVerificacion = (db: Ejecutor, actor: string, numero: string) =>
+  llamarProceso(
+    db,
+    'proc_wa_solicitar_verificacion',
+    [actor, numero],
+    z.object({ codigo: z.string(), expira_en: z.string() }),
+  );
+
+/** `proc_wa_crear_reporte_personal`: «Enviarme mi reporte por WhatsApp». */
+export const crearReportePersonal = (db: Ejecutor, actor: string) =>
+  llamarProceso(db, 'proc_wa_crear_reporte_personal', [actor], esquemaAvisosParaEnviar.element);
+
+/** `proc_wa_caducar_pendientes`: sistema, lo pendiente de ventana vencido. */
+export const caducarPendientes = (db: Ejecutor, ahora?: string) =>
+  llamarProceso(
+    db,
+    'proc_wa_caducar_pendientes',
+    [ahora ?? new Date().toISOString()],
+    z.object({ caducadas: z.number() }),
+  );
+
+/** `proc_wa_formato_guardar`: formato personal (`null` = el del equipo). */
+export const guardarFormato = (db: Ejecutor, actor: string, formato: string | null) =>
+  llamarProceso(db, 'proc_wa_formato_guardar', [actor, formato], esquemaWhatsAppUsuarioRespuesta);

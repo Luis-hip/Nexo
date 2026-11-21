@@ -35,6 +35,7 @@ import { useCambiarContrasena, useCuenta, useReenviarVerificacion } from '@/lib/
 import { useAccionesWhatsAppYo, useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { FotoPerfil } from '@/components/perfil/FotoPerfil';
 import { toast } from '@/lib/toasts';
+import { DirectoPersonal } from '@/components/whatsapp/Directo';
 
 const SECCIONES = [
   ['perfil', 'Perfil'],
@@ -518,6 +519,7 @@ export function WhatsAppPersonal() {
                   acciones.guardar.mutate({ consentimiento: v }, { onError: avisar })
                 }
               />
+              <DirectoPersonal w={w} />
               {w.equipos.length > 0 && (
                 <div className="border-t border-line pt-3">
                   <h3 className="mb-1 text-sm font-semibold">Por equipo</h3>

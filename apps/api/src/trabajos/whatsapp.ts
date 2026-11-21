@@ -16,12 +16,20 @@ interface Registro {
  *  4. entrega lo que el sistema envía solo (reportes y, con envío automático, instantáneos).
  * Todo pasa por procesos con `FOR UPDATE SKIP LOCKED`: dos instancias no repiten trabajo.
  */
-export async function cicloWhatsApp(db: BaseDatos, config: Config) {
+export async function cicloWhatsApp(db: BaseDatos, config: Config, ahora?: string) {
+  // Spike 1 a 1: lo que esperaba la ventana de 24 h y ya caducó (P-7).
+  const cad = await repo.caducarPendientes(db, ahora);
   const venc = await repo.vencimientos(db);
   const eventos = await repo.procesarEventos(db);
   const rep = await repo.reportes(db);
   const envio = await entregar(db, config, await repo.porEnviar(db));
-  return { vencimientos: venc.registrados, ...eventos, reportes: rep.generados, ...envio };
+  return {
+    vencimientos: venc.registrados,
+    ...eventos,
+    reportes: rep.generados,
+    ...envio,
+    caducadas: cad.caducadas,
+  };
 }
 
 /**

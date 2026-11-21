@@ -239,6 +239,7 @@ Solo si la cuenta de Meta está lista (Fase 0, tarea 0.7):
 2. Webhook de estados con verificación de firma HMAC; registrar en `whatsapp_webhook_eventos`; actualizar el estado del mensaje.
 3. Pantallas `FALT-03` y `FALT-04` (unirse al grupo y aprobar solicitudes), según lo que confirme la verificación de Meta.
 4. **Si la cuenta no está lista**, se deja documentado y el artículo describe el modo simulado como lo implementado, sin afirmar envío real.
+5. *(Actualizado el 2026-11-21, DEC-WA-2 y DEC-039.)* El envío real mínimo puede ser **directo** (número de pruebas, mensajes por persona con plantillas y ventana de 24 h; spike en `11_Plan_Spike_WhatsApp_1a1.md`) o a grupo cuando haya OBA.
 
 ### Criterio de terminado de la Fase 4
 - [ ] Dos navegadores con distintos usuarios intercambian mensajes en tiempo real; un invitado **no** recibe mensajes del chat del equipo (prueba).
