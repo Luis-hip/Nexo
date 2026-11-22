@@ -102,6 +102,8 @@ export function Bienvenida() {
   if (consulta.isPending) return <EsqueletoLista filas={3} />;
   if (consulta.data === undefined) return <ErrorEstado onReintentar={() => consulta.refetch()} />;
   if (consulta.data === null) return <Navigate to="/entrar?volver=/bienvenida/1" replace />;
+  // La bienvenida es para personas; soporte va a su tablero (docs/15).
+  if (consulta.data.usuario.tipo_cuenta === 'soporte') return <Navigate to="/soporte" replace />;
   return <PasosBienvenida yo={consulta.data} />;
 }
 

@@ -20,6 +20,7 @@ const vistas = () => import('./pages/equipo/vistas');
 const ajustes = () => import('./pages/ajustes');
 const chat = () => import('./pages/equipo/chat');
 const whatsapp = () => import('./pages/equipo/whatsapp');
+const soporte = () => import('./pages/soporte');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -83,6 +84,33 @@ const rutas: RouteObject[] = [
             } satisfies RouteObject,
           ]
         : []),
+      {
+        // Rol «Soporte de Nexo» (docs/15): tablero propio, separado de la app de personas.
+        path: 'soporte',
+        lazy: diferida(soporte, (m) => m.SoporteShell),
+        children: [
+          { index: true, lazy: diferida(soporte, (m) => m.InicioSoporte) },
+          {
+            path: 'contacto',
+            lazy: diferida(
+              () => import('./pages/admin/Contacto'),
+              (m) => m.PanelContacto,
+            ),
+          },
+          {
+            path: 'contacto/:id',
+            lazy: diferida(
+              () => import('./pages/admin/Contacto'),
+              (m) => m.DetalleContactoPagina,
+            ),
+          },
+          { path: 'cuentas', lazy: diferida(soporte, (m) => m.CuentasSoporte) },
+          { path: 'equipo', lazy: diferida(soporte, (m) => m.EquipoSoporte) },
+          { path: 'cuenta', lazy: diferida(soporte, (m) => m.MiCuentaSoporte) },
+        ],
+      },
+      // Enlaces viejos del panel (antes /admin/contacto).
+      { path: 'admin/contacto', element: <Navigate to="/soporte/contacto" replace /> },
       {
         Component: AppShell,
         children: [
@@ -296,21 +324,6 @@ const rutas: RouteObject[] = [
               },
               { path: '*', element: proximamente('Esta sección del equipo', 3) },
             ],
-          },
-          {
-            // Panel de contacto y soporte (docs/12 §8.4): permiso de sistema contacto.ver.
-            path: 'admin/contacto',
-            lazy: diferida(
-              () => import('./pages/admin/Contacto'),
-              (m) => m.PanelContacto,
-            ),
-          },
-          {
-            path: 'admin/contacto/:id',
-            lazy: diferida(
-              () => import('./pages/admin/Contacto'),
-              (m) => m.DetalleContactoPagina,
-            ),
           },
           {
             // Fase 3.6: ajustes de la persona (PF-01 a PF-09).

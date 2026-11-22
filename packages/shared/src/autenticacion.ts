@@ -134,5 +134,6 @@ export const MENSAJES_GOOGLE: Record<string, string> = {
   cuenta_existente: 'Ya existe una cuenta con ese correo. Entra con tu contraseña.',
   google_en_uso: 'Esa cuenta de Google ya está vinculada a otra cuenta de Nexo.',
   cuenta_bloqueada: 'La cuenta está bloqueada por intentos fallidos. Espera 15 minutos.',
+  soporte_sin_google: 'Las cuentas de soporte entran con contraseña y verificación en dos pasos.',
   vinculada: 'Listo: tu cuenta de Google quedó vinculada.',
 };

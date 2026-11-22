@@ -291,7 +291,7 @@ function Bandeja({ gestionar }: { gestionar: boolean }) {
                   titulo: 'Folio',
                   celda: (m) => (
                     <Link
-                      to={`/admin/contacto/${m.id}`}
+                      to={`/soporte/contacto/${m.id}`}
                       className={cx(
                         'font-mono text-xs text-brand hover:underline',
                         m.estado === 'nuevo' && 'font-bold',
@@ -318,7 +318,7 @@ function Bandeja({ gestionar }: { gestionar: boolean }) {
                         'max-w-[22rem] truncate text-left hover:underline',
                         m.estado === 'nuevo' && 'font-semibold',
                       )}
-                      onClick={() => nav(`/admin/contacto/${m.id}`)}
+                      onClick={() => nav(`/soporte/contacto/${m.id}`)}
                       title={m.extracto}
                     >
                       {m.asunto}
@@ -519,7 +519,7 @@ export function DetalleContactoPagina() {
   return (
     <div className="space-y-5" data-name="NX/ADM-Contacto-Detalle">
       <Link
-        to="/admin/contacto"
+        to="/soporte/contacto"
         className="inline-flex items-center gap-1 text-sm text-brand hover:underline"
       >
         <ArrowLeft className="size-4" aria-hidden /> Bandeja
@@ -797,7 +797,7 @@ function Detalle({ id, gestionar }: { id: string; gestionar: boolean }) {
                       acc.anonimizar.mutate(undefined, {
                         onSuccess: () => {
                           toast('Datos personales eliminados.');
-                          void nav('/admin/contacto');
+                          void nav('/soporte/contacto');
                         },
                         onError: avisar,
                       });

@@ -252,7 +252,8 @@ function ConfirmarConCodigo({
 }
 
 /** Ajustes → Cuenta: activar, ver el estado, regenerar códigos y desactivar. */
-export function DosPasosAjustes() {
+/** `onTerminar`: se llama al cerrar la lista de códigos de respaldo (el tablero de soporte espera a eso). */
+export function DosPasosAjustes({ onTerminar }: { onTerminar?: () => void } = {}) {
   const consulta = useDosPasos();
   const acc = useAccionesDosPasos();
   const [codigos, setCodigos] = useState<string[] | null>(null);
@@ -278,6 +279,7 @@ export function DosPasosAjustes() {
                 codigos={codigos}
                 onListo={() => {
                   setCodigos(null);
+                  onTerminar?.();
                   acc.iniciar.reset();
                 }}
               />

@@ -212,7 +212,7 @@ export function Cuenta() {
 }
 
 /** PF-02: cambiar la contraseña con la actual; se cierran las demás sesiones. */
-function CambiarContrasena() {
+export function CambiarContrasena() {
   const cambiar = useCambiarContrasena();
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');

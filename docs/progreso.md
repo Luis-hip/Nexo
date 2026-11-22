@@ -369,6 +369,7 @@ Se harán después del spike de WhatsApp 1 a 1 (`docs/11_Plan_Spike_WhatsApp_1a1
 ## Pendientes del 2026-11-21 (docs/13_Plan_Integrado_Pendientes.md)
 
 - [x] **WhatsApp al empezar** (`0036`): paso 4 opcional en la bienvenida, aviso «activa WhatsApp» al unirse a un equipo (con número verificado queda activo solo), «Enviarme mi reporte» sin verificar lleva al registro y envía al terminar. P234.
+- [x] **Rol «Soporte de Nexo»** (`0040`, docs/15): tipo de cuenta sin equipos, tareas ni espacio personal (lo impide la BD); tablero propio `/soporte` (Inicio con cifras de la plataforma, Contacto, Cuentas con bitácora, Equipo de soporte, Mi cuenta); verificación en dos pasos obligatoria; sin Google; alta solo por otra cuenta de soporte con `soporte.alta` o por `db:soporte`. P250–P255, `soporte.test.ts`.
 - [x] **Módulo de contacto** (`0039`, docs/12 y docs/14): formulario con trampa, captcha opcional, límites, folio y seguimiento; panel `/admin/contacto` con bandeja, detalle, notas, respuestas, asignación, métricas, CSV y anonimización; correos por outbox con reintentos; retención de 12 meses; `pnpm db:permiso`. P242–P249, `contacto.test.ts`. **Falta:** claves de Turnstile, `CONTACTO_EQUIPO_DESTINO`, quién tendrá el permiso, y Resend con su DNS (ignorado hasta nuevo aviso).
 
 ## Spike: WhatsApp 1 a 1

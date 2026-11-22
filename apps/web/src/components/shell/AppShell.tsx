@@ -11,7 +11,6 @@ import {
   Plus,
   Search,
   Settings,
-  LifeBuoy,
   UserCircle,
   Users,
   WifiOff,
@@ -44,7 +43,6 @@ import {
 import { ErrorApi } from '@/lib/api';
 import { aplicarPreferencias } from '@/lib/apariencia';
 import { useGuardarPreferencias, useSalir, useYo } from '@/lib/consultas';
-import { usePendientesContacto, usePermisosContacto } from '@/lib/consultasContacto';
 import { DetalleTareaPanel } from '@/pages/personal/DetalleTarea';
 import { TareaForm } from '@/pages/personal/TareaForm';
 import { Busqueda } from './Busqueda';
@@ -93,6 +91,8 @@ export function AppShell() {
       <Navigate to={`/entrar?volver=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
     );
   }
+  // Las cuentas de soporte no usan la app de personas: tienen su tablero (docs/15).
+  if (consulta.data.usuario.tipo_cuenta === 'soporte') return <Navigate to="/soporte" replace />;
   return <Shell yo={consulta.data} />;
 }
 
@@ -634,9 +634,6 @@ function MenuPerfil({
   };
   const item =
     'flex min-h-11 w-full items-center gap-3 rounded-[8px] px-3 text-sm hover:bg-surface';
-  // Panel de contacto (docs/12 §8.4): solo con permiso de sistema; nuevos cada minuto.
-  const contacto = usePermisosContacto();
-  const nuevos = usePendientesContacto(!!contacto.data?.ver).data?.nuevos ?? 0;
   return (
     <>
       <button
@@ -679,19 +676,6 @@ function MenuPerfil({
           <Link to="/ajustes/cuenta" className={item}>
             <Settings className="size-[18px] text-muted" aria-hidden /> Ajustes
           </Link>
-          {contacto.data?.ver && (
-            <Link to="/admin/contacto" className={item}>
-              <LifeBuoy className="size-[18px] text-muted" aria-hidden /> Contacto y soporte
-              {nuevos > 0 && (
-                <span
-                  className="ml-auto rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-on-brand tabular"
-                  aria-label={`${nuevos} mensajes nuevos`}
-                >
-                  {nuevos > 99 ? '99+' : nuevos}
-                </span>
-              )}
-            </Link>
-          )}
           <div className="px-3 py-2">
             <p className="mb-1.5 text-xs text-muted">Tema</p>
             <Segmentado

@@ -10,7 +10,7 @@ Formulario (/contacto) ─► POST /contacto ─► límites (BD) ─► proc_co
                                                                                    └─► contacto_outbox (aviso + confirmación)
 Ciclo de trabajos (cada 30 s, dentro de la API) ─► proc_contacto_outbox_tomar (SKIP LOCKED)
    └─► CanalNotificacion «correo» (Resend) ─► proc_contacto_outbox_resultado (reintentos 1/5/15/60/180 min)
-Panel (/admin/contacto) ─► /admin/contacto/… ─► proc_contacto_* (exigen contacto.ver / contacto.gestionar)
+Panel (/soporte/contacto) ─► /soporte/contacto/… ─► proc_contacto_* (exigen contacto.ver / contacto.gestionar)
 Seguimiento (/contacto/seguimiento) ─► folio + token (SHA-256) ─► solo respuestas
 Retención (diaria) ─► proc_contacto_purgar (12 meses)
 ```
@@ -26,7 +26,7 @@ Retención (diaria) ─► proc_contacto_purgar (12 meses)
 | Worker aparte | Ciclo dentro de la API (`trabajos/contacto.ts`) | El plan gratuito de Render no tiene worker |
 | `EmailProvider` nuevo | `Correo` de `correo.ts` (Resend), con HTML y `Reply-To` | Un solo correo (docs/13 1.3) |
 | Roles admin/desarrollador | `permisos_sistema` y `pnpm db:permiso` | Nexo solo tiene roles por equipo |
-| Rutas `/api/...` | Sin prefijo (`/contacto`, `/admin/contacto`) | Convención del repo |
+| Rutas `/api/...` | Sin prefijo (`/contacto`, `/soporte/contacto`) | Convención del repo |
 | Respuesta con enlace de seguimiento | La respuesta remite al enlace del correo de confirmación | El token solo existe como hash; el plano solo viaja cifrado para la confirmación |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `VITE_TURNSTILE_SITE_KEY` | La web es Vite |
 
@@ -44,6 +44,8 @@ Retención (diaria) ─► proc_contacto_purgar (12 meses)
 **DNS (pendiente, junto con Resend):** SPF, DKIM y DMARC que indique Resend para `nexo.lol` (DMARC empezando con `p=none`). Probar con Gmail y Outlook.
 
 ## 4. Dar acceso al panel
+
+> **Desde 0040 el panel es parte del rol «Soporte de Nexo» (`docs/15_Rol_Soporte.md`):** solo lo usan cuentas de tipo `soporte` con verificación en dos pasos, en su tablero `/soporte`. Las cuentas de soporte las da de alta otra cuenta de soporte con `soporte.alta` (Equipo de soporte → Dar de alta) o un desarrollador con `db:soporte`; nadie lo elige al registrarse.
 
 **Cuenta de soporte (recomendada):** `soporte@nexo.lol` no pertenece a ningún equipo. Tiene el correo verificado y solo el permiso `contacto.gestionar`, así el soporte no se mezcla con el espacio personal de nadie. La crea el script con una contraseña aleatoria, que guarda en `.credenciales-demo.md` (fuera de git):
 
