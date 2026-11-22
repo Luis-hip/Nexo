@@ -49,6 +49,7 @@ import { BurbujaWA } from '@/components/whatsapp/BurbujaWA';
 import { AvisoCookies } from './AvisoCookies';
 import { ARTICULOS, FAQ } from './contenido';
 import { colorDeIntegrante } from '@/lib/color';
+import { useYo } from '@/lib/consultas';
 
 const enlace = 'text-sm text-muted hover:text-fg';
 
@@ -80,8 +81,25 @@ function SelectorTema({ compacto }: { compacto?: boolean }) {
 
 export { AvisoCookies };
 
+/**
+ * Botones de cuenta del encabezado público: sin sesión, «Iniciar sesión» y «Empezar gratis»; con
+ * sesión, un solo «Ir a Nexo» (soporte va a su tablero). Mientras se consulta la sesión no se pinta
+ * nada para que no parpadeen los de invitado.
+ */
+function useCuentaPublica() {
+  const consulta = useYo();
+  const yo = consulta.data;
+  return {
+    // Si la consulta falla (red, API dormida) se muestran los de invitado.
+    cargando: consulta.isPending,
+    conSesion: !!yo,
+    destino: yo?.usuario.tipo_cuenta === 'soporte' ? '/soporte' : '/app',
+  };
+}
+
 export function PublicoLayout() {
   const [abierto, setAbierto] = useState(false);
+  const cuenta = useCuentaPublica();
   const nav = [
     ['/caracteristicas', 'Características'],
     ['/como-funciona', 'Cómo funciona'],
@@ -110,18 +128,31 @@ export function PublicoLayout() {
           <div className="hidden lg:block">
             <SelectorTema compacto />
           </div>
-          <Link
-            to="/entrar"
-            className="hidden h-10 items-center px-3 text-sm font-medium sm:inline-flex"
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            to="/registro"
-            className="hidden h-10 items-center rounded-[8px] bg-brand px-4 text-sm font-medium text-on-brand sm:inline-flex"
-          >
-            Empezar gratis
-          </Link>
+          {cuenta.conSesion ? (
+            <Link
+              to={cuenta.destino}
+              className="hidden h-10 items-center gap-2 rounded-[8px] bg-brand px-4 text-sm font-medium text-on-brand sm:inline-flex"
+            >
+              Ir a Nexo <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          ) : (
+            !cuenta.cargando && (
+              <>
+                <Link
+                  to="/entrar"
+                  className="hidden h-10 items-center px-3 text-sm font-medium sm:inline-flex"
+                >
+                  Iniciar sesión
+                </Link>
+                <Link
+                  to="/registro"
+                  className="hidden h-10 items-center rounded-[8px] bg-brand px-4 text-sm font-medium text-on-brand sm:inline-flex"
+                >
+                  Empezar gratis
+                </Link>
+              </>
+            )
+          )}
           <button
             type="button"
             className="grid size-11 place-items-center rounded-[8px] lg:hidden"
@@ -160,18 +191,31 @@ export function PublicoLayout() {
             </nav>
             <div className="mt-6 space-y-3">
               <SelectorTema />
-              <Link
-                to="/registro"
-                className="flex h-12 items-center justify-center rounded-[10px] bg-brand font-medium text-on-brand"
-              >
-                Empezar gratis
-              </Link>
-              <Link
-                to="/entrar"
-                className="flex h-12 items-center justify-center rounded-[10px] border border-line font-medium"
-              >
-                Iniciar sesión
-              </Link>
+              {cuenta.conSesion ? (
+                <Link
+                  to={cuenta.destino}
+                  className="flex h-12 items-center justify-center gap-2 rounded-[10px] bg-brand font-medium text-on-brand"
+                >
+                  Ir a Nexo <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              ) : (
+                !cuenta.cargando && (
+                  <>
+                    <Link
+                      to="/registro"
+                      className="flex h-12 items-center justify-center rounded-[10px] bg-brand font-medium text-on-brand"
+                    >
+                      Empezar gratis
+                    </Link>
+                    <Link
+                      to="/entrar"
+                      className="flex h-12 items-center justify-center rounded-[10px] border border-line font-medium"
+                    >
+                      Iniciar sesión
+                    </Link>
+                  </>
+                )
+              )}
             </div>
           </div>
         )}
