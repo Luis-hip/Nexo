@@ -2729,7 +2729,7 @@ Migración `0038_google.sql` (docs/13_Plan_Integrado_Pendientes.md, 1.2). Prueba
 - **Lo llama:** `repositorios/autenticacion.ts` → `google()`; `GET /auth/google/callback`.
 - **Pruebas:** P239, P240, P241; `google.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_google('1098…', 'ana@gmail.com', true, 'Ana', NULL, $1, '127.0.0.1', 'Firefox', now() + interval '30 days')`
-- **Historial:** 2026-11-21 · creación · `0038`.
+- **Historial:** 2026-11-21 · creación · `0038`. 2026-11-21 · rechaza las cuentas de soporte (`soporte_sin_google`) · `0040_rol_soporte.sql`.
 
 ### proc_auth_google_desvincular
 - **Migración:** `0038_google.sql`
@@ -2846,7 +2846,7 @@ Auxiliares: `fn_permiso_sistema_asignar` (otorga o retira un permiso por correo;
 - **Lo llama:** `GET /admin/contacto/permisos`.
 - **Pruebas:** P244.
 - **Ejemplo de llamada:** `select proc_contacto_permisos($1)`
-- **Historial:** 2026-11-21 · creación · `0039`.
+- **Historial:** 2026-11-21 · creación · `0039`. 2026-11-21 · solo cuentas de soporte; devuelve `{ soporte, ver, gestionar, cuentas, dos_pasos }` · `0040_rol_soporte.sql`.
 
 ### proc_contacto_listar
 - **Migración:** `0039_contacto.sql`
@@ -3072,3 +3072,122 @@ Auxiliares: `fn_permiso_sistema_asignar` (otorga o retira un permiso por correo;
 - **Ejemplo de llamada:** `select proc_contacto_purgar(12)`
 - **Historial:** 2026-11-21 · creación · `0039`.
 
+---
+
+## Rol de soporte
+
+Migración `0040_rol_soporte.sql` (docs/15_Rol_Soporte.md). Pruebas `P250`–`P255` y `apps/api/src/rutas/soporte.test.ts`.
+
+**Esquema:** `usuarios.tipo_cuenta` (`persona` | `soporte`); permisos de sistema nuevos `cuentas.ayudar` y `soporte.alta`; tabla `soporte_bitacora` (lo que hace soporte sobre otras cuentas). Disparadores `fn_bloquear_soporte` en `membresias`, `equipos` y `tareas`: una cuenta de soporte no pertenece a equipos, no los crea ni tiene tareas (`NX005`, `cuenta_soporte`).
+
+**Procesos que cambian (misma firma):** `fn_usuario_json` suma `tipo_cuenta`; `fn_contacto_exigir` exige cuenta de soporte y verificación en dos pasos (`dos_pasos_requerido`); `proc_contacto_permisos` devuelve `{ soporte, ver, gestionar, cuentas, dos_pasos }`; `proc_auth_google` rechaza cuentas de soporte (`soporte_sin_google`); `fn_permiso_sistema_asignar` acepta los permisos nuevos.
+
+Auxiliares: `fn_es_soporte`, `fn_bloquear_soporte`, `fn_soporte_exigir`, `fn_soporte_cuenta_json`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_soporte_buscar_cuenta` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_desbloquear` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_reenviar_verificacion` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_bitacora` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_plataforma` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_equipo_listar` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_crear_cuenta` | Soporte | `0040_rol_soporte.sql` | Vigente |
+
+### proc_soporte_buscar_cuenta
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Buscar UNA cuenta de persona por correo exacto para ayudarla.
+- **Parámetros:** `p_actor_id uuid`. `p_correo text`.
+- **Retorno:** `jsonb` `{ encontrada, cuenta? }`; la cuenta con su estado (creada, correo verificado, bloqueo, 2FA, Google, número de equipos activos, última actividad), nunca el contenido de sus equipos.
+- **Reglas y validaciones:** Exige cuenta de soporte con `cuentas.ayudar` y 2FA. No encuentra cuentas de soporte ni hace búsquedas parciales. Se registra en la bitácora también si no la encuentra (por eso no lanza error).
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `membresias`, `credenciales_2fa`; escritura `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/cuentas?correo=`.
+- **Pruebas:** P253.
+- **Ejemplo de llamada:** `select proc_soporte_buscar_cuenta($1, 'ana@correo.com')`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_desbloquear
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Quitar el bloqueo por intentos fallidos de una cuenta.
+- **Parámetros:** `p_actor_id uuid`. `p_usuario_id uuid`.
+- **Retorno:** `jsonb` cuenta.
+- **Reglas y validaciones:** Exige `cuentas.ayudar` y 2FA. Solo cuentas de persona. Bitácora.
+- **Errores:** `NX005`; `NX006`.
+- **Tablas que toca:** escritura `usuarios`, `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `POST /soporte/cuentas/:id/desbloquear`.
+- **Pruebas:** P253.
+- **Ejemplo de llamada:** `select proc_soporte_desbloquear($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_reenviar_verificacion
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Enlace nuevo de verificación de correo para otra persona (la API lo manda).
+- **Parámetros:** `p_actor_id uuid`. `p_usuario_id uuid`. `p_token_hash bytea`. `p_expira timestamptz` (24 h).
+- **Retorno:** `jsonb` `{ correo, nombre }`.
+- **Reglas y validaciones:** Exige `cuentas.ayudar` y 2FA. Los enlaces anteriores dejan de servir. Bitácora.
+- **Errores:** `NX005`; `NX006`; `NX007` · `ya_verificado`.
+- **Tablas que toca:** escritura `tokens_verificacion`, `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `POST /soporte/cuentas/:id/verificacion`.
+- **Pruebas:** P253.
+- **Ejemplo de llamada:** `select proc_soporte_reenviar_verificacion($1, $2, $3, now() + interval '24 hours')`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_bitacora
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Últimas acciones de soporte sobre cuentas.
+- **Parámetros:** `p_actor_id uuid`. `p_limite int` (50; máx. 200).
+- **Retorno:** `jsonb` `[{ accion, actor, cuenta, detalles, creado_en }]`.
+- **Reglas y validaciones:** Exige `cuentas.ayudar` y 2FA.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/bitacora`.
+- **Pruebas:** `soporte.test.ts`.
+- **Ejemplo de llamada:** `select proc_soporte_bitacora($1, 50)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_plataforma
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Cifras de la plataforma sin datos personales.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ cuentas, nuevas_7_dias, verificadas, con_dos_pasos, con_google, activas_30_dias, equipos_activos, altas_por_semana[8] }`.
+- **Reglas y validaciones:** Exige cuenta de soporte con `contacto.ver` y 2FA. No cuenta las cuentas de soporte.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `equipos`, `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/plataforma`.
+- **Pruebas:** P254.
+- **Ejemplo de llamada:** `select proc_soporte_plataforma($1)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_equipo_listar
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** El equipo de soporte (cuentas de soporte activas).
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `[{ id, nombre, correo, dos_pasos, activa, permisos[], creada_en, ultima_actividad_en }]`.
+- **Reglas y validaciones:** Exige cuenta de soporte con `contacto.ver` y 2FA. `activa` = ya eligió contraseña.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `permisos_sistema`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/equipo`.
+- **Pruebas:** `soporte.test.ts`.
+- **Ejemplo de llamada:** `select proc_soporte_equipo_listar($1)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_crear_cuenta
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Alta de otra cuenta de soporte (docs/15 §1): solo otra cuenta de soporte con `soporte.alta`; también un desarrollador con `db:soporte`.
+- **Parámetros:** `p_actor_id uuid`. `p_correo text`. `p_nombre text`. `p_puede_dar_alta boolean`. `p_token_hash bytea` y `p_expira timestamptz` (enlace para elegir contraseña, 72 h).
+- **Retorno:** `jsonb` `{ id, correo, nombre }`.
+- **Reglas y validaciones:** Crea la cuenta como `soporte`, sin contraseña ni equipos, con `contacto.ver`, `contacto.gestionar` y `cuentas.ayudar` (y `soporte.alta` si se pide); el enlace es el de restablecer contraseña; al entrar deberá activar la 2FA. Un correo con cuenta no se convierte. Bitácora.
+- **Errores:** `NX005`; `NX010`; `NX012` · `correo_registrado`.
+- **Tablas que toca:** escritura `usuarios`, `preferencias_usuario`, `permisos_sistema`, `tokens_verificacion`, `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `POST /soporte/equipo`.
+- **Pruebas:** P255; `soporte.test.ts`.
+- **Ejemplo de llamada:** `select proc_soporte_crear_cuenta($1, 'ana@nexo.lol', 'Ana Soporte', false, $2, now() + interval '72 hours')`
+- **Historial:** 2026-11-21 · creación · `0040`.

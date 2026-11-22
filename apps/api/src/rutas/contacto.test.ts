@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cifrar } from '../cifrado';
 import { correoEnMemoria } from '../correo';
-import { crearEntorno, DATABASE_URL, SEMILLA, type Cookies, type Entorno } from '../pruebas/ayudas';
+import {
+  crearEntorno,
+  DATABASE_URL,
+  entrarComoSoporte,
+  SEMILLA,
+  type Cookies,
+  type Entorno,
+} from '../pruebas/ayudas';
 import { armarCorreo, canalCorreo, cicloContacto } from '../trabajos/contacto';
 import { celdaCsv } from './contacto';
 
@@ -42,7 +49,7 @@ describe('contacto: piezas sin BD', () => {
     expect(aviso.asunto).toContain('[ALTA]');
     expect(aviso.html).toContain('&lt;b&gt;no carga&lt;/b&gt;');
     expect(aviso.html).not.toContain('<script>');
-    expect(aviso.texto).toContain('https://app.nexo.test/admin/contacto/m-1');
+    expect(aviso.texto).toContain('https://app.nexo.test/soporte/contacto/m-1');
     const conf = armarCorreo(
       {
         ...base,
@@ -91,25 +98,21 @@ describe.skipIf(!DATABASE_URL)('contacto por la API', () => {
 
   beforeAll(async () => {
     e = await crearEntorno({ CONTACTO_EQUIPO_DESTINO: 'soporte@nexo.test' });
-    gestor = await e.entrar(SEMILLA.carlos);
+    // Los límites viven en la BD: una corrida anterior del mismo día no debe afectar a esta.
+    await e.db.deleteFrom('contacto_intentos').execute();
+    // Desde 0040 el panel es solo de cuentas de soporte con 2FA (docs/15).
+    gestor = await entrarComoSoporte(e, `soporte-contacto-${marca}@nexo.test`);
     sinPermiso = await e.entrar(SEMILLA.daniela);
-    const carlos = await e.db
-      .selectFrom('usuarios')
-      .select('id')
-      .where('correo', '=', SEMILLA.carlos)
-      .executeTakeFirstOrThrow();
-    await e.db
-      .insertInto('permisos_sistema')
-      .values({ usuario_id: carlos.id, permiso: 'contacto.gestionar' })
-      .onConflict((oc) => oc.doNothing())
-      .execute();
   });
   afterAll(async () => {
     await e.db
       .deleteFrom('contacto_mensajes')
       .where('correo', 'like', 'contacto-%@nexo.test')
       .execute();
-    await e.db.deleteFrom('permisos_sistema').execute();
+    await e.db
+      .deleteFrom('usuarios')
+      .where('correo', 'like', 'soporte-contacto-%@nexo.test')
+      .execute();
     await e.cerrar();
   });
 
@@ -182,9 +185,11 @@ describe.skipIf(!DATABASE_URL)('contacto por la API', () => {
   it('panel: sin sesión 401, sin permiso 403; con permiso filtra, responde y exporta CSV', async () => {
     expect((await e.pedir(null, 'GET', '/admin/contacto')).estado).toBe(401);
     expect((await e.pedir(sinPermiso, 'GET', '/admin/contacto')).estado).toBe(403);
-    expect((await e.pedir(gestor, 'GET', '/admin/contacto/permisos')).cuerpo).toEqual({
+    expect((await e.pedir(gestor, 'GET', '/admin/contacto/permisos')).cuerpo).toMatchObject({
+      soporte: true,
       ver: true,
       gestionar: true,
+      dos_pasos: true,
     });
     const r = await enviar({
       ...valido,

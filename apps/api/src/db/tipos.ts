@@ -538,6 +538,15 @@ export interface SolicitudesInvitado {
   usuario_id: string;
 }
 
+export interface SoporteBitacora {
+  accion: string;
+  actor_id: string | null;
+  creado_en: Generated<Timestamp>;
+  detalles: Generated<Json>;
+  id: Generated<string>;
+  usuario_id: string | null;
+}
+
 export interface SprintCapacidad {
   horas: number;
   sprint_id: string;
@@ -665,6 +674,10 @@ export interface Usuarios {
   id: Generated<string>;
   intentos_fallidos: Generated<number>;
   nombre: string;
+  /**
+   * persona (usa Nexo) o soporte (atiende Nexo; docs/15). Lo fija db:soporte.
+   */
+  tipo_cuenta: Generated<string>;
   ultima_actividad_en: Timestamp | null;
   zona_horaria: Generated<string>;
 }
@@ -850,6 +863,7 @@ export interface DB {
   reuniones: Reuniones;
   sesiones: Sesiones;
   solicitudes_invitado: SolicitudesInvitado;
+  soporte_bitacora: SoporteBitacora;
   sprint_capacidad: SprintCapacidad;
   sprint_instantaneas: SprintInstantaneas;
   sprints: Sprints;

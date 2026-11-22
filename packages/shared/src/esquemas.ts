@@ -31,6 +31,8 @@ export interface UsuarioSesion {
   descripcion: string;
   zona_horaria: string;
   avatar_url: string | null;
+  /** `soporte`: cuenta del equipo que atiende Nexo, con su propio tablero (docs/15). */
+  tipo_cuenta: 'persona' | 'soporte';
 }
 
 /** Respuesta de GET /yo. */

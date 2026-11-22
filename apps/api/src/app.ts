@@ -12,6 +12,7 @@ import { rutasAjustes } from './rutas/ajustes';
 import { rutasAutenticacion } from './rutas/autenticacion';
 import { rutasChat } from './rutas/chat';
 import { rutasContacto } from './rutas/contacto';
+import { rutasSoporte } from './rutas/soporte';
 import { rutasDev } from './rutas/dev';
 import { rutasEquipos } from './rutas/equipos';
 import { rutasLiderazgo } from './rutas/liderazgo';
@@ -87,6 +88,7 @@ export async function crearApp(
   await app.register(rutasWhatsApp, { db, config });
   const correo = opciones.correo ?? crearCorreo(config, app.log);
   await app.register(rutasPendientes, { db, config, correo });
+  await app.register(rutasSoporte, { db, config, correo });
   await app.register(rutasAutenticacion, { db, config, correo });
 
   if (config.DEV_LOGIN_ENABLED) {

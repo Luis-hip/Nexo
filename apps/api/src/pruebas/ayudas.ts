@@ -76,3 +76,30 @@ export async function crearEntorno(extra: Record<string, string> = {}): Promise<
     },
   };
 }
+
+/**
+ * Cuenta de soporte para las pruebas (docs/15): tipo `soporte`, con la 2FA confirmada (el secreto no
+ * importa: se entra con el acceso de desarrollo) y los permisos pedidos. Devuelve la cookie.
+ */
+export async function entrarComoSoporte(
+  e: Entorno,
+  correo: string,
+  permisos: string[] = ['contacto.ver', 'contacto.gestionar', 'cuentas.ayudar', 'soporte.alta'],
+  conDosPasos = true,
+): Promise<Cookies> {
+  const u = await e.db
+    .insertInto('usuarios')
+    .values({ correo, nombre: 'Soporte Pruebas', tipo_cuenta: 'soporte' })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  if (conDosPasos) {
+    await e.db
+      .insertInto('credenciales_2fa')
+      .values({ usuario_id: u.id, secreto_cifrado: 'x', confirmado_en: new Date() })
+      .execute();
+  }
+  for (const permiso of permisos) {
+    await e.db.insertInto('permisos_sistema').values({ usuario_id: u.id, permiso }).execute();
+  }
+  return e.entrar(correo);
+}

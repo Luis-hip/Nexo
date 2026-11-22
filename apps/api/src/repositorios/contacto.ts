@@ -134,7 +134,13 @@ export const permisos = (db: Ejecutor, actor: string) =>
     db,
     'proc_contacto_permisos',
     [actor],
-    z.object({ ver: z.boolean(), gestionar: z.boolean() }),
+    z.object({
+      soporte: z.boolean(),
+      ver: z.boolean(),
+      gestionar: z.boolean(),
+      cuentas: z.boolean(),
+      dos_pasos: z.boolean(),
+    }),
   );
 
 export const listar = (db: Ejecutor, actor: string, filtros: FiltrosContacto) =>

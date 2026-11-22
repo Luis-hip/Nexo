@@ -49,7 +49,7 @@ export function armarCorreo(
   const app = config.APP_URL.replace(/\/$/, '');
   const tipo = NOMBRE_TIPO_CONTACTO[item.tipo].nombre;
   if (item.plantilla === 'aviso_equipo') {
-    const url = `${app}/admin/contacto/${item.mensaje_id}`;
+    const url = `${app}/soporte/contacto/${item.mensaje_id}`;
     const alta = item.prioridad === 'alta' ? '[ALTA]' : '';
     const quien = `${item.nombre}${item.registrado ? ' (usuario registrado)' : ''}`;
     return {

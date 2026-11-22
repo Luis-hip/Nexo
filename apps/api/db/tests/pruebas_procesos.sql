@@ -3431,7 +3431,12 @@ CREATE FUNCTION pg_temp.con_permiso(p_nombre text, p_permiso text) RETURNS uuid 
 DECLARE v uuid;
 BEGIN
   v := pg_temp.usuario(p_nombre);
-  IF p_permiso IS NOT NULL THEN INSERT INTO permisos_sistema (usuario_id, permiso) VALUES (v, p_permiso); END IF;
+  -- Desde 0040 el panel es solo de cuentas de soporte con verificación en dos pasos (docs/15).
+  IF p_permiso IS NOT NULL THEN
+    UPDATE usuarios SET tipo_cuenta = 'soporte' WHERE id = v;
+    INSERT INTO credenciales_2fa (usuario_id, secreto_cifrado, confirmado_en) VALUES (v, 'x', now());
+    INSERT INTO permisos_sistema (usuario_id, permiso) VALUES (v, p_permiso);
+  END IF;
   RETURN v;
 END $$ LANGUAGE plpgsql;
 
@@ -3511,8 +3516,8 @@ DO $$ DECLARE ge uuid := pg_temp.con_permiso('Gestor Estados', 'contacto.gestion
   BEGIN PERFORM proc_contacto_cambiar_estado(ge, v_id, 'descartado'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
   m := proc_contacto_cambiar_estado(ge, v_id, 'en_revision');
   IF m->>'resuelto_en' IS NOT NULL THEN RAISE EXCEPTION 'FALLO P245: reabrir no limpió resuelto_en'; END IF;
-  IF (SELECT metadatos FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento = 'cambio_estado' ORDER BY creado_en DESC LIMIT 1)
-     <> '{"de": "resuelto", "a": "en_revision"}'::jsonb THEN
+  IF NOT EXISTS (SELECT 1 FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento = 'cambio_estado'
+                   AND metadatos = '{"de": "resuelto", "a": "en_revision"}'::jsonb) THEN
     RAISE EXCEPTION 'FALLO P245: evento sin de/a';
   END IF;
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P245: % de 2 rechazos', ok; END IF;
@@ -3611,4 +3616,106 @@ DO $$ DECLARE ge uuid := pg_temp.con_permiso('Anonimiza', 'contacto.gestionar');
     RAISE EXCEPTION 'FALLO P249: purgar %', r;
   END IF;
   RAISE NOTICE 'OK P249: anonimizar y purgar';
+END $$;
+
+-- ===========================================================================================
+-- Rol de soporte (0040, docs/15_Rol_Soporte.md)
+-- ===========================================================================================
+
+-- P250. Soporte · una cuenta de soporte no se une a equipos, no los crea y no tiene tareas (NX005).
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Sin Equipo', 'contacto.ver'); e uuid := pg_temp.equipo_con(1); ok int := 0; c text; BEGIN
+  c := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  BEGIN PERFORM proc_invitacion_aceptar(s, c); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN INSERT INTO equipos (nombre, creado_por) VALUES ('Equipo de soporte', s); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN INSERT INTO tareas (dueno_id, codigo, titulo) VALUES (s, 1, 'Tarea'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P250: % de 3 bloqueos', ok; END IF;
+  IF fn_usuario_json(s)->>'tipo_cuenta' <> 'soporte' THEN RAISE EXCEPTION 'FALLO P250: tipo_cuenta en la sesión'; END IF;
+  RAISE NOTICE 'OK P250: soporte sin equipos ni tareas';
+END $$;
+
+-- P251. Soporte · el panel exige cuenta de soporte Y verificación en dos pasos: una persona con el
+--       permiso no entra; una de soporte sin 2FA recibe «dos_pasos_requerido».
+DO $$ DECLARE p uuid := pg_temp.usuario('Persona Con Permiso'); s uuid := pg_temp.usuario('Soporte Sin 2FA'); h text; ok int := 0; BEGIN
+  INSERT INTO permisos_sistema (usuario_id, permiso) VALUES (p, 'contacto.gestionar'), (s, 'contacto.gestionar');
+  UPDATE usuarios SET tipo_cuenta = 'soporte' WHERE id = s;
+  BEGIN PERFORM proc_contacto_listar(p, '{}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_contacto_listar(s, '{}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT; END;
+  IF h <> 'dos_pasos_requerido' THEN RAISE EXCEPTION 'FALLO P251: sin 2FA dio %', h; END IF;
+  INSERT INTO credenciales_2fa (usuario_id, secreto_cifrado, confirmado_en) VALUES (s, 'x', now());
+  PERFORM proc_contacto_listar(s, '{}');
+  IF (proc_contacto_permisos(p)->>'ver')::boolean OR NOT (proc_contacto_permisos(s)->>'soporte')::boolean THEN
+    RAISE EXCEPTION 'FALLO P251: permisos %', proc_contacto_permisos(p);
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P251: la persona entró al panel'; END IF;
+  RAISE NOTICE 'OK P251: panel solo para soporte con 2FA';
+END $$;
+
+-- P252. Soporte · no entra ni se vincula con Google (NX005).
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Google', 'contacto.ver'); ok int := 0; v_correo text; BEGIN
+  SELECT correo INTO v_correo FROM usuarios WHERE id = s;
+  UPDATE usuarios SET correo_verificado_en = now() WHERE id = s;
+  BEGIN PERFORM proc_auth_google('sub-P252', v_correo, true, 'X', NULL, sha256('s-P252a'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_google('sub-P252b', 'otro-p252@x.test', true, 'X', s, sha256('s-P252b'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 2 OR (SELECT google_sub FROM usuarios WHERE id = s) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P252: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P252: soporte sin Google';
+END $$;
+
+-- P253. Soporte · ayuda con cuentas: buscar por correo exacto (sin contenido de equipos; no encuentra
+--       cuentas de soporte), desbloquear y reenviar la verificación; todo queda en la bitácora.
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Ayuda', 'cuentas.ayudar'); otra uuid := pg_temp.con_permiso('Otra Soporte', 'contacto.ver');
+               p uuid := pg_temp.usuario('Persona Bloqueada'); v_correo text; r jsonb; ok int := 0; BEGIN
+  UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = now() + interval '10 minutes' WHERE id = p;
+  SELECT correo INTO v_correo FROM usuarios WHERE id = p;
+  r := proc_soporte_buscar_cuenta(s, upper(v_correo))->'cuenta';
+  IF r->>'bloqueada_hasta' IS NULL OR (r->>'correo_verificado')::boolean OR r ? 'tareas' THEN RAISE EXCEPTION 'FALLO P253: %', r; END IF;
+  IF (proc_soporte_buscar_cuenta(s, 'parte')->>'encontrada')::boolean THEN RAISE EXCEPTION 'FALLO P253: búsqueda parcial'; END IF;
+  IF (proc_soporte_buscar_cuenta(s, (SELECT correo FROM usuarios WHERE id = otra))->>'encontrada')::boolean THEN
+    RAISE EXCEPTION 'FALLO P253: encontró otra cuenta de soporte';
+  END IF;
+  r := proc_soporte_desbloquear(s, p);
+  IF r->>'bloqueada_hasta' IS NOT NULL THEN RAISE EXCEPTION 'FALLO P253: sigue bloqueada'; END IF;
+  r := proc_soporte_reenviar_verificacion(s, p, sha256('ver-P253'), now() + interval '1 day');
+  IF NOT EXISTS (SELECT 1 FROM tokens_verificacion WHERE usuario_id = p AND token_hash = sha256('ver-P253') AND tipo = 'verificar_correo') THEN
+    RAISE EXCEPTION 'FALLO P253: sin token';
+  END IF;
+  UPDATE usuarios SET correo_verificado_en = now() WHERE id = p;
+  BEGIN PERFORM proc_soporte_reenviar_verificacion(s, p, sha256('ver-P253b'), now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF (SELECT count(*) FROM soporte_bitacora WHERE actor_id = s) <> 5 THEN
+    RAISE EXCEPTION 'FALLO P253: bitácora %', (SELECT count(*) FROM soporte_bitacora WHERE actor_id = s);
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P253: reenviar con el correo verificado no se rechazó'; END IF;
+  RAISE NOTICE 'OK P253: ayuda con cuentas y bitácora';
+END $$;
+
+-- P254. Soporte · cifras de la plataforma sin datos personales (no cuenta las cuentas de soporte).
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Cifras', 'contacto.ver'); r jsonb; b jsonb; BEGIN
+  r := proc_soporte_plataforma(s);
+  IF (r->>'cuentas')::int <> (SELECT count(*) FROM usuarios WHERE eliminado_en IS NULL AND tipo_cuenta = 'persona')
+     OR jsonb_array_length(r->'altas_por_semana') <> 8 OR r::text LIKE '%@%' THEN
+    RAISE EXCEPTION 'FALLO P254: %', r;
+  END IF;
+  RAISE NOTICE 'OK P254: cifras de la plataforma';
+END $$;
+
+-- P255. Soporte · alta de otra cuenta de soporte: solo con «soporte.alta»; un correo con cuenta no se
+--       convierte (NX012); la nueva no tiene contraseña, tiene los permisos y un enlace de un solo uso.
+DO $$ DECLARE sin uuid := pg_temp.con_permiso('Soporte Sin Alta', 'contacto.gestionar'); con uuid := pg_temp.con_permiso('Soporte Alta', 'soporte.alta');
+               r jsonb; ok int := 0; v uuid; BEGIN
+  BEGIN PERFORM proc_soporte_crear_cuenta(sin, 'nueva-p255@soporte.test', 'Nueva Soporte', false, sha256('t-P255a'), now() + interval '3 days');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_soporte_crear_cuenta(con, (SELECT correo FROM usuarios WHERE id = sin), 'Ya Existe', false, sha256('t-P255b'), now() + interval '3 days');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  r := proc_soporte_crear_cuenta(con, 'Nueva-P255@Soporte.test', 'Nueva Soporte', false, sha256('t-P255c'), now() + interval '3 days');
+  v := (r->>'id')::uuid;
+  IF (SELECT tipo_cuenta || '|' || (hash_contrasena IS NULL)::text FROM usuarios WHERE id = v) <> 'soporte|true'
+     OR (SELECT string_agg(permiso, ',' ORDER BY permiso) FROM permisos_sistema WHERE usuario_id = v) <> 'contacto.gestionar,contacto.ver,cuentas.ayudar'
+     OR NOT EXISTS (SELECT 1 FROM tokens_verificacion WHERE usuario_id = v AND tipo = 'restablecer_contrasena' AND token_hash = sha256('t-P255c'))
+     OR NOT EXISTS (SELECT 1 FROM soporte_bitacora WHERE actor_id = con AND accion = 'crear_soporte' AND usuario_id = v) THEN
+    RAISE EXCEPTION 'FALLO P255: %', r;
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P255: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P255: alta de cuentas de soporte';
 END $$;

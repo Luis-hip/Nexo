@@ -93,6 +93,7 @@ export const esquemaUsuarioSesion = z.object({
   descripcion: z.string(),
   zona_horaria: z.string(),
   avatar_url: z.string().nullable(),
+  tipo_cuenta: z.enum(['persona', 'soporte']).default('persona'),
 }) satisfies z.ZodType<UsuarioSesion>;
 
 /** Lo que devuelve `proc_sesion_resolver`: la sesión vigente y su usuario, o `null`. */

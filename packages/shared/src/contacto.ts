@@ -193,8 +193,14 @@ export interface MetricasContacto {
 }
 
 export interface PermisosContacto {
+  /** Es una cuenta de soporte (docs/15). */
+  soporte: boolean;
   ver: boolean;
   gestionar: boolean;
+  /** Ayuda con cuentas (`cuentas.ayudar`). */
+  cuentas: boolean;
+  /** Tiene la verificación en dos pasos activa (obligatoria para soporte). */
+  dos_pasos: boolean;
 }
 
 /** Filtros de la bandeja (query string de GET /admin/contacto). */
@@ -221,3 +227,69 @@ export const esquemaRespuestaContacto = z.object({
 export const esquemaEstadoContacto = z.object({ estado: z.enum(ESTADOS_CONTACTO) });
 export const esquemaPrioridadContacto = z.object({ prioridad: z.enum(PRIORIDADES_CONTACTO) });
 export const esquemaAsignacionContacto = z.object({ asignado_a: z.uuid().nullable() });
+
+// --- Rol de soporte (docs/15_Rol_Soporte.md) -----------------------------------------------------
+
+export interface CuentaParaSoporte {
+  id: string;
+  nombre: string;
+  correo: string;
+  creada_en: string;
+  correo_verificado: boolean;
+  bloqueada_hasta: string | null;
+  intentos_fallidos: number;
+  dos_pasos: boolean;
+  google: boolean;
+  tiene_contrasena: boolean;
+  equipos_activos: number;
+  ultima_actividad_en: string | null;
+}
+
+export interface EntradaBitacoraSoporte {
+  id: string;
+  accion: 'buscar_cuenta' | 'desbloquear' | 'reenviar_verificacion' | 'crear_soporte';
+  actor: { id: string; nombre: string } | null;
+  cuenta: string | null;
+  detalles: Record<string, unknown>;
+  creado_en: string;
+}
+
+export interface CifrasPlataforma {
+  cuentas: number;
+  nuevas_7_dias: number;
+  verificadas: number;
+  con_dos_pasos: number;
+  con_google: number;
+  activas_30_dias: number;
+  equipos_activos: number;
+  altas_por_semana: { semana: string; altas: number }[];
+}
+
+export interface MiembroSoporte {
+  id: string;
+  nombre: string;
+  correo: string;
+  dos_pasos: boolean;
+  /** Ya eligió su contraseña. */
+  activa: boolean;
+  permisos: string[];
+  creada_en: string;
+  ultima_actividad_en: string | null;
+}
+
+/** Alta de otra cuenta de soporte (solo con `soporte.alta`). */
+export const esquemaCrearSoporte = z.object({
+  correo: z.string().trim().toLowerCase().max(254).email('Escribe un correo válido.'),
+  nombre: z.string().trim().min(2, 'Escribe el nombre (mínimo 2 caracteres).').max(80),
+  puede_dar_alta: z.boolean().default(false),
+});
+export type CrearSoporte = z.input<typeof esquemaCrearSoporte>;
+
+/** Al crear una cuenta de soporte: el enlace para elegir contraseña (se muestra una sola vez). */
+export interface SoporteCreado {
+  id: string;
+  correo: string;
+  nombre: string;
+  enlace: string;
+  correo_enviado: boolean;
+}
