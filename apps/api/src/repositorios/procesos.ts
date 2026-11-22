@@ -39,6 +39,7 @@ const ESTADO_HTTP: Record<string, number> = {
   NX010: 400, // datos inválidos
   NX011: 410, // ya no disponible (invitación caducada, usada o revocada)
   NX012: 409, // conflicto que no es de versión (ya es miembro, el tablero cambió)
+  NX013: 429, // límite de envíos excedido (formulario de contacto)
 };
 
 interface ErrorPg {

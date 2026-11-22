@@ -8,7 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, ExternalLink, LogOut, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router';
+import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router';
 import {
   AreaTexto,
   Banner,
@@ -35,7 +35,10 @@ import { useCambiarContrasena, useCuenta, useReenviarVerificacion } from '@/lib/
 import { useAccionesWhatsAppYo, useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { FotoPerfil } from '@/components/perfil/FotoPerfil';
 import { toast } from '@/lib/toasts';
+import { DosPasosAjustes } from '@/components/auth/DosPasos';
+import { AvisoGoogle, GoogleCuenta } from '@/components/auth/Google';
 import { DirectoPersonal } from '@/components/whatsapp/Directo';
+import { RegistroWhatsApp } from '@/components/whatsapp/Registro';
 
 const SECCIONES = [
   ['perfil', 'Perfil'],
@@ -158,8 +161,10 @@ export function Cuenta() {
   const salir = useSalir();
   const nav = useNavigate();
   const c = cuenta.data;
+  const [sp] = useSearchParams();
   return (
     <div className="space-y-4">
+      <AvisoGoogle codigo={sp.get('google')} />
       <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-02-Cuenta">
         <h2 className="font-semibold">Cuenta</h2>
         <dl className="grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
@@ -200,15 +205,14 @@ export function Cuenta() {
         </Boton>
       </Tarjeta>
       {c?.tiene_contrasena && <CambiarContrasena />}
-      <Banner tono="info">
-        El cambio de correo y la verificación en dos pasos quedan para una fase posterior.
-      </Banner>
+      {c && <GoogleCuenta cuenta={c} />}
+      <DosPasosAjustes />
     </div>
   );
 }
 
 /** PF-02: cambiar la contraseña con la actual; se cierran las demás sesiones. */
-function CambiarContrasena() {
+export function CambiarContrasena() {
   const cambiar = useCambiarContrasena();
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
@@ -466,59 +470,14 @@ function Silencio({ a, onGuardar }: { a: AjustesUsuario; onGuardar: (c: GuardarA
 export function WhatsAppPersonal() {
   const consulta = useWhatsAppYo();
   const acciones = useAccionesWhatsAppYo();
-  const [numero, setNumero] = useState<string | null>(null);
-  const [error, setError] = useState<string>();
   return (
     <Tarjeta as="section" className="space-y-4 p-4 sm:p-5" data-name="NX/PF-05-WhatsApp">
       <h2 className="font-semibold">WhatsApp</h2>
       <EstadosDatos consulta={consulta} esqueleto={<EsqueletoTarjetas n={2} />}>
         {(w) => {
-          const valor = numero ?? w.numero ?? '';
-          const guardarNumero = () => {
-            setError(undefined);
-            acciones.guardar.mutate(
-              { numero: valor.trim() },
-              {
-                onSuccess: () => {
-                  setNumero(null);
-                  toast(valor.trim() ? 'Número guardado.' : 'Número borrado.');
-                },
-                onError: (e) => setError(mensajeDeError(e)),
-              },
-            );
-          };
           return (
             <>
-              <Campo
-                etiqueta="Tu número de WhatsApp"
-                error={error}
-                ayuda="Con lada internacional, por ejemplo +5212221234567. Solo se usa para los avisos de tus equipos."
-              >
-                <Entrada
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={valor}
-                  maxLength={16}
-                  onChange={(e) => setNumero(e.target.value)}
-                />
-              </Campo>
-              <Boton
-                cargando={acciones.guardar.isPending}
-                disabled={numero === null}
-                onClick={guardarNumero}
-              >
-                Guardar número
-              </Boton>
-              <Interruptor
-                etiqueta="Acepto recibir avisos de Nexo por WhatsApp"
-                descripcion="Puedes retirarlo cuando quieras; al hacerlo, dejas de aparecer en los avisos de todos tus equipos."
-                checked={w.consentimiento}
-                disabled={!w.numero}
-                onChange={(v) =>
-                  acciones.guardar.mutate({ consentimiento: v }, { onError: avisar })
-                }
-              />
+              <RegistroWhatsApp w={w} variante="ajustes" />
               <DirectoPersonal w={w} />
               {w.equipos.length > 0 && (
                 <div className="border-t border-line pt-3">
@@ -599,19 +558,26 @@ export function Privacidad() {
   );
 }
 
-/** FALT-09: descargar todo lo que Nexo guarda de mí y eliminar la cuenta (con contraseña). */
+/** FALT-09: descargar todo lo que Nexo guarda de mí y eliminar la cuenta (con contraseña, o código/correo si solo usa Google). */
 function MisDatos() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const [abierto, setAbierto] = useState(false);
+  const cuenta = useCuenta();
   const [contrasena, setContrasena] = useState('');
   const [confirmacion, setConfirmacion] = useState('');
   const [error, setError] = useState('');
+  // docs/13 1.2: sin contraseña (solo Google) se confirma con el código 2FA o escribiendo el correo.
+  const modo = cuenta.data?.tiene_contrasena
+    ? 'contrasena'
+    : cuenta.data?.dos_pasos
+      ? 'codigo'
+      : 'correo';
   const eliminar = useMutation({
     mutationFn: () =>
       api<{ eliminada: true }>('/yo/cuenta/eliminar', {
         metodo: 'POST',
-        cuerpo: { contrasena, confirmacion },
+        cuerpo: { [modo]: contrasena, confirmacion },
       }),
     onSuccess: () => {
       qc.clear();
@@ -649,13 +615,29 @@ function MisDatos() {
           </Boton>
         ) : (
           <div className="space-y-3 rounded-[8px] border border-danger/40 p-3">
-            <Campo etiqueta="Tu contraseña">
-              <Contrasena
-                autoComplete="current-password"
-                value={contrasena}
-                onChange={(e) => setContrasena(e.target.value)}
-              />
-            </Campo>
+            {modo === 'contrasena' ? (
+              <Campo etiqueta="Tu contraseña">
+                <Contrasena
+                  autoComplete="current-password"
+                  value={contrasena}
+                  onChange={(e) => setContrasena(e.target.value)}
+                />
+              </Campo>
+            ) : (
+              <Campo
+                etiqueta={
+                  modo === 'codigo'
+                    ? 'Código de tu app de autenticación (o uno de respaldo)'
+                    : 'Escribe el correo de tu cuenta'
+                }
+              >
+                <Entrada
+                  value={contrasena}
+                  autoComplete="off"
+                  onChange={(e) => setContrasena(e.target.value)}
+                />
+              </Campo>
+            )}
             <Campo etiqueta="Escribe ELIMINAR para confirmar" error={error}>
               <Entrada value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} />
             </Campo>

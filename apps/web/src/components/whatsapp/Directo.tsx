@@ -18,8 +18,10 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Acordeon, Boton, Insignia, Radios } from '@/components/ui';
 import { api, mensajeDeError } from '@/lib/api';
+import { useWhatsAppYo } from '@/lib/consultasWhatsApp';
 import { toast } from '@/lib/toasts';
 
 /**
@@ -69,6 +71,9 @@ export function RepartoEntregas({ entregas }: { entregas: EntregaWa[] }) {
 
 /** «Enviarme mi reporte por WhatsApp» (plan §9, `/app/personal/reportes` y Ajustes). */
 export function EnviarMiReporte({ deshabilitado }: { deshabilitado?: boolean }) {
+  const nav = useNavigate();
+  const { pathname, search } = useLocation();
+  const wa = useWhatsAppYo();
   const enviar = useMutation({
     mutationFn: () => api<ResultadoEnvioWa>('/yo/whatsapp/reporte', { metodo: 'POST' }),
     onSuccess: (r) =>
@@ -85,7 +90,14 @@ export function EnviarMiReporte({ deshabilitado }: { deshabilitado?: boolean }) 
       icono={<Send className="size-4" />}
       cargando={enviar.isPending}
       disabled={deshabilitado}
-      onClick={() => enviar.mutate()}
+      onClick={() => {
+        // docs/13 1.1: sin número verificado no hay error; lleva al registro y, al terminar,
+        // regresa aquí con el reporte enviado.
+        if (wa.data && !(wa.data.verificado && wa.data.consentimiento)) {
+          const volver = encodeURIComponent(pathname + search);
+          nav(`/app/whatsapp/activar?accion=reporte&volver=${volver}`);
+        } else enviar.mutate();
+      }}
       data-name="NX/PER-Reporte-WhatsApp"
     >
       Enviarme mi reporte por WhatsApp

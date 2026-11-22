@@ -16,6 +16,8 @@
     "procesos:verificar": "tsx scripts/verificar-procesos-doc.ts",
     "db:reset": "tsx --env-file-if-exists=.env scripts/reiniciar.ts",
     "db:rol-app": "tsx scripts/habilitar-rol-app.ts",
+    "db:permiso": "tsx --env-file-if-exists=.env scripts/permiso.ts",
+    "db:soporte": "tsx --env-file-if-exists=.env scripts/soporte.ts",
     "db:volumen": "tsx --env-file-if-exists=.env scripts/volumen.ts",
     "db:explain": "tsx --env-file-if-exists=.env scripts/explain.ts",
     "wa:probar": "tsx --env-file-if-exists=.env scripts/wa-probar.ts",
@@ -33,6 +35,7 @@
     "kysely": "^0.29.9",
     "pdf-lib": "1.17.1",
     "pg": "^8.23.1",
+    "qrcode": "1.5.4",
     "socket.io": "^4.8.4",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"
@@ -40,6 +43,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "1.5.5",
     "kysely-codegen": "^0.20.0",
     "node-pg-migrate": "^9.0.0",
     "socket.io-client": "^4.8.4",

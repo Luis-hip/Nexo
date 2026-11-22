@@ -93,6 +93,7 @@ export const esquemaUsuarioSesion = z.object({
   descripcion: z.string(),
   zona_horaria: z.string(),
   avatar_url: z.string().nullable(),
+  tipo_cuenta: z.enum(['persona', 'soporte']).default('persona'),
 }) satisfies z.ZodType<UsuarioSesion>;
 
 /** Lo que devuelve `proc_sesion_resolver`: la sesión vigente y su usuario, o `null`. */
@@ -205,6 +206,8 @@ export const esquemaVistaInvitacion = z.object({
 export const esquemaInvitacionAceptada = z.object({
   equipo_id: z.string(),
   rol: z.enum(['integrante', 'invitado']),
+  /** docs/13 1.1: la persona ya tiene WhatsApp verificado y quedó con los avisos del equipo. */
+  whatsapp_activo: z.boolean().default(false),
 });
 
 // --- Tareas de equipo ---------------------------------------------------------------------------
@@ -746,8 +749,39 @@ export const esquemaAuthCredenciales = z
   .nullable();
 
 export const esquemaAuthEntrar = z.object({
-  estado: z.enum(['ok', 'fallo', 'bloqueada']),
+  estado: z.enum(['ok', '2fa', 'fallo', 'bloqueada']),
   usuario: esquemaUsuarioSesion.optional(),
+});
+
+// --- AUTH-07 · Verificación en dos pasos (`proc_2fa_*`, migración 0037) --------------------------
+
+export const esquema2faEstado = z.object({
+  activa: z.boolean(),
+  desde: fechaIso.nullable(),
+  codigos_restantes: z.number().int(),
+});
+
+export const esquema2faSecreto = z
+  .object({ secreto_cifrado: z.string(), confirmado: z.boolean(), ultimo_paso: z.coerce.number() })
+  .nullable();
+
+export const esquema2faDesafio = z.object({
+  usuario_id: z.string(),
+  secreto_cifrado: z.string(),
+  ultimo_paso: z.coerce.number(),
+  metodo: z.enum(['contrasena', 'google']),
+});
+
+export const esquemaAuthGoogle = z.object({
+  estado: z.enum(['ok', '2fa', 'vinculada']),
+  nuevo: z.boolean(),
+  usuario: esquemaUsuarioSesion.optional(),
+});
+
+export const esquema2faCompletar = z.object({
+  estado: z.enum(['ok', 'fallo', 'agotado']),
+  usuario: esquemaUsuarioSesion.optional(),
+  intentos_restantes: z.number().int().optional(),
 });
 
 export const esquemaAuthDestinatario = z
@@ -764,6 +798,8 @@ export const esquemaCuentaAuth = z.object({
   correo: z.string(),
   correo_verificado: z.boolean(),
   tiene_contrasena: z.boolean(),
+  dos_pasos: z.boolean().default(false),
+  google: z.boolean().default(false),
   sesiones_activas: z.number().int(),
 }) satisfies z.ZodType<CuentaAuth>;
 

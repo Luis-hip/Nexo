@@ -26,9 +26,10 @@ export function Unirse() {
   const unirme = () => {
     if (!inv || aceptar.isPending) return;
     aceptar.mutate(inv.codigo, {
-      onSuccess: ({ equipo_id, rol }) => {
+      onSuccess: ({ equipo_id, rol, whatsapp_activo }) => {
         toast(`Te uniste a ${inv.equipo.nombre} como ${rol}.`);
-        nav(`/app/e/${equipo_id}`);
+        // docs/13 1.1: sin WhatsApp verificado, el equipo le ofrece activarlo.
+        nav(`/app/e/${equipo_id}`, { state: { activarWhatsApp: !whatsapp_activo } });
       },
     });
   };
