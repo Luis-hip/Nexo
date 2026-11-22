@@ -319,7 +319,7 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 | P-15 | Probar `docker compose` en una máquina con Docker | Fase 0 | persona | Falta una máquina con Docker | Abierto |
 | P-16 | Revisión visual por una persona (claro/oscuro y móvil) | Fases 1 a 5 | persona | La automática (axe, 360 px) ya pasa | Abierto |
 | P-17 | Revisar DEC-030 a DEC-034, V-10, V-11 y DEC-AUTH-1 | Fases 2.5, 3 y 5 | persona | Lectura de Luis | Abierto |
-| P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | ignorado | Sin ella no hay correos en producción (P-04 depende de esto en producción). Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
+| P-18 | Cuenta de Resend y `RESEND_API_KEY` | Fase 5 | persona | Dominio `nexo.lol` verificado en Resend (DKIM `resend._domainkey`, CNAME `send` y `rsend`, DMARC `p=none` en Porkbun); clave «nexo-api produccion» solo de envío en Render. Primer correo real entregado: confirmación del folio NX-2026-000002 | Hecho (2026-11-22) |
 | P-19 | Copias de seguridad, raíz `nexo.lol`, plan de pago antes del 2026-12-18 y *Auto-Deploy* de Render | Fase 3.5 | ignorado | Paneles de Render y Porkbun. Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
 | P-20 | 2FA, cambio de correo e inicio con Google | Fase 5 | — | Fuera de alcance («solo si hay tiempo», `03` 5.1): fase posterior | Fase posterior |
 
@@ -364,13 +364,13 @@ Se harán después del spike de WhatsApp 1 a 1 (`docs/11_Plan_Spike_WhatsApp_1a1
 - [x] **Token permanente de WhatsApp y webhook en producción** (2026-11-21): usuario del sistema `nexo-api`, `WHATSAPP_PROVIDER=real` y las variables en Render, webhook en `https://api.nexo.lol/whatsapp/webhook` con el campo `messages` (`operacion.md` §15). Con el número de pruebas solo reciben los destinatarios dados de alta en Meta (hasta 5).
 - [ ] **Adjuntos en el chat** (la tabla `archivos` ya tiene `mensaje_id`).
 - [x] **Verificación en dos pasos** (2026-11-21, `0037`): TOTP compatible con Google Authenticator, 10 códigos de respaldo, segundo paso al entrar (también con Google). P235–P238, `dosPasos.test.ts`.
-- [x] **Entrar con Google** (2026-11-21, `0038`): OAuth 2.0 con PKCE en la API; correo verificado cuando Google lo verifica (con otro correo, el de verificación de siempre); una cuenta con correo sin verificar no se vincula sola. P239–P241, `google.test.ts`. **Falta:** crear el cliente OAuth en Google Cloud y poner `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` en Render.
+- [x] **Entrar con Google** (2026-11-21, `0038`): OAuth 2.0 con PKCE en la API; correo verificado cuando Google lo verifica (con otro correo, el de verificación de siempre); una cuenta con correo sin verificar no se vincula sola. P239–P241, `google.test.ts`. En producción desde el 2026-11-22: proyecto «Nexo» en Google Cloud, cliente web «Nexo web (API)» con los callbacks de `api.nexo.lol` y `localhost:3000`, app publicada (*En producción*) y las dos variables en Render.
 
 ## Pendientes del 2026-11-21 (docs/13_Plan_Integrado_Pendientes.md)
 
 - [x] **WhatsApp al empezar** (`0036`): paso 4 opcional en la bienvenida, aviso «activa WhatsApp» al unirse a un equipo (con número verificado queda activo solo), «Enviarme mi reporte» sin verificar lleva al registro y envía al terminar. P234.
 - [x] **Rol «Soporte de Nexo»** (`0040`, docs/15): tipo de cuenta sin equipos, tareas ni espacio personal (lo impide la BD); tablero propio `/soporte` (Inicio con cifras de la plataforma, Contacto, Cuentas con bitácora, Equipo de soporte, Mi cuenta); verificación en dos pasos obligatoria; sin Google; alta solo por otra cuenta de soporte con `soporte.alta` o por `db:soporte`. P250–P255, `soporte.test.ts`.
-- [x] **Módulo de contacto** (`0039`, docs/12 y docs/14): formulario con trampa, captcha opcional, límites, folio y seguimiento; panel `/admin/contacto` con bandeja, detalle, notas, respuestas, asignación, métricas, CSV y anonimización; correos por outbox con reintentos; retención de 12 meses; `pnpm db:permiso`. P242–P249, `contacto.test.ts`. **Falta:** claves de Turnstile, `CONTACTO_EQUIPO_DESTINO`, quién tendrá el permiso, y Resend con su DNS (ignorado hasta nuevo aviso).
+- [x] **Módulo de contacto** (`0039`, docs/12 y docs/14): formulario con trampa, captcha opcional, límites, folio y seguimiento; panel `/admin/contacto` con bandeja, detalle, notas, respuestas, asignación, métricas, CSV y anonimización; correos por outbox con reintentos; retención de 12 meses; `pnpm db:permiso`. P242–P249, `contacto.test.ts`. En producción (2026-11-22): Turnstile «Nexo contacto» (`app.nexo.lol` y `localhost`; `VITE_TURNSTILE_SITE_KEY` en Vercel, `TURNSTILE_SECRET_KEY` en Render) y correos con Resend. **Falta:** `CONTACTO_EQUIPO_DESTINO` (con reenvío de Porkbun si se quiere una dirección `@nexo.lol`). El captcha falla (error 600010) en navegadores automatizados como el panel de pruebas; en un navegador normal pasa.
 
 ## Spike: WhatsApp 1 a 1
 
