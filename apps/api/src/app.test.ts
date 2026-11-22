@@ -28,6 +28,16 @@ describe.skipIf(!DATABASE_URL)('API con BD', () => {
     expect(r.json()).toEqual({ estado: 'ok' });
   });
 
+  it('manda las cabeceras de seguridad (F6-1), también en un 404', async () => {
+    for (const url of ['/salud', '/no-existe']) {
+      const r = await app.inject({ method: 'GET', url });
+      expect(r.headers['x-content-type-options']).toBe('nosniff');
+      expect(r.headers['x-frame-options']).toBe('DENY');
+      expect(r.headers['content-security-policy']).toBe("frame-ancestors 'none'");
+      expect(r.headers['referrer-policy']).toBe('no-referrer');
+    }
+  });
+
   it('POST /dev/login crea una sesión real con el token guardado como hash', async () => {
     const r = await app.inject({
       method: 'POST',
