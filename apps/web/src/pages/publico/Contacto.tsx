@@ -61,33 +61,52 @@ declare global {
     turnstile?: {
       render: (el: HTMLElement, o: Record<string, unknown>) => string;
       reset: (id?: string) => void;
+      remove: (id: string) => void;
     };
   }
 }
 
-/** Cloudflare Turnstile (solo si hay clave pública). El servidor vuelve a comprobarlo. */
+const SCRIPT_TURNSTILE = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+
+/**
+ * Cloudflare Turnstile (solo si hay clave pública). El servidor vuelve a comprobarlo.
+ * Al salir de la página se quita el widget (si no, Turnstile sigue buscándolo y avisa en consola),
+ * y el script se carga una sola vez aunque se vuelva a entrar antes de que termine de bajar.
+ */
 function Captcha({ onToken }: { onToken: (t: string | undefined) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!CLAVE_SITIO || !ref.current) return;
     const el = ref.current;
-    const pintar = () =>
-      window.turnstile?.render(el, {
+    let id: string | undefined;
+    let vigente = true;
+    const pintar = () => {
+      if (!vigente || !window.turnstile) return;
+      id = window.turnstile.render(el, {
         sitekey: CLAVE_SITIO,
         language: 'es',
         callback: (t: string) => onToken(t),
         'expired-callback': () => onToken(undefined),
         'error-callback': () => onToken(undefined),
       });
-    if (window.turnstile) {
-      pintar();
-      return;
+    };
+    let s: HTMLScriptElement | null = null;
+    if (window.turnstile) pintar();
+    else {
+      s = document.querySelector<HTMLScriptElement>(`script[src="${SCRIPT_TURNSTILE}"]`);
+      if (!s) {
+        s = document.createElement('script');
+        s.src = SCRIPT_TURNSTILE;
+        s.async = true;
+        document.head.appendChild(s);
+      }
+      s.addEventListener('load', pintar);
     }
-    const s = document.createElement('script');
-    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-    s.async = true;
-    s.onload = pintar;
-    document.head.appendChild(s);
+    return () => {
+      vigente = false;
+      s?.removeEventListener('load', pintar);
+      if (id) window.turnstile?.remove(id);
+    };
   }, [onToken]);
   if (!CLAVE_SITIO) return null;
   return <div ref={ref} />;
