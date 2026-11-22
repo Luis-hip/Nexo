@@ -4,7 +4,7 @@
 
 ## Estado general
 
-*Actualizado el 2026-11-21: pendientes tras la Fase 5 resueltos (P-01 a P-10), WhatsApp real probado con el número de pruebas y cuentas de la semilla en producción (DEC-038). Siguiente: Fase 6 · Cierre.*
+*Actualizado el 2026-11-22: Fase 6 · Cierre terminada (secretos revisados, prueba de humo en producción, README y resumen de lo que quedó fuera); WhatsApp real, 2FA, Google, contacto, rol de soporte y correos con Resend en producción. Siguiente: **pruebas de usabilidad con personas reales**; lo que salga se trabaja como mejoras.*
 
 | Fase | Estado | Etiqueta | Dónde está |
 |---|---|---|---|
@@ -14,10 +14,11 @@
 | 2.5 · Cambios de alcance | Terminada | `fase-2-5` | `dev` y `main` |
 | 3 · Hill Chart, sprints y vistas secundarias | Terminada | `fase-3` | `dev` y `main` |
 | 3.5 · Despliegue | En línea con las Fases 0–5; prueba de humo hecha. Copias, raíz `nexo.lol` y plan de pago: `[~]` ignorados hasta nuevo aviso | — | `produccion` |
-| 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp en modo simulado; envío real comprobado en local con el número de pruebas, DEC-WA-2) | `fase-4` | `produccion` |
+| 4 · Chat y WhatsApp | Terminada y en producción (WhatsApp **real** desde el 2026-11-21: token permanente y webhook; mensajes 1 a 1, DEC-039; grupos `[~]`) | `fase-4` | `produccion` |
 | 5 · Autenticación, QA y permisos | Terminada y en producción | `fase-5` | `produccion` |
 | Pendientes tras la Fase 5 | Terminados y en producción (P-01 a P-10, DEC-037 y DEC-038) | — | `produccion` |
-| 6 · Cierre | **Siguiente** | — | — |
+| Pendientes del 2026-11-21 | 2FA, Google, WhatsApp al empezar, contacto y rol de soporte, en producción | — | `produccion` |
+| 6 · Cierre | Terminada (F6-5 es del artículo: Carlos e Isac) | `v1.0` | `produccion` |
 
 **`produccion` tiene las Fases 0 a 5** (último: PR #33, `4a2edff`, 2026-11-21) y de ella salen los despliegues: front en Vercel (`https://app.nexo.lol`) y API en Render (`https://api.nexo.lol`), ambos en plan gratuito (DEC-036; la BD expira el **2026-12-18**). Detalle y pendientes en la Fase 3.5 y en `docs/operacion.md`. Flujo de ramas: `Dev_<Nombre>` → `dev` → `main` → `produccion`, siempre por PR con la CI en verde (DEC-001).
 
@@ -312,7 +313,7 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 | P-08 | Envío real con el número de pruebas (DEC-WA-2) | Fase 4.3 | código + persona | Plantilla fuera de la ventana de 24 h (DEC-WA-2) y `pnpm --filter @nexo/api wa:probar +52…`; la prueba real necesita el token y el id del número de Meta en `apps/api/.env` y un destinatario dado de alta en Meta | Hecho (2026-11-21): envío real a WhatsApp comprobado |
 | P-09 | Adjunto en contacto y foto de perfil en el onboarding | Fase 1 | código | Foto de perfil en el onboarding y en Ajustes → Perfil (`proc_usuario_foto_*`). El formulario público de contacto **no** admite adjuntos: `contacto_mensajes` no tiene dónde guardarlos y abrir la subida a visitantes sin sesión es riesgo de abuso (DEC-037) | Foto hecha; adjunto del contacto a fase posterior |
 | P-10 | Insignia de no leídos del chat en tiempo real fuera del chat | Fase 4 | código | El socket del chat escucha en todo el equipo; la insignia cambia al momento | Hecho (2026-11-20) |
-| P-11 | Verificar el número de WhatsApp por código | Fase 4 | ignorado | Requiere mandar el código por WhatsApp real con un número verificado; con el de pruebas solo llega a destinatarios ya dados de alta | [~] |
+| P-11 | Verificar el número de WhatsApp por código | Fase 4 | código | La persona manda el código de 6 dígitos al número de Nexo (`0033`–`0035`); probado en producción con el número de Luis | Hecho (2026-11-21) |
 | P-12 | Verificación del negocio, OBA, grupos, FALT-03/04 | 0.7 / 4.3 | ignorado | DEC-WA-2 | [~] |
 | P-13 | Repositorio privado y licencia; *secret scanning* y *push protection* | Fases 0 y 2.5 | ignorado | Decisión de Luis. Ignorado hasta nuevo aviso (decisión de Luis, 2026-11-20) | [~] |
 | P-14 | Tablero de proyecto e *issues* en GitHub | Fase 0 | persona | Decisión del equipo (el seguimiento real vive en `progreso.md`) | Abierto |
@@ -343,19 +344,43 @@ Cruce de `03` (Fases 0 a 5, sección 9 y criterio de la 3.5 en `10`) con lo cons
 - **Comprobado en producción** con la cuenta de Carlos (DEC-038): entra, la agenda personal responde, las solicitudes del invitado le dan 403 por ser integrante y la exportación de sus datos responde 200; el front nuevo trae Ajustes → Privacidad (FALT-09) y las solicitudes del invitado.
 - Producción sigue con `WHATSAPP_PROVIDER=simulado`. La plantilla `nexo_aviso` está en revisión de Meta.
 
-## Fase 6 · Cierre (siguiente)
+## Fase 6 · Cierre (terminada el 2026-11-22)
 
-Según `03`, Fase 6. Plan:
+Según `03`, Fase 6.
 
-| # | Tarea | Tipo | Cómo |
+| # | Tarea | Estado | Resultado |
 |---|---|---|---|
-| F6-1 | Secretos de producción con la lista de `09_Seguridad_y_Secretos.md` | código + revisión | Repasar la lista; gitleaks ya corre en la CI |
-| F6-2 | Prueba de humo completa en producción: registrar, crear equipo, proponer y votar, chatear y ver un aviso de WhatsApp (simulado) | código (Playwright contra `app.nexo.lol`) + persona | Un flujo E2E apuntando a producción con cuentas creadas para la prueba y borradas al final |
-| F6-3 | Webhook de WhatsApp en la URL pública | — | `[~]` Ignorado hasta nuevo aviso: solo con cuenta real y token permanente (DEC-WA-2) |
-| F6-4 | `README.md` para que alguien nuevo levante el proyecto en local | código | Instalación, BD local (PGlite o Docker), semilla y cuentas, pruebas y ramas |
-| F6-5 | Tabla de verificación del artículo (`04`) sin `[VERIFICAR]` | persona (Carlos e Isac) | Hoy hay 6 marcas (comparativa Trello/Asana y 3 referencias); el código aporta capturas y cifras de pruebas |
-| F6-6 | Resumen de lo que quedó fuera | código | Sección final en este archivo |
-| F6-7 | Tag `v1.0` | — | Con la CI en verde en `produccion` y F6-1 a F6-6 cerrados |
+| F6-1 | Secretos de producción con la lista de `09_Seguridad_y_Secretos.md` | Hecho | Lista del §5 revisada con comprobaciones contra producción. Faltaban cabeceras de seguridad: se agregaron en la API (`app.ts`, con prueba en `app.test.ts`) y en la web (`vercel.json`). Quedan de personas: 2FA en cada cuenta de proveedor y probar una rotación |
+| F6-2 | Prueba de humo completa en producción | Hecho | `flujos.e2e.ts` con `E2E_PRODUCCION=1` contra `app.nexo.lol`: registro de dos cuentas, crear equipo, unirse con código, proponer → votar → aceptar → habilitar → en curso → completar, y chat en tiempo real entre dos navegadores: **3/3 en verde** (40 s). Correos a `delivered+…@resend.dev` (entregados, sin rebotes); las cuentas se eliminan al final. El aviso de WhatsApp en producción es real y se probó a mano con el número de Luis (B1–B6, verificación, aviso y reporte en PDF) |
+| F6-3 | Webhook de WhatsApp en la URL pública | Hecho (2026-11-21) | `https://api.nexo.lol/whatsapp/webhook`, campo `messages`, token permanente del usuario del sistema `nexo-api` (`operacion.md` §15) |
+| F6-4 | `README.md` para levantar el proyecto en local | Hecho | Pasos con PGlite o Docker, cómo entrar (acceso de desarrollo y cuenta de soporte), integraciones opcionales, pruebas (incluida la de humo), scripts, producción y ramas |
+| F6-5 | Tabla de verificación del artículo (`04`) sin `[VERIFICAR]` | De Carlos e Isac | Las marcas que dependen del sistema ya tienen datos (abajo, «Datos del sistema para el artículo»); las de citas, la comparativa Trello/Asana y la red de Petri son del artículo |
+| F6-6 | Resumen de lo que quedó fuera | Hecho | Sección «Lo que quedó fuera» (abajo) |
+| F6-7 | Tag `v1.0` | Con la CI en verde en `produccion` | Marca la versión que entra a pruebas de usabilidad |
+
+### Datos del sistema para el artículo (F6-5, 2026-11-22)
+
+Para resolver las marcas `[VERIFICAR]` que hablan del sistema (`04`, secciones B.10 y tabla comparativa, fila Nexo):
+
+- **Implementado y en producción** (`app.nexo.lol`): tablero con roles (líder, integrante, invitado) y espacio personal; propuestas con votación; estados de tarea; Hill Chart, sprints y vistas; chat en tiempo real; avisos y reportes por **WhatsApp 1 a 1** (cada persona verifica su número con un código y elige formato; reporte en PDF); autenticación con correo, **Google** y **verificación en dos pasos**; módulo de contacto con folio; rol de soporte.
+- **Cambio respecto al borrador:** el artículo habla de avisos «al grupo de WhatsApp». La API de grupos exige la verificación del negocio en Meta, que no se hizo (DEC-WA-2), así que se construyó el canal **directo a cada persona** (DEC-039). El consentimiento sigue siendo individual: nadie recibe nada sin verificar su número. La fila «Nexo» de la tabla y B.10.1 deben decirlo así.
+- **Pruebas automáticas:** integridad SQL **11**; procesos de la BD **204** (`db:test:procesos`, P1–P255 con huecos); API **237** (incluye la matriz de permisos: **41 acciones** × 4 perfiles, más de 150 comprobaciones); web **100**; `shared` **197**; extremo a extremo **8** en local y **3 flujos críticos en producción**.
+- **Limitaciones observadas** (B.10.5): sin grupos de WhatsApp (falta la verificación del negocio); con el número de pruebas de Meta solo reciben hasta 5 destinatarios dados de alta; plan gratuito de Render (la API se duerme y la BD caduca el 2026-12-18); **aún no hay pruebas con usuarios**: son la siguiente etapa.
+- **Capturas reales:** la app en producción ya tiene todas las pantallas (WhatsApp: verificación, preferencias, historial); se toman de ahí para reemplazar las del prototipo.
+
+### Lo que quedó fuera (F6-6)
+
+| Qué | Por qué | Dónde se retoma |
+|---|---|---|
+| Avisos al **grupo** de WhatsApp, OBA, FALT-03/04 | Requieren la verificación del negocio en Meta | P-12, DEC-WA-2 |
+| Adjuntos en el chat | Mejora acordada; la tabla `archivos` ya tiene `mensaje_id` | «Mejoras pendientes» |
+| Código por correo como alternativa a la app de autenticación | Propuesta del 2026-11-22; ahora que hay Resend es viable | Mejora |
+| `CONTACTO_EQUIPO_DESTINO` (aviso por correo de mensajes nuevos) | Falta decidir la dirección (con reenvío de Porkbun si es `@nexo.lol`) | `docs/14` |
+| CSP completa en la web | Turnstile, Socket.IO y Google la complican; hoy solo `frame-ancestors` | `docs/09` §5 |
+| Repositorio privado, licencia, *secret scanning* | Decisión de Luis | P-13 |
+| Copias de seguridad, plan de pago antes del **2026-12-18**, raíz `nexo.lol`, *Auto-Deploy* | Decisión de Luis; **la BD gratuita caduca ese día** | P-19 |
+| Tablero de proyecto en GitHub, prueba con Docker, revisión visual por una persona, revisión de decisiones | Tareas de personas | P-14 a P-17 |
+| Pruebas de usabilidad con personas reales | Siguiente etapa del proyecto | — |
 
 ## Mejoras pendientes (acordadas el 2026-11-21)
 

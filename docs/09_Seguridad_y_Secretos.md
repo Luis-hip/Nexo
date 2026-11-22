@@ -50,12 +50,15 @@ Lista de **nombres** (dónde vive cada uno y quién accede):
 
 ## 5. Lista de verificación previa a producción
 
-- [ ] gitleaks en verde y secret scanning con push protection activados.
-- [ ] Ningún secreto en el repositorio ni en el historial (informe de la Fase 2.5).
-- [ ] Variables de producción cargadas **solo** en los paneles; distintas de las de local y CI.
-- [ ] `NODE_ENV=production`, `DEV_LOGIN_ENABLED=false`, `APP_URL` y `API_URL` definidas.
-- [ ] Ningún valor de `.env.example` en producción (la API se niega a arrancar).
-- [ ] Cookie `HttpOnly; Secure; SameSite=Lax`; CORS solo al origen del front; `Origin` verificado.
-- [ ] La API usa el rol `nexo_app`; las migraciones, `nexo_migraciones`; la semilla no se carga.
-- [ ] Verificación en dos pasos en GitHub, alojamiento y Meta.
-- [ ] Procedimientos de rotación probados al menos una vez en local.
+Revisada el **2026-11-22** (Fase 6, F6-1). `[x]` comprobado; `[~]` decisión de Luis o tarea de una persona.
+
+- [x] gitleaks en verde en cada PR (CI, historial completo). `[~]` *Secret scanning* y *push protection*: P-13, ignorado hasta nuevo aviso.
+- [x] Ningún secreto en el repositorio ni en el historial: búsqueda en `git log --all -p` de claves de Resend (`re_…`), tokens de Meta (`EAA…`), secretos de Google (`GOCSPX-…`), claves secretas de Turnstile, URL de Postgres con contraseña y llaves privadas, sin resultados. `.env`, `apps/api/.env` y `.credenciales-demo.md` están ignorados y ninguno está versionado.
+- [x] Variables de producción **solo** en los paneles (Render: API; Vercel: `VITE_*` públicas). Las de Google, Turnstile y Resend se pegaron directo en el panel.
+- [x] `NODE_ENV=production` y sin acceso de desarrollo: `GET /dev/usuarios` y `POST /dev/login` responden 404 en `api.nexo.lol`.
+- [x] Ningún valor de `.env.example` en producción (la API valida al arrancar y se niega).
+- [x] Cookie `HttpOnly; Secure; SameSite=Lax` (código); CORS solo a `https://app.nexo.lol` (un origen ajeno recibe `access-control-allow-origin: https://app.nexo.lol`, que el navegador rechaza); `POST` con `Origin` ajeno → 403 `origen_no_permitido`.
+- [x] Cabeceras de seguridad (agregadas en F6-1): la API manda `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Referrer-Policy: no-referrer` y HSTS; la web (Vercel) manda HSTS, `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Referrer-Policy` y `Permissions-Policy` (sin cámara, micrófono, ubicación ni pagos). Una CSP completa para la web queda pendiente (Turnstile, socket y Google la complican).
+- [x] La API usa el rol `nexo_app` y las migraciones `nexo_migraciones`; la semilla de demostración no se carga (las cuentas de prueba en producción se crearon a mano, DEC-038). Pasos en `operacion.md` §1.
+- [~] Verificación en dos pasos en GitHub, Render, Vercel (activada el 2026-11-22), Meta, Google Cloud, Cloudflare, Resend y Porkbun: la revisa cada dueño de cuenta.
+- [~] Rotación probada en local: pendiente de una persona (sección 3).

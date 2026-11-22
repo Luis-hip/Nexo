@@ -8,14 +8,25 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
  *  3. Chat: Ana y Beto, en dos navegadores, intercambian mensajes en tiempo real. (El aviso de WhatsApp
  *     simulado se sumará al juntar la rama de WhatsApp.)
  * Las cuentas son nuevas en cada corrida (correo con marca de tiempo, dominio de pruebas `.test`).
+ *
+ * Fase 6 · F6-2, prueba de humo en producción: con `E2E_PRODUCCION=1`, `E2E_WEB_URL` y `E2E_API_URL`
+ * apuntando a `app.nexo.lol` y `api.nexo.lol`, los correos son direcciones de prueba de Resend
+ * (`delivered+…@resend.dev`: se dan por entregados sin rebotar), se salta el aviso de WhatsApp
+ * simulado (en producción el proveedor es real; se probó a mano, B1–B6) y al final se eliminan las
+ * dos cuentas (Beto primero, para que Ana pueda irse siendo líder sola y su equipo se archive).
  */
 test.describe.configure({ mode: 'serial' });
 
+const enProduccion = process.env.E2E_PRODUCCION === '1';
+const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
+const WEB = process.env.E2E_WEB_URL ?? 'http://localhost:5173';
 const marca = Date.now();
-const ana = { nombre: 'Ana Prueba', correo: `ana-${marca}@e2e.test`, contrasena: 'Ana-e2e-2026' };
+const correoDe = (quien: string) =>
+  enProduccion ? `delivered+${quien}-${marca}@resend.dev` : `${quien}-${marca}@e2e.test`;
+const ana = { nombre: 'Ana Prueba', correo: correoDe('ana'), contrasena: 'Ana-e2e-2026' };
 const beto = {
   nombre: 'Beto Prueba',
-  correo: `beto-${marca}@e2e.test`,
+  correo: correoDe('beto'),
   contrasena: 'Beto-e2e-2026',
 };
 const nombreEquipo = `Equipo E2E ${String(marca).slice(-5)}`;
@@ -36,11 +47,9 @@ async function registrar(browser: Browser, p: typeof ana) {
   await expect(page).toHaveURL(/\/bienvenida\/1/);
   // El recorrido de primer uso (ONB-04) se marca como visto con la misma sesión, para que no tape
   // las pantallas que se prueban aquí.
-  const api = process.env.E2E_API_URL ?? 'http://localhost:3000';
-  const web = process.env.E2E_WEB_URL ?? 'http://localhost:5173';
-  const r = await page.request.patch(`${api}/yo/preferencias`, {
+  const r = await page.request.patch(`${API}/yo/preferencias`, {
     data: { tour_visto: true },
-    headers: { origin: web },
+    headers: { origin: WEB },
   });
   expect(r.ok()).toBe(true);
   // El aviso de cookies tapa parte de la pantalla: se rechazan las opcionales.
@@ -55,7 +64,21 @@ async function sinRecorrido(page: Page) {
   if (await saltar.isVisible({ timeout: 2_000 }).catch(() => false)) await saltar.click();
 }
 
+/** En producción no quedan cuentas de prueba: cada una se elimina con su propia sesión. */
+async function eliminarCuenta(page: Page | undefined, p: typeof ana) {
+  if (!page) return;
+  const r = await page.request.post(`${API}/yo/cuenta/eliminar`, {
+    data: { contrasena: p.contrasena, confirmacion: 'ELIMINAR' },
+    headers: { origin: WEB },
+  });
+  expect(r.ok(), `eliminar ${p.correo}: ${r.status()} ${await r.text()}`).toBe(true);
+}
+
 test.afterAll(async () => {
+  if (enProduccion) {
+    await eliminarCuenta(paginaBeto, beto);
+    await eliminarCuenta(paginaAna, ana);
+  }
   await paginaAna?.context().close();
   await paginaBeto?.context().close();
 });
@@ -82,7 +105,8 @@ test('1 · crear equipo e invitar: la otra persona se une con el código', async
   await paginaBeto.getByLabel('Código o enlace').fill(codigo!);
   await paginaBeto.getByLabel('Código o enlace').press('Enter');
   await paginaBeto.getByRole('button', { name: 'Confirmar y unirme' }).click();
-  await expect(paginaBeto).toHaveURL(new RegExp(`${urlEquipo.split('/app')[1]}$`));
+  // Por la ruta, no por la URL completa: en producción el dominio también empieza con «app».
+  await expect(paginaBeto).toHaveURL(new RegExp(`${new URL(urlEquipo).pathname}$`));
   await expect(paginaBeto.getByText(nombreEquipo).first()).toBeVisible();
 
   // Ana ve a Beto en Miembros.
@@ -174,8 +198,9 @@ test('3 · chat en tiempo real entre dos navegadores', async () => {
 });
 
 test('3b · aviso de WhatsApp simulado: conectar, encolar, enviar e historial', async () => {
-  const api = process.env.E2E_API_URL ?? 'http://localhost:3000';
-  const web = process.env.E2E_WEB_URL ?? 'http://localhost:5173';
+  test.skip(enProduccion, 'En producción WhatsApp es real (se probó a mano, B1–B6).');
+  const api = API;
+  const web = WEB;
   // WA-06: Ana conecta WhatsApp (modo simulado) con el asistente.
   await paginaAna.goto(`${urlEquipo}/whatsapp`);
   await expect(paginaAna).toHaveURL(/\/whatsapp\/conectar$/);

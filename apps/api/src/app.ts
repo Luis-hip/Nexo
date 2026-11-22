@@ -44,6 +44,19 @@ export async function crearApp(
     methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'],
   });
   await app.register(cookie);
+  // Cabeceras de seguridad en todas las respuestas (Fase 6, F6-1; docs/09 §5). La API no se
+  // incrusta en marcos ni deja que el navegador adivine tipos; HSTS solo en producción (HTTPS).
+  app.addHook('onSend', async (_req, res) => {
+    res.header('x-content-type-options', 'nosniff');
+    res.header('x-frame-options', 'DENY');
+    res.header('referrer-policy', 'no-referrer');
+    if (!res.hasHeader('content-security-policy')) {
+      res.header('content-security-policy', "frame-ancestors 'none'");
+    }
+    if (config.NODE_ENV === 'production') {
+      res.header('strict-transport-security', 'max-age=63072000');
+    }
+  });
   exigirOrigenPermitido(app, config.APP_URL);
   // Límite de peticiones: solo en las rutas que lo declaran (contacto; login en la Fase 5).
   await app.register(rateLimit, { global: false });
