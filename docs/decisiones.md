@@ -475,4 +475,5 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - Caducidad de 7 días para lo pendiente de ventana, un aviso corto cada 12 h por persona, PDF con `pdf-lib`.
 - Durante el spike la verificación del número no bloquea la entrega; los números se comparan normalizados (México con y sin el `1`).
 - **Resultado (S6):** go técnico (A1–A13 en verde, retrabajo fuera de la capa de WhatsApp de 97 líneas); la pista B queda pendiente de la aprobación de plantillas y del token permanente con webhook en producción. Meta reclasificó `nx_aviso_ver` y `nx_resumen_enlace` como marketing (V1).
+- **Pista B en producción (2026-11-21):** con token permanente y webhook, B1, B3, B5 y B6 en verde con el número de Luis. Decisiones del día: (a) **con la ventana de 24 h abierta no se usan plantillas** (resumen como texto con enlace, PDF como documento), así «REPORTE» funciona sin depender de Meta; (b) **el código solo verifica** si hay uno pendiente; (c) la app de Meta se queda sin publicar (recibe los mensajes reales igual y publicarla pide la verificación del negocio, ignorada hasta nuevo aviso). Pendiente: B2 y B4 (plantillas en revisión).
 

@@ -91,6 +91,8 @@ export function AppShell() {
       <Navigate to={`/entrar?volver=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
     );
   }
+  // Las cuentas de soporte no usan la app de personas: tienen su tablero (docs/15).
+  if (consulta.data.usuario.tipo_cuenta === 'soporte') return <Navigate to="/soporte" replace />;
   return <Shell yo={consulta.data} />;
 }
 

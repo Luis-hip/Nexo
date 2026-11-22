@@ -13,6 +13,10 @@ export interface MensajeCorreo {
   para: string;
   asunto: string;
   texto: string;
+  /** Versión HTML (opcional; el texto plano siempre va). */
+  html?: string;
+  /** Dirección para «Responder» (p. ej. la del equipo de soporte). */
+  responderA?: string;
 }
 
 export interface Correo {
@@ -50,8 +54,11 @@ export function crearCorreo(c: Config, log: FastifyBaseLogger): Correo {
           body: JSON.stringify({
             from: c.CORREO_REMITENTE,
             to: [m.para],
-            subject: m.asunto,
+            // Sin saltos de línea en cabeceras (inyección de cabeceras).
+            subject: m.asunto.replace(/[\r\n]+/g, ' '),
             text: m.texto,
+            ...(m.html ? { html: m.html } : {}),
+            ...(m.responderA ? { reply_to: m.responderA.replace(/[\r\n]+/g, '') } : {}),
           }),
           signal: AbortSignal.timeout(10_000),
         });

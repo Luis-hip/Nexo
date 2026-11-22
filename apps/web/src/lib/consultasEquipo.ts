@@ -93,7 +93,7 @@ export function useAceptarInvitacion() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (codigo: string) =>
-      api<{ equipo_id: string; rol: 'integrante' | 'invitado' }>(
+      api<{ equipo_id: string; rol: 'integrante' | 'invitado'; whatsapp_activo?: boolean }>(
         `/invitaciones/${encodeURIComponent(codigo)}/aceptar`,
         { metodo: 'POST' },
       ),

@@ -57,7 +57,7 @@
 | `proc_usuario_yo` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
 | `proc_usuario_preferencias_guardar` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
 | `proc_usuario_perfil_guardar` | Cuenta | `0004_procesos_cuenta.sql` | Vigente |
-| `proc_contacto_enviar` | Contacto | `0004_procesos_cuenta.sql` | Vigente |
+| `proc_contacto_enviar` | Contacto | `0004_procesos_cuenta.sql` | Retirado en `0039` (lo sustituye `proc_contacto_crear`) |
 | `proc_equipo_contexto` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
 | `proc_equipo_crear` | Equipos | `0005_procesos_equipos.sql` | Vigente |
 | `proc_equipo_obtener` | Equipos (lectura) | `0005_procesos_equipos.sql` | Vigente |
@@ -371,7 +371,10 @@
 - **Ejemplo de llamada:** `select proc_usuario_perfil_guardar($1, '{"cargo":"QA"}')`
 - **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0004`.
 
-### proc_contacto_enviar
+### proc_contacto_enviar (retirado en 0039)
+
+> Sustituido por `proc_contacto_crear` (sección «Contacto»). Se conserva el apartado como historial.
+
 - **Migración:** `0004_procesos_cuenta.sql`
 - **Propósito:** Guarda un mensaje del formulario público de contacto.
 - **Parámetros:** `p_nombre text`. `p_correo text`. `p_asunto text`. `p_mensaje text`. **No hay actor**: la ruta no tiene sesión.
@@ -501,15 +504,15 @@
 - **Migración:** `0005_procesos_equipos.sql`
 - **Propósito:** Unirse a un equipo con un código de invitación.
 - **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_codigo text` · código ya normalizado.
-- **Retorno:** `jsonb` `{ equipo_id, rol }`.
+- **Retorno:** `jsonb` `{ equipo_id, rol, whatsapp_activo }`.
 - **Reglas y validaciones:** la invitación es de **un solo uso**: se marca `aceptada` en la misma transacción que crea la membresía; el integrante recibe el primer color libre y el invitado, una caducidad (7, 14 o 30 días); las altas del equipo se serializan con el mismo bloqueo que usa el disparador del tope; si el equipo está lleno, todo se deshace y la invitación sigue pendiente (DEC-019).
 - **Errores:** `NX006` / `NX011` · invitación inexistente, caducada, usada o revocada. `NX012` · ya es miembro (409, `ya_miembro`, con `equipo_id` en el detalle). `NX001` · equipo lleno (409, `equipo_lleno`, con `max_miembros` en el detalle).
 - **Tablas que toca:** lectura `equipos`; escritura `invitaciones`, `membresias`, `eventos_dominio`, `actividad`.
 - **Eventos que genera:** `membresia.creada` («… se unió al equipo como integrante»).
 - **Lo llama:** `repositorios/equipos.ts` → `aceptarInvitacion()`; `POST /invitaciones/:codigo/aceptar`.
-- **Pruebas:** `pruebas_procesos.sql` P31; `equipos.test.ts` (incluida la de dos personas a la vez al último lugar).
+- **Pruebas:** `pruebas_procesos.sql` P31, P234; `equipos.test.ts` (incluida la de dos personas a la vez al último lugar).
 - **Ejemplo de llamada:** `select proc_invitacion_aceptar($1, 'NX4-821Q')`
-- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`.
+- **Historial:** 2026-11-16 · creación (sustituye al SQL que estaba en la API) · `0005`. 2026-11-21 · con número de WhatsApp verificado y consentimiento general, la membresía nueva queda con `consentimiento_wa = true`; devuelve `whatsapp_activo` (docs/13, 1.1) · `0036_invitacion_whatsapp.sql`.
 
 ### proc_tarea_listar
 - **Migración:** `0006_procesos_tareas_equipo.sql`
@@ -1865,7 +1868,7 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_
 - **Lo llama:** `repositorios/autenticacion.ts` → `entrar()`; `POST /auth/entrar` (10 por minuto por IP).
 - **Pruebas:** P202, P203, P208; `autenticacion.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_entrar($1, true, $2, $3, $4, $5)`
-- **Historial:** 2026-11-19 · creación · `0030`.
+- **Historial:** 2026-11-19 · creación · `0030`. 2026-11-21 · verificación en dos pasos (AUTH-07): con la 2FA activa devuelve `estado: '2fa'` y crea un desafío en lugar de la sesión · `0037_dos_pasos.sql`.
 
 ### proc_auth_recuperar
 - **Migración:** `0030_procesos_autenticacion.sql`
@@ -1935,7 +1938,7 @@ Auxiliares nuevos (solo los ejecuta el dueño): `fn_auth_max_intentos` (5), `fn_
 - **Lo llama:** `repositorios/autenticacion.ts` → `cuenta()`; `GET /auth/cuenta`.
 - **Pruebas:** P207; `autenticacion.test.ts`.
 - **Ejemplo de llamada:** `select proc_auth_cuenta($1)`
-- **Historial:** 2026-11-19 · creación · `0030`.
+- **Historial:** 2026-11-19 · creación · `0030`. 2026-11-21 · verificación en dos pasos (AUTH-07): suma `dos_pasos` · `0037_dos_pasos.sql`. 2026-11-21 · suma `google` (cuenta de Google vinculada) · `0038_google.sql`.
 
 ### proc_auth_hash_actual
 - **Migración:** `0030_procesos_autenticacion.sql`
@@ -2562,3 +2565,629 @@ Auxiliares nuevos: `fn_wa_numero_normal` (P-13: México con y sin el `1`), `fn_w
 - **Pruebas:** P230; `spike.test.ts`; `integracion.test.ts`.
 - **Ejemplo de llamada:** `select proc_wa_formato_guardar($1, 'bajo_demanda')`
 - **Historial:** 2026-11-21 · creación · `0033`.
+
+---
+
+## Verificación en dos pasos (AUTH-07)
+
+Migración `0037_dos_pasos.sql` (docs/13_Plan_Integrado_Pendientes.md, 1.2). Pruebas `P235`–`P238` y `apps/api/src/rutas/dosPasos.test.ts`.
+
+**Esquema:** `credenciales_2fa` suma `ultimo_paso` (el último paso TOTP aceptado; un código no sirve dos veces) y `creado_en`; tabla nueva **`desafios_2fa`** (segundo paso pendiente del inicio de sesión: token como hash, método `contrasena` o `google`, 5 min, 5 intentos). El secreto TOTP llega cifrado con AES-256-GCM (`apps/api/src/cifrado.ts`, `ENCRYPTION_KEY`) y la API calcula el código (`apps/api/src/totp.ts`); los códigos de respaldo solo se guardan como hash SHA-256.
+
+**Procesos que cambian (misma firma):** `proc_auth_entrar` devuelve `estado: '2fa'` (sin sesión) cuando la persona tiene la 2FA activa, y el token de la sesión pasa a ser el del desafío; `proc_auth_cuenta` suma `dos_pasos`.
+
+Auxiliares: `fn_2fa_activa`, `fn_2fa_crear_desafio`, `fn_2fa_validar` (comprueba y consume un paso TOTP posterior al último o un código de respaldo sin usar), `fn_2fa_estado_json`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_2fa_estado` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_iniciar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_secreto` | Autenticación · sistema | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_confirmar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_desactivar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_respaldo_regenerar` | Autenticación · persona | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_desafio` | Autenticación · sistema | `0037_dos_pasos.sql` | Vigente |
+| `proc_2fa_completar` | Autenticación · sistema | `0037_dos_pasos.sql` | Vigente |
+
+### proc_2fa_estado
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** estado de la verificación en dos pasos de la persona (Ajustes → Cuenta).
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ activa, desde, codigos_restantes }`.
+- **Reglas y validaciones:** ninguna.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `credenciales_2fa`, `codigos_respaldo_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `estado2fa()`; `GET /auth/2fa`.
+- **Pruebas:** P235; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_estado($1)`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_iniciar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** primer paso de activar: guarda el secreto nuevo, cifrado y sin confirmar.
+- **Parámetros:** `p_actor_id uuid`. `p_secreto_cifrado text` (AES-256-GCM, lo cifra la API).
+- **Retorno:** `jsonb` estado (`activa: false`).
+- **Reglas y validaciones:** si había una activación a medias, la reemplaza.
+- **Errores:** `NX007` · ya está activa. `NX010` · falta el secreto.
+- **Tablas que toca:** escritura `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `iniciar2fa()`; `POST /auth/2fa/iniciar` (devuelve el secreto en base32, el enlace `otpauth://` y el QR en SVG; nada de eso se guarda en claro).
+- **Pruebas:** P235; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_iniciar($1, 'v1.…')`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_secreto
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** el secreto cifrado de la persona para que la API calcule el código.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ secreto_cifrado, confirmado, ultimo_paso }` o `NULL`.
+- **Reglas y validaciones:** solo la API lo usa; nunca se devuelve al navegador.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `secreto2fa()`; confirmar, desactivar y regenerar.
+- **Pruebas:** `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_secreto($1)`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_confirmar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** segundo paso de activar: la API ya comprobó el primer código.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint` (paso TOTP del código). `p_hashes text[]` (10 hashes SHA-256 de los códigos de respaldo).
+- **Retorno:** `jsonb` estado (`activa: true`, `codigos_restantes: 10`).
+- **Reglas y validaciones:** exige una activación pendiente; guarda `ultimo_paso`; borra los códigos de respaldo anteriores. Los códigos en claro solo los ve la persona en esa respuesta.
+- **Errores:** `NX007` · no hay activación pendiente. `NX010` · no son 10 códigos.
+- **Tablas que toca:** escritura `credenciales_2fa`, `codigos_respaldo_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `confirmar2fa()`; `POST /auth/2fa/confirmar`.
+- **Pruebas:** P235; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_confirmar($1, 59312345, $2::text[])`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_desactivar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** apagar la verificación en dos pasos.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint` (o `NULL`). `p_respaldo_hash text` (o `NULL`).
+- **Retorno:** `jsonb` estado (`activa: false`).
+- **Reglas y validaciones:** pide un segundo factor válido (`fn_2fa_validar`); borra secreto, códigos y desafíos.
+- **Errores:** `NX007` · no está activa. `NX010` · código incorrecto.
+- **Tablas que toca:** escritura `credenciales_2fa`, `codigos_respaldo_2fa`, `desafios_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `desactivar2fa()`; `POST /auth/2fa/desactivar`.
+- **Pruebas:** P238; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_desactivar($1, NULL, 'hash…')`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_respaldo_regenerar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** 10 códigos de respaldo nuevos; los anteriores dejan de servir.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint`. `p_respaldo_hash text`. `p_hashes text[]`.
+- **Retorno:** `jsonb` estado.
+- **Reglas y validaciones:** pide un segundo factor válido.
+- **Errores:** `NX007` · no está activa. `NX010` · código incorrecto o no son 10 códigos.
+- **Tablas que toca:** escritura `codigos_respaldo_2fa`, `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `regenerarRespaldo2fa()`; `POST /auth/2fa/respaldo`.
+- **Pruebas:** P238.
+- **Ejemplo de llamada:** `select proc_2fa_respaldo_regenerar($1, 59312346, NULL, $2::text[])`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_desafio
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** datos del desafío vigente para que la API calcule el código del segundo paso.
+- **Parámetros:** `p_token_hash bytea` (SHA-256 del desafío que devolvió «entrar»).
+- **Retorno:** `jsonb` `{ usuario_id, secreto_cifrado, ultimo_paso, metodo }`.
+- **Reglas y validaciones:** solo desafíos no vencidos con la 2FA confirmada.
+- **Errores:** `NX011` · el desafío venció o no existe (`desafio_vencido`).
+- **Tablas que toca:** lectura `desafios_2fa`, `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `desafio2fa()`; `POST /auth/2fa`.
+- **Pruebas:** P236, P237; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_desafio($1)`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+### proc_2fa_completar
+- **Migración:** `0037_dos_pasos.sql`
+- **Propósito:** segundo paso del inicio de sesión (contraseña o Google).
+- **Parámetros:** `p_token_hash bytea`. `p_paso bigint` (paso TOTP válido según la API, `-1` si el código no cuadró, o `NULL`). `p_respaldo_hash text`. `p_sesion_hash bytea`, `p_ip text`, `p_dispositivo text`, `p_expira timestamptz` (la sesión nueva).
+- **Retorno:** `jsonb` `{ estado: ok | fallo | agotado, usuario?, intentos_restantes? }`.
+- **Reglas y validaciones:** con un factor válido borra el desafío y crea la sesión; si no, suma un intento y al quinto borra el desafío.
+- **Errores:** `NX011` · el desafío venció o no existe.
+- **Tablas que toca:** escritura `desafios_2fa`, `credenciales_2fa`, `codigos_respaldo_2fa`, `sesiones`, `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `completar2fa()`; `POST /auth/2fa`.
+- **Pruebas:** P236, P237; `dosPasos.test.ts`.
+- **Ejemplo de llamada:** `select proc_2fa_completar($1, 59312345, NULL, $2, '127.0.0.1', 'Firefox', now() + interval '30 days')`
+- **Historial:** 2026-11-21 · creación · `0037`.
+
+---
+
+## Entrar con Google (AUTH-07)
+
+Migración `0038_google.sql` (docs/13_Plan_Integrado_Pendientes.md, 1.2). Pruebas `P239`–`P241` y `apps/api/src/rutas/google.test.ts`. La API hace el flujo OAuth 2.0 con PKCE (`GET /auth/google` y `/auth/google/callback`): el estado y el verificador viajan en una cookie cifrada (AES-256-GCM), y el `id_token` se pide directo a Google y se comprueban emisor, audiencia y vigencia. Sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` el botón no aparece (`GET /auth/proveedores`).
+
+**Reglas:** cuenta creada o vinculada con Google → el correo queda verificado si Google lo marca verificado; con otro correo, el registro manda el correo de verificación de siempre. Una cuenta que ya existe solo se vincula sola si su correo ya estaba verificado en Nexo; si no, hay que entrar con la contraseña y vincular en Ajustes → Cuenta. Con la 2FA activa, Google también pide el segundo paso.
+
+**Procesos que cambian (misma firma):** `proc_auth_cuenta` suma `google`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_auth_google` | Autenticación · sistema | `0038_google.sql` | Vigente |
+| `proc_auth_google_desvincular` | Autenticación · persona | `0038_google.sql` | Vigente |
+| `proc_2fa_verificar` | Autenticación · persona | `0038_google.sql` | Vigente |
+
+### proc_auth_google
+- **Migración:** `0038_google.sql`
+- **Propósito:** entrar (o crear la cuenta) con Google, o vincular Google a la cuenta con sesión.
+- **Parámetros:** `p_sub text`, `p_correo text`, `p_correo_verificado boolean`, `p_nombre text` (lo que confirmó Google). `p_actor_id uuid` (`NULL` = entrar; con valor = vincular). `p_token_hash bytea`, `p_ip text`, `p_dispositivo text`, `p_expira timestamptz` (la sesión nueva, o el desafío si hay 2FA).
+- **Retorno:** `jsonb` `{ estado: ok | 2fa | vinculada, nuevo, usuario? }`.
+- **Reglas y validaciones:** ver arriba. Cuenta nueva sin contraseña, con preferencias y `nuevo: true` (la web la lleva a la bienvenida). Respeta el bloqueo por intentos fallidos.
+- **Errores:** `NX010` · Google no devolvió los datos. `NX012` · `cuenta_existente` (correo sin verificar en Nexo) o `google_en_uso` (ese Google es de otra cuenta). `NX006` · la cuenta con sesión no existe. `NX007` · cuenta bloqueada.
+- **Tablas que toca:** escritura `usuarios`, `preferencias_usuario`, `sesiones` o `desafios_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `google()`; `GET /auth/google/callback`.
+- **Pruebas:** P239, P240, P241; `google.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_google('1098…', 'ana@gmail.com', true, 'Ana', NULL, $1, '127.0.0.1', 'Firefox', now() + interval '30 days')`
+- **Historial:** 2026-11-21 · creación · `0038`. 2026-11-21 · rechaza las cuentas de soporte (`soporte_sin_google`) · `0040_rol_soporte.sql`.
+
+### proc_auth_google_desvincular
+- **Migración:** `0038_google.sql`
+- **Propósito:** quitar Google de la cuenta.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ google: false }`.
+- **Reglas y validaciones:** solo si la cuenta tiene contraseña; si no, la persona se quedaría sin acceso.
+- **Errores:** `NX007` · `sin_contrasena`. `NX006` · no encontrada.
+- **Tablas que toca:** escritura `usuarios`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `desvincularGoogle()`; `POST /auth/google/desvincular`.
+- **Pruebas:** P241; `google.test.ts`.
+- **Ejemplo de llamada:** `select proc_auth_google_desvincular($1)`
+- **Historial:** 2026-11-21 · creación · `0038`.
+
+### proc_2fa_verificar
+- **Migración:** `0038_google.sql`
+- **Propósito:** comprobar (y consumir) un segundo factor para una acción sensible: eliminar una cuenta que solo usa Google.
+- **Parámetros:** `p_actor_id uuid`. `p_paso bigint` (o `NULL`/`-1`). `p_respaldo_hash text` (o `NULL`).
+- **Retorno:** `jsonb` `{ valido }`.
+- **Reglas y validaciones:** falso si la 2FA no está activa.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `credenciales_2fa` o `codigos_respaldo_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/autenticacion.ts` → `verificar2fa()`; `POST /yo/cuenta/eliminar`.
+- **Pruebas:** P241.
+- **Ejemplo de llamada:** `select proc_2fa_verificar($1, NULL, 'hash…')`
+- **Historial:** 2026-11-21 · creación · `0038`.
+
+---
+
+## Contacto
+
+Módulo de contacto y soporte (docs/12_Plan_Contacto.md; ajustes al repo en docs/13, sección 2). Migración `0039_contacto.sql`. Pruebas `P242`–`P249` y `apps/api/src/rutas/contacto.test.ts`.
+
+**Esquema:** `contacto_mensajes` (de 0001) suma folio, tipo, estado, prioridad, `usuario_id`, contexto técnico, `token_seguimiento_hash` (el token solo como SHA-256), `ip_hash` (HMAC), navegador, `asignado_a`, `anonimizado`, `actualizado_en` y `resuelto_en`; los mensajes anteriores recibieron folio. Tablas nuevas: `contacto_eventos` (hilo: creado, nota interna, respuesta, cambios), `contacto_outbox` (correos por enviar, con reintentos), `contacto_intentos` (límites) y `permisos_sistema` (`contacto.ver`, `contacto.gestionar`). Código de error nuevo: `NX013` (429, límite excedido).
+
+Auxiliares: `fn_permiso_sistema_asignar` (otorga o retira un permiso por correo; solo lo usa el script `pnpm db:permiso` con la cadena del dueño: al ser `fn_*`, el rol `nexo_app` de la API no puede ejecutarlo), `fn_permiso_sistema`, `fn_contacto_exigir`, `fn_contacto_transicion_valida`, `fn_contacto_persona_json`, `fn_contacto_json`, `fn_contacto_evento_json`, `fn_contacto_bloquear`, `fn_contacto_estado`, `fn_contacto_filtra`, `fn_contacto_anonimizar`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_contacto_verificar_limite` | Contacto · público | `0039_contacto.sql` | Vigente |
+| `proc_contacto_crear` | Contacto · público | `0039_contacto.sql` | Vigente |
+| `proc_contacto_seguimiento` | Contacto · público | `0039_contacto.sql` | Vigente |
+| `proc_contacto_permisos` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_listar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_obtener` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_cambiar_estado` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_cambiar_prioridad` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_asignar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_agregar_nota` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_responder` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_metricas` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_exportar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_pendientes` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_equipo` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_outbox_reintentar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_anonimizar` | Contacto · panel | `0039_contacto.sql` | Vigente |
+| `proc_contacto_outbox_tomar` | Contacto · sistema | `0039_contacto.sql` | Vigente |
+| `proc_contacto_outbox_resultado` | Contacto · sistema | `0039_contacto.sql` | Vigente |
+| `proc_contacto_purgar` | Contacto · sistema | `0039_contacto.sql` | Vigente |
+
+### proc_contacto_verificar_limite
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Límites del formulario antes de guardar un mensaje (plan §4).
+- **Parámetros:** `p_ip_hash text` (HMAC de la IP). `p_correo_hash text` (HMAC del correo).
+- **Retorno:** `jsonb` `{ permitido: true }`.
+- **Reglas y validaciones:** Por IP 3 por hora y 10 por día; por correo 3 por día; global 200 por hora. Si no se excede, registra el intento.
+- **Errores:** `NX013` (429) · límite excedido; `DETAIL` `{ retry_after }` en segundos (la API lo manda en `Retry-After`).
+- **Tablas que toca:** lectura y escritura `contacto_intentos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/contacto.ts` → `verificarLimite()`; `POST /contacto`.
+- **Pruebas:** P243; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_verificar_limite('hmac-ip', 'hmac-correo')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_crear
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Guarda un mensaje del formulario (visitante o persona con sesión) con su folio.
+- **Parámetros:** `p_datos jsonb` `{ tipo, nombre, correo, asunto, mensaje, contexto }`. `p_usuario_id uuid` (con sesión). `p_token_hash text` (SHA-256 del token de seguimiento). `p_token_cifrado text` (el token cifrado, solo para el correo). `p_ip_hash text`. `p_user_agent text`. `p_destino_equipo text` (correo del equipo o NULL).
+- **Retorno:** `jsonb` `{ id, folio }`.
+- **Reglas y validaciones:** Valida tipo y longitudes; con sesión toma nombre y correo de la cuenta; folio `NX-AAAA-NNNNNN`; evento «creado»; outbox con el aviso al equipo (si hay destino) y la confirmación al remitente. Una transacción.
+- **Errores:** `NX010` · datos inválidos.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/contacto.ts` → `crear()`; `POST /contacto`.
+- **Pruebas:** P22, P242; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_crear($1::jsonb, NULL, $2, $3, $4, 'Firefox', 'equipo@nexo.lol')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_seguimiento
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Consulta del estado de un mensaje con folio y token, sin cuenta.
+- **Parámetros:** `p_folio text`. `p_token_hash text`.
+- **Retorno:** `jsonb` `{ folio, tipo, asunto, estado, creado_en, actualizado_en, respuestas[] }`.
+- **Reglas y validaciones:** Solo las respuestas del equipo, nunca notas internas ni datos de contacto. Folio inexistente y token incorrecto dan el mismo error.
+- **Errores:** `NX006` · `seguimiento_no_encontrado`.
+- **Tablas que toca:** lectura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/contacto.ts` → `seguimiento()`; `GET /contacto/seguimiento`.
+- **Pruebas:** P246; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_seguimiento('NX-2026-000123', $1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_permisos
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Qué puede hacer la persona en el panel (para mostrar u ocultar controles).
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ ver, gestionar }`.
+- **Reglas y validaciones:** `contacto.gestionar` incluye `contacto.ver`. La API y los procesos lo vuelven a exigir.
+- **Errores:** ninguno.
+- **Tablas que toca:** lectura `permisos_sistema`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/permisos`.
+- **Pruebas:** P244.
+- **Ejemplo de llamada:** `select proc_contacto_permisos($1)`
+- **Historial:** 2026-11-21 · creación · `0039`. 2026-11-21 · solo cuentas de soporte; devuelve `{ soporte, ver, gestionar, cuentas, dos_pasos }` · `0040_rol_soporte.sql`.
+
+### proc_contacto_listar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Bandeja con filtros, búsqueda y paginación del lado del servidor.
+- **Parámetros:** `p_actor_id uuid`. `p_filtros jsonb` `{ estado[], tipo[], prioridad[], asignado (yo | sin_asignar | uuid), q, desde, hasta, orden (reciente | antiguo | prioridad), pagina, por_pagina ≤ 100 }`.
+- **Retorno:** `jsonb` `{ datos[], total, pagina, por_pagina }`; cada fila con extracto de 160 caracteres.
+- **Reglas y validaciones:** Búsqueda en español (`to_tsvector`) más coincidencia exacta por folio o correo. Exige `contacto.ver`.
+- **Errores:** `NX005` · sin permiso.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto`.
+- **Pruebas:** P244, P248.
+- **Ejemplo de llamada:** `select proc_contacto_listar($1, '{"estado":["nuevo"],"q":"tablero"}')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_obtener
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Detalle de un mensaje con su hilo.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`.
+- **Retorno:** `jsonb` mensaje completo + `eventos[]` + `envios_fallidos`.
+- **Reglas y validaciones:** Exige `contacto.ver`. Nunca devuelve hashes de token ni de IP.
+- **Errores:** `NX005`; `NX006` · no existe.
+- **Tablas que toca:** lectura `contacto_mensajes`, `contacto_eventos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/:id`.
+- **Pruebas:** P244.
+- **Ejemplo de llamada:** `select proc_contacto_obtener($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_cambiar_estado
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Cambia el estado según la matriz (plan 4.1).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_estado text`.
+- **Retorno:** `jsonb` mensaje.
+- **Reglas y validaciones:** Registra el evento con `{ de, a }`; fija `atendido_en` la primera vez; `resuelto_en` al resolver y se limpia al reabrir. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX007` · transición inválida; `NX010` · estado desconocido.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `PATCH /admin/contacto/:id/estado`.
+- **Pruebas:** P245.
+- **Ejemplo de llamada:** `select proc_contacto_cambiar_estado($1, $2, 'resuelto')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_cambiar_prioridad
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Cambia la prioridad.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_prioridad text` (baja, normal, alta).
+- **Retorno:** `jsonb` mensaje.
+- **Reglas y validaciones:** Evento con `{ de, a }`. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX010`.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `PATCH /admin/contacto/:id/prioridad`.
+- **Pruebas:** `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_cambiar_prioridad($1, $2, 'alta')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_asignar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Asigna el mensaje a alguien del equipo de soporte (o NULL para desasignar).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_asignado uuid` (o NULL).
+- **Retorno:** `jsonb` mensaje.
+- **Reglas y validaciones:** Solo a quien tiene `contacto.gestionar`. Un mensaje «nuevo» pasa a «en revisión».
+- **Errores:** `NX005`; `NX006`; `NX010` · `asignado_invalido`.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `PATCH /admin/contacto/:id/asignacion`.
+- **Pruebas:** P248.
+- **Ejemplo de llamada:** `select proc_contacto_asignar($1, $2, $3)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_agregar_nota
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Nota interna (solo la ve el equipo).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_contenido text` (1–5000).
+- **Retorno:** `jsonb` evento.
+- **Reglas y validaciones:** Fija `atendido_en` si aplica. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX010`.
+- **Tablas que toca:** escritura `contacto_eventos`, `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `POST /admin/contacto/:id/notas`.
+- **Pruebas:** P246.
+- **Ejemplo de llamada:** `select proc_contacto_agregar_nota($1, $2, 'Revisar con el equipo de web')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_responder
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Respuesta al remitente.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`. `p_contenido text` (1–5000). `p_estado text` (`esperando_usuario`, `resuelto` o NULL).
+- **Retorno:** `jsonb` evento.
+- **Reglas y validaciones:** Evento «respuesta» (visible en el seguimiento) y correo en el outbox; un «nuevo» pasa antes a «en revisión»; después el estado pedido. Una transacción. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`; `NX007` · anonimizado o transición inválida; `NX010`.
+- **Tablas que toca:** escritura `contacto_eventos`, `contacto_outbox`, `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `POST /admin/contacto/:id/respuestas`.
+- **Pruebas:** P246, P249.
+- **Ejemplo de llamada:** `select proc_contacto_responder($1, $2, 'Ya quedó', 'resuelto')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_metricas
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Métricas del panel entre dos fechas (30 días por defecto).
+- **Parámetros:** `p_actor_id uuid`. `p_desde timestamptz`. `p_hasta timestamptz`.
+- **Retorno:** `jsonb` `{ total, abiertos, resueltos, por_tipo, por_estado, primera_respuesta_horas, resolucion_horas, por_dia[], por_persona[] }`.
+- **Reglas y validaciones:** Exige `contacto.ver`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/metricas`.
+- **Pruebas:** P248.
+- **Ejemplo de llamada:** `select proc_contacto_metricas($1, NULL, NULL)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_exportar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Filas para el CSV con los filtros de la bandeja (tope de 10 000).
+- **Parámetros:** `p_actor_id uuid`. `p_filtros jsonb`.
+- **Retorno:** `jsonb` arreglo de filas.
+- **Reglas y validaciones:** Exige `contacto.gestionar` (contiene datos personales). La API neutraliza fórmulas y agrega BOM.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/exportar.csv`.
+- **Pruebas:** P248; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_exportar($1, '{}')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_pendientes
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Indicador del menú.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ nuevos }`.
+- **Reglas y validaciones:** Exige `contacto.ver`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `contacto_mensajes`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/pendientes/conteo`.
+- **Pruebas:** `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_pendientes($1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_equipo
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** A quién se puede asignar.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `[{ id, nombre }]` de quienes tienen `contacto.gestionar`.
+- **Reglas y validaciones:** Exige `contacto.ver`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `permisos_sistema`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `GET /admin/contacto/equipo`.
+- **Pruebas:** `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_equipo($1)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_outbox_reintentar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Vuelve a intentar los envíos fallidos de un mensaje.
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`.
+- **Retorno:** `jsonb` `{ reintentados }`.
+- **Reglas y validaciones:** Exige `contacto.gestionar`.
+- **Errores:** `NX005`.
+- **Tablas que toca:** escritura `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `POST /admin/contacto/:id/reintentar`.
+- **Pruebas:** P247.
+- **Ejemplo de llamada:** `select proc_contacto_outbox_reintentar($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_anonimizar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Elimina los datos personales de un mensaje (solicitud de eliminación).
+- **Parámetros:** `p_actor_id uuid`. `p_id uuid`.
+- **Retorno:** `jsonb` `{ anonimizado: true }`.
+- **Reglas y validaciones:** Reemplaza nombre, correo, IP, navegador, mensaje, contexto y contenido de eventos; cancela envíos pendientes; deja un evento de sistema. Exige `contacto.gestionar`.
+- **Errores:** `NX005`; `NX006`.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `DELETE /admin/contacto/:id/datos`.
+- **Pruebas:** P249.
+- **Ejemplo de llamada:** `select proc_contacto_anonimizar($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_outbox_tomar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Toma envíos pendientes para el ciclo de trabajos.
+- **Parámetros:** `p_limite int`.
+- **Retorno:** `jsonb` arreglo con lo necesario para armar cada correo.
+- **Reglas y validaciones:** `FOR UPDATE SKIP LOCKED` (dos instancias no duplican); marca `procesando` y suma el intento; recupera los `procesando` de más de 10 minutos.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `contacto_outbox`; lectura `contacto_mensajes`, `contacto_eventos`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `trabajos/contacto.ts` → `cicloContacto()`.
+- **Pruebas:** P247; `contacto.test.ts`.
+- **Ejemplo de llamada:** `select proc_contacto_outbox_tomar(10)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_outbox_resultado
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Resultado de un envío.
+- **Parámetros:** `p_id uuid`. `p_ok boolean`. `p_error text`.
+- **Retorno:** `jsonb` `{ estado, intentos }`.
+- **Reglas y validaciones:** Bien: `enviado` y se borran sus datos (el token cifrado). Mal: espera 1, 5, 15, 60 y 180 minutos; al quinto intento, `fallido`.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `trabajos/contacto.ts`.
+- **Pruebas:** P247.
+- **Ejemplo de llamada:** `select proc_contacto_outbox_resultado($1, false, 'Resend 500')`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+### proc_contacto_purgar
+- **Migración:** `0039_contacto.sql`
+- **Propósito:** Retención diaria (plan §9).
+- **Parámetros:** `p_meses int` (12 por defecto, `CONTACTO_RETENCION_MESES`).
+- **Retorno:** `jsonb` `{ anonimizados, intentos_borrados, envios_borrados }`.
+- **Reglas y validaciones:** Anonimiza lo resuelto o descartado de hace más de N meses; borra intentos de más de 7 días y envíos hechos de más de 90.
+- **Errores:** ninguno.
+- **Tablas que toca:** escritura `contacto_mensajes`, `contacto_eventos`, `contacto_intentos`, `contacto_outbox`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `trabajos/contacto.ts` (una vez al día).
+- **Pruebas:** P249.
+- **Ejemplo de llamada:** `select proc_contacto_purgar(12)`
+- **Historial:** 2026-11-21 · creación · `0039`.
+
+---
+
+## Rol de soporte
+
+Migración `0040_rol_soporte.sql` (docs/15_Rol_Soporte.md). Pruebas `P250`–`P255` y `apps/api/src/rutas/soporte.test.ts`.
+
+**Esquema:** `usuarios.tipo_cuenta` (`persona` | `soporte`); permisos de sistema nuevos `cuentas.ayudar` y `soporte.alta`; tabla `soporte_bitacora` (lo que hace soporte sobre otras cuentas). Disparadores `fn_bloquear_soporte` en `membresias`, `equipos` y `tareas`: una cuenta de soporte no pertenece a equipos, no los crea ni tiene tareas (`NX005`, `cuenta_soporte`).
+
+**Procesos que cambian (misma firma):** `fn_usuario_json` suma `tipo_cuenta`; `fn_contacto_exigir` exige cuenta de soporte y verificación en dos pasos (`dos_pasos_requerido`); `proc_contacto_permisos` devuelve `{ soporte, ver, gestionar, cuentas, dos_pasos }`; `proc_auth_google` rechaza cuentas de soporte (`soporte_sin_google`); `fn_permiso_sistema_asignar` acepta los permisos nuevos.
+
+Auxiliares: `fn_es_soporte`, `fn_bloquear_soporte`, `fn_soporte_exigir`, `fn_soporte_cuenta_json`.
+
+| Proceso | Dominio | Migración | Estado |
+|---|---|---|---|
+| `proc_soporte_buscar_cuenta` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_desbloquear` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_reenviar_verificacion` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_bitacora` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_plataforma` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_equipo_listar` | Soporte | `0040_rol_soporte.sql` | Vigente |
+| `proc_soporte_crear_cuenta` | Soporte | `0040_rol_soporte.sql` | Vigente |
+
+### proc_soporte_buscar_cuenta
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Buscar UNA cuenta de persona por correo exacto para ayudarla.
+- **Parámetros:** `p_actor_id uuid`. `p_correo text`.
+- **Retorno:** `jsonb` `{ encontrada, cuenta? }`; la cuenta con su estado (creada, correo verificado, bloqueo, 2FA, Google, número de equipos activos, última actividad), nunca el contenido de sus equipos.
+- **Reglas y validaciones:** Exige cuenta de soporte con `cuentas.ayudar` y 2FA. No encuentra cuentas de soporte ni hace búsquedas parciales. Se registra en la bitácora también si no la encuentra (por eso no lanza error).
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `membresias`, `credenciales_2fa`; escritura `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/cuentas?correo=`.
+- **Pruebas:** P253.
+- **Ejemplo de llamada:** `select proc_soporte_buscar_cuenta($1, 'ana@correo.com')`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_desbloquear
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Quitar el bloqueo por intentos fallidos de una cuenta.
+- **Parámetros:** `p_actor_id uuid`. `p_usuario_id uuid`.
+- **Retorno:** `jsonb` cuenta.
+- **Reglas y validaciones:** Exige `cuentas.ayudar` y 2FA. Solo cuentas de persona. Bitácora.
+- **Errores:** `NX005`; `NX006`.
+- **Tablas que toca:** escritura `usuarios`, `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `POST /soporte/cuentas/:id/desbloquear`.
+- **Pruebas:** P253.
+- **Ejemplo de llamada:** `select proc_soporte_desbloquear($1, $2)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_reenviar_verificacion
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Enlace nuevo de verificación de correo para otra persona (la API lo manda).
+- **Parámetros:** `p_actor_id uuid`. `p_usuario_id uuid`. `p_token_hash bytea`. `p_expira timestamptz` (24 h).
+- **Retorno:** `jsonb` `{ correo, nombre }`.
+- **Reglas y validaciones:** Exige `cuentas.ayudar` y 2FA. Los enlaces anteriores dejan de servir. Bitácora.
+- **Errores:** `NX005`; `NX006`; `NX007` · `ya_verificado`.
+- **Tablas que toca:** escritura `tokens_verificacion`, `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `POST /soporte/cuentas/:id/verificacion`.
+- **Pruebas:** P253.
+- **Ejemplo de llamada:** `select proc_soporte_reenviar_verificacion($1, $2, $3, now() + interval '24 hours')`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_bitacora
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Últimas acciones de soporte sobre cuentas.
+- **Parámetros:** `p_actor_id uuid`. `p_limite int` (50; máx. 200).
+- **Retorno:** `jsonb` `[{ accion, actor, cuenta, detalles, creado_en }]`.
+- **Reglas y validaciones:** Exige `cuentas.ayudar` y 2FA.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/bitacora`.
+- **Pruebas:** `soporte.test.ts`.
+- **Ejemplo de llamada:** `select proc_soporte_bitacora($1, 50)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_plataforma
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Cifras de la plataforma sin datos personales.
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `{ cuentas, nuevas_7_dias, verificadas, con_dos_pasos, con_google, activas_30_dias, equipos_activos, altas_por_semana[8] }`.
+- **Reglas y validaciones:** Exige cuenta de soporte con `contacto.ver` y 2FA. No cuenta las cuentas de soporte.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `equipos`, `credenciales_2fa`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/plataforma`.
+- **Pruebas:** P254.
+- **Ejemplo de llamada:** `select proc_soporte_plataforma($1)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_equipo_listar
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** El equipo de soporte (cuentas de soporte activas).
+- **Parámetros:** `p_actor_id uuid`.
+- **Retorno:** `jsonb` `[{ id, nombre, correo, dos_pasos, activa, permisos[], creada_en, ultima_actividad_en }]`.
+- **Reglas y validaciones:** Exige cuenta de soporte con `contacto.ver` y 2FA. `activa` = ya eligió contraseña.
+- **Errores:** `NX005`.
+- **Tablas que toca:** lectura `usuarios`, `permisos_sistema`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `GET /soporte/equipo`.
+- **Pruebas:** `soporte.test.ts`.
+- **Ejemplo de llamada:** `select proc_soporte_equipo_listar($1)`
+- **Historial:** 2026-11-21 · creación · `0040`.
+
+### proc_soporte_crear_cuenta
+- **Migración:** `0040_rol_soporte.sql`
+- **Propósito:** Alta de otra cuenta de soporte (docs/15 §1): solo otra cuenta de soporte con `soporte.alta`; también un desarrollador con `db:soporte`.
+- **Parámetros:** `p_actor_id uuid`. `p_correo text`. `p_nombre text`. `p_puede_dar_alta boolean`. `p_token_hash bytea` y `p_expira timestamptz` (enlace para elegir contraseña, 72 h).
+- **Retorno:** `jsonb` `{ id, correo, nombre }`.
+- **Reglas y validaciones:** Crea la cuenta como `soporte`, sin contraseña ni equipos, con `contacto.ver`, `contacto.gestionar` y `cuentas.ayudar` (y `soporte.alta` si se pide); el enlace es el de restablecer contraseña; al entrar deberá activar la 2FA. Un correo con cuenta no se convierte. Bitácora.
+- **Errores:** `NX005`; `NX010`; `NX012` · `correo_registrado`.
+- **Tablas que toca:** escritura `usuarios`, `preferencias_usuario`, `permisos_sistema`, `tokens_verificacion`, `soporte_bitacora`.
+- **Eventos que genera:** ninguno.
+- **Lo llama:** `repositorios/soporte.ts`; `POST /soporte/equipo`.
+- **Pruebas:** P255; `soporte.test.ts`.
+- **Ejemplo de llamada:** `select proc_soporte_crear_cuenta($1, 'ana@nexo.lol', 'Ana Soporte', false, $2, now() + interval '72 hours')`
+- **Historial:** 2026-11-21 · creación · `0040`.

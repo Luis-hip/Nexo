@@ -20,6 +20,7 @@ const vistas = () => import('./pages/equipo/vistas');
 const ajustes = () => import('./pages/ajustes');
 const chat = () => import('./pages/equipo/chat');
 const whatsapp = () => import('./pages/equipo/whatsapp');
+const soporte = () => import('./pages/soporte');
 const proximamente = (titulo: string, fase: number) => <Proximamente titulo={titulo} fase={fase} />;
 
 // Árbol de rutas del prototipo (docs/01, 3.2). Lo que aún no se construye muestra «Próximamente».
@@ -38,6 +39,7 @@ const rutas: RouteObject[] = [
           { path: 'ayuda', lazy: diferida(publico, (m) => m.AyudaCentro) },
           { path: 'ayuda/:articulo', lazy: diferida(publico, (m) => m.AyudaArticulo) },
           { path: 'contacto', lazy: diferida(publico, (m) => m.Contacto) },
+          { path: 'contacto/seguimiento', lazy: diferida(publico, (m) => m.SeguimientoContacto) },
           { path: 'acerca', lazy: diferida(publico, (m) => m.Acerca) },
           { path: 'terminos', lazy: diferida(publico, (m) => m.Terminos) },
           { path: 'privacidad', lazy: diferida(publico, (m) => m.Privacidad) },
@@ -49,6 +51,7 @@ const rutas: RouteObject[] = [
         lazy: diferida(auth, (m) => m.AuthLayout),
         children: [
           { path: 'entrar', lazy: diferida(auth, (m) => m.Entrar) },
+          { path: 'entrar/dos-pasos', lazy: diferida(auth, (m) => m.EntrarDosPasos) },
           { path: 'sesion-expirada', lazy: diferida(auth, (m) => m.SesionExpirada) },
           { path: 'bienvenida/:paso', lazy: diferida(auth, (m) => m.Bienvenida) },
           // Fase 5.1: autenticación real (AUTH-01 a AUTH-06).
@@ -81,6 +84,33 @@ const rutas: RouteObject[] = [
             } satisfies RouteObject,
           ]
         : []),
+      {
+        // Rol «Soporte de Nexo» (docs/15): tablero propio, separado de la app de personas.
+        path: 'soporte',
+        lazy: diferida(soporte, (m) => m.SoporteShell),
+        children: [
+          { index: true, lazy: diferida(soporte, (m) => m.InicioSoporte) },
+          {
+            path: 'contacto',
+            lazy: diferida(
+              () => import('./pages/admin/Contacto'),
+              (m) => m.PanelContacto,
+            ),
+          },
+          {
+            path: 'contacto/:id',
+            lazy: diferida(
+              () => import('./pages/admin/Contacto'),
+              (m) => m.DetalleContactoPagina,
+            ),
+          },
+          { path: 'cuentas', lazy: diferida(soporte, (m) => m.CuentasSoporte) },
+          { path: 'equipo', lazy: diferida(soporte, (m) => m.EquipoSoporte) },
+          { path: 'cuenta', lazy: diferida(soporte, (m) => m.MiCuentaSoporte) },
+        ],
+      },
+      // Enlaces viejos del panel (antes /admin/contacto).
+      { path: 'admin/contacto', element: <Navigate to="/soporte/contacto" replace /> },
       {
         Component: AppShell,
         children: [
@@ -125,6 +155,14 @@ const rutas: RouteObject[] = [
             lazy: diferida(
               () => import('./pages/personal/Reportes'),
               (m) => m.ReportesPersonales,
+            ),
+          },
+          {
+            // docs/13 1.1: registro y verificación de WhatsApp con destino (aviso al unirse, reporte).
+            path: 'app/whatsapp/activar',
+            lazy: diferida(
+              () => import('./pages/personal/ActivarWhatsApp'),
+              (m) => m.ActivarWhatsAppPagina,
             ),
           },
           { path: 'app/equipos/nuevo', lazy: diferida(equipos, (m) => m.CrearEquipo) },

@@ -891,10 +891,12 @@ describe.skipIf(!DATABASE_URL)('tareas de equipo', () => {
       // Un proceso sí funciona…
       await e.db.transaction().execute(async (tx) => {
         await sql`set local role nexo_app`.execute(tx);
-        const ok = await sql<{ x: { recibido: boolean } }>`
-          select proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Mensaje enviado como nexo_app') as x
+        const ok = await sql<{ x: { folio: string } }>`
+          select proc_contacto_crear(
+            '{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"Mensaje enviado como nexo_app"}',
+            null, ${'hash-' + Date.now()}, 'c', null, null, null) as x
         `.execute(tx);
-        expect(ok.rows[0]?.x.recibido).toBe(true);
+        expect(ok.rows[0]?.x.folio).toMatch(/^NX-/);
       });
       // …pero no las tablas, las vistas, las auxiliares ni los procesos de desarrollo.
       for (const consulta of [

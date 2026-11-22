@@ -1,6 +1,15 @@
 import type { TareaEquipo } from '@nexo/shared';
-import { CheckSquare, Clock, Inbox, KanbanSquare, Lock, UserCheck } from 'lucide-react';
-import { Link } from 'react-router';
+import {
+  CheckSquare,
+  Clock,
+  Inbox,
+  KanbanSquare,
+  Lock,
+  MessageCircle,
+  UserCheck,
+} from 'lucide-react';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router';
 import { HillChart } from '@/components/charts/HillChart';
 import { useAcciones } from '@/components/shell/contexto';
 import {
@@ -31,7 +40,42 @@ import { TareasCompartidas } from './tareas';
  */
 export function Resumen() {
   const { equipo } = useEquipoActual();
-  return equipo.mi_rol === 'invitado' ? <ResumenInvitado /> : <ResumenMiembro />;
+  return (
+    <div className="space-y-4">
+      <AvisoActivarWhatsApp />
+      {equipo.mi_rol === 'invitado' ? <ResumenInvitado /> : <ResumenMiembro />}
+    </div>
+  );
+}
+
+/**
+ * docs/13 1.1: al unirse sin WhatsApp verificado, el equipo ofrece activarlo (una vez, al llegar
+ * desde «Unirme»). Quien ya lo tiene quedó con los avisos del equipo aceptados y no ve nada.
+ */
+function AvisoActivarWhatsApp() {
+  const { equipo } = useEquipoActual();
+  const { state, pathname } = useLocation();
+  const [visible, setVisible] = useState(
+    !!(state as { activarWhatsApp?: boolean } | null)?.activarWhatsApp,
+  );
+  if (!visible) return null;
+  return (
+    <Banner
+      tono="marca"
+      icono={<MessageCircle />}
+      onCerrar={() => setVisible(false)}
+      accion={
+        <Link
+          to={`/app/whatsapp/activar?equipo=${equipo.id}&volver=${encodeURIComponent(pathname)}`}
+          className="font-medium text-brand hover:underline"
+        >
+          Activar WhatsApp
+        </Link>
+      }
+    >
+      Activa WhatsApp para recibir los avisos de este equipo.
+    </Banner>
+  );
 }
 
 /** IN-01: resumen reducido del invitado, solo con lo compartido. */

@@ -32,21 +32,13 @@ import {
   ShieldCheck,
   Heart,
 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
-import { esquemaContacto, type Contacto as DatosContacto } from '@nexo/shared';
-import { api, mensajeDeError } from '@/lib/api';
 import { guardarApariencia, useApariencia, useTema } from '@/lib/apariencia';
 import { Logo } from '@/components/shell/Logo';
 import {
   Acordeon,
-  AreaTexto,
-  Banner,
   Boton,
   Buscador,
-  Campo,
-  Entrada,
   FormaSvg,
-  Radios,
   Segmentado,
   Tarjeta,
   Vacio,
@@ -1008,126 +1000,8 @@ export function AyudaArticulo() {
   );
 }
 
-type ErroresContacto = Partial<Record<keyof DatosContacto, string>>;
-
-/** PUB-08: contacto. El mensaje se guarda en la API (tabla contacto_mensajes). */
-export function Contacto() {
-  const [v, setV] = useState<DatosContacto>({ nombre: '', correo: '', tipo: 'duda', mensaje: '' });
-  const [err, setErr] = useState<ErroresContacto>({});
-  const envio = useMutation({
-    mutationFn: (datos: DatosContacto) =>
-      api<{ recibido: boolean }>('/contacto', { metodo: 'POST', cuerpo: datos }),
-  });
-  /** Misma validación (Zod) que el servidor: al salir de un campo y al enviar. */
-  const validar = (campo?: keyof DatosContacto) => {
-    const r = esquemaContacto.safeParse(v);
-    const e: ErroresContacto = {};
-    if (!r.success)
-      for (const i of r.error.issues) e[i.path[0] as keyof DatosContacto] ??= i.message;
-    setErr(campo ? { ...err, [campo]: e[campo] } : e);
-    return r.success ? r.data : null;
-  };
-  const enviar = () => {
-    const datos = validar();
-    if (datos && !envio.isPending) envio.mutate(datos);
-  };
-  if (envio.isSuccess)
-    return (
-      <Pagina titulo="¡Gracias por escribirnos!" nombre="NX/PUB-08-Contacto-exito">
-        <Tarjeta className="max-w-xl p-6">
-          <CheckCircle2 className="size-8 text-ok" aria-hidden />
-          <p className="mt-3">
-            Recibimos tu{' '}
-            {v.tipo === 'error' ? 'reporte' : v.tipo === 'sugerencia' ? 'sugerencia' : 'duda'}. Te
-            responderemos a <strong>{v.correo.trim()}</strong> en menos de 2 días hábiles.
-          </p>
-          <div className="mt-5 flex gap-2">
-            <Link
-              to="/"
-              className="inline-flex h-11 items-center rounded-[8px] bg-brand px-4 text-sm font-medium text-on-brand"
-            >
-              Volver al inicio
-            </Link>
-            <Boton
-              onClick={() => {
-                envio.reset();
-                setV({ ...v, mensaje: '' });
-              }}
-            >
-              Enviar otro mensaje
-            </Boton>
-          </div>
-        </Tarjeta>
-      </Pagina>
-    );
-  return (
-    <Pagina
-      titulo="Contacto"
-      intro="Dudas, errores o sugerencias: te leemos."
-      nombre="NX/PUB-08-Contacto"
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          enviar();
-        }}
-        noValidate
-        className="max-w-xl space-y-4"
-      >
-        {envio.isError && (
-          <Banner tono="danger">No pudimos enviar tu mensaje. {mensajeDeError(envio.error)}</Banner>
-        )}
-        <Campo etiqueta="Nombre" error={err.nombre}>
-          <Entrada
-            value={v.nombre}
-            onChange={(e) => setV({ ...v, nombre: e.target.value })}
-            onBlur={() => validar('nombre')}
-            autoComplete="name"
-            maxLength={80}
-          />
-        </Campo>
-        <Campo etiqueta="Correo" error={err.correo}>
-          <Entrada
-            type="email"
-            value={v.correo}
-            onChange={(e) => setV({ ...v, correo: e.target.value })}
-            onBlur={() => validar('correo')}
-            autoComplete="email"
-          />
-        </Campo>
-        <Radios
-          nombre="tipo"
-          etiqueta="Tipo"
-          horizontal
-          valor={v.tipo}
-          onChange={(x) => setV({ ...v, tipo: x })}
-          opciones={[
-            { valor: 'duda', etiqueta: 'Duda' },
-            { valor: 'error', etiqueta: 'Error' },
-            { valor: 'sugerencia', etiqueta: 'Sugerencia' },
-          ]}
-        />
-        <Campo etiqueta="Mensaje" error={err.mensaje}>
-          <AreaTexto
-            value={v.mensaje}
-            onChange={(e) => setV({ ...v, mensaje: e.target.value })}
-            onBlur={() => validar('mensaje')}
-            rows={5}
-            maxLength={4000}
-          />
-        </Campo>
-        <Boton
-          type="submit"
-          variante="primario"
-          icono={<Send className="size-4" />}
-          cargando={envio.isPending}
-        >
-          Enviar mensaje
-        </Boton>
-      </form>
-    </Pagina>
-  );
-}
+// PUB-08 · Contacto y seguimiento: ./Contacto.tsx (módulo completo, docs/12).
+export { Contacto, SeguimientoContacto } from './Contacto';
 
 export function Acerca() {
   return (
@@ -1289,7 +1163,7 @@ export function Privacidad() {
       secciones={[
         [
           '1. Datos que recopilamos',
-          'Nombre, correo, zona horaria, preferencias y el contenido que creas en tus equipos. Si conectas WhatsApp, el número que verifiques.',
+          'Nombre, correo, zona horaria, preferencias y el contenido que creas en tus equipos. Si conectas WhatsApp, el número que verifiques. Si entras con Google, el identificador de tu cuenta de Google, tu correo y tu nombre (no tu contraseña). Si activas la verificación en dos pasos, una clave cifrada y tus códigos de respaldo solo como huella (hash). Si nos escribes desde Contacto, tu nombre, correo, mensaje y, en los reportes de error, la página anterior, el navegador y la versión de la app; tu IP solo como huella (HMAC), nunca en claro.',
         ],
         [
           '2. Para qué los usamos',
@@ -1309,11 +1183,11 @@ export function Privacidad() {
         ],
         [
           '6. Conservación',
-          'Conservamos tus datos mientras tu cuenta esté activa. Al eliminarla, los borramos en un plazo máximo de 30 días.',
+          'Conservamos tus datos mientras tu cuenta esté activa. Al eliminarla, los borramos en un plazo máximo de 30 días. Los mensajes de Contacto se anonimizan 12 meses después de resolverse, o antes si lo pides desde Contacto.',
         ],
         [
           '7. Seguridad',
-          'Cifrado en tránsito, verificación en dos pasos opcional y control de sesiones activas.',
+          'Cifrado en tránsito, verificación en dos pasos opcional (app de autenticación y códigos de respaldo), acceso con Google opcional y control de sesiones activas.',
         ],
         ['8. Contacto', 'Para dudas de privacidad, escríbenos desde la página de Contacto.'],
       ]}
