@@ -16,7 +16,9 @@ import type { Correo } from '../correo';
 import type { BaseDatos } from '../db/conexion';
 import { contextoEquipo, requiereEquipoActivo, requierePermiso } from '../equipos/contexto';
 import { ErrorNexo } from '../errores';
-import { hashActual } from '../repositorios/autenticacion';
+import { descifrar } from '../cifrado';
+import { hashActual, secreto2fa, verificar2fa } from '../repositorios/autenticacion';
+import { hashRespaldo, pasoValido } from '../totp';
 import * as repo from '../repositorios/pendientes';
 import * as equipos from '../servicios/equipos';
 import { COOKIE_SESION } from '../sesiones';
@@ -62,10 +64,35 @@ export const rutasPendientes: FastifyPluginAsync<{
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
     async (req, res) => {
       const { usuario } = exigirSesion(req);
-      const { contrasena } = validar(esquemaEliminarCuenta, req.body);
+      const d = validar(esquemaEliminarCuenta, req.body);
       const { hash } = await hashActual(db, usuario.id);
-      if (!hash || !(await verify(hash, contrasena).catch(() => false))) {
-        throw new ErrorNexo(400, 'contrasena_incorrecta', 'La contraseña no es correcta.');
+      if (hash) {
+        if (!d.contrasena || !(await verify(hash, d.contrasena).catch(() => false))) {
+          throw new ErrorNexo(400, 'contrasena_incorrecta', 'La contraseña no es correcta.');
+        }
+      } else {
+        // Cuenta solo con Google (docs/13 1.2): código de la 2FA si la tiene; si no, su correo.
+        const s2 = await secreto2fa(db, usuario.id);
+        if (s2?.confirmado) {
+          const codigo = d.codigo ?? '';
+          const paso = /^\d{6}$/.test(codigo)
+            ? (pasoValido(descifrar(config, s2.secreto_cifrado), codigo) ?? -1)
+            : null;
+          const ok = await verificar2fa(
+            db,
+            usuario.id,
+            paso,
+            paso === null ? hashRespaldo(codigo) : null,
+          );
+          if (!ok.valido)
+            throw new ErrorNexo(400, 'codigo_incorrecto', 'El código no es correcto.');
+        } else if ((d.correo ?? '').toLowerCase() !== usuario.correo.toLowerCase()) {
+          throw new ErrorNexo(
+            400,
+            'correo_incorrecto',
+            'Escribe el correo de tu cuenta para confirmar.',
+          );
+        }
       }
       const r = await repo.eliminarCuenta(db, usuario.id);
       res.clearCookie(COOKIE_SESION, { path: '/' });

@@ -529,10 +529,21 @@ Además: modo «ambos» sin duplicar (P222), estado del aviso derivado de sus en
 
 | # | Estado | Motivo |
 |---|---|---|
-| B1 | ✅ Parcial | Antes del spike ya llegaron `hello_world` y textos al número de Luis (DEC-WA-2, `operacion.md` §14). Las plantillas propias siguen **en revisión** |
-| B2 | ⏳ | `nx_aviso_ver` y `nx_resumen_enlace` **reclasificadas como marketing** por Meta (V1); `nx_reporte_pdf` como utilidad. Las tres en revisión al cerrar este reporte |
-| B3, B5, B6 | ⏳ | Necesitan el webhook de Meta apuntando a una API con este código. La URL pública existe (`api.nexo.lol`), pero falta desplegar el spike, poner el secreto de la app y un **token permanente** (la mejora pendiente acordada); con el token de 24 h no sirve en producción |
-| B4 | ⏳ | Depende de la aprobación de `nx_reporte_pdf`; en local ya se probó la subida y el mensaje contra una Meta imitada |
+| B1 | ✅ | En producción (2026-11-21, token permanente): el reporte llegó al número de Luis desde `app.nexo.lol` |
+| B2 | ⏳ | `nx_aviso_ver` y `nx_resumen_enlace` **reclasificadas como marketing** por Meta (V1); `nx_reporte_pdf` como utilidad. Las tres siguen **en revisión** (consultado el 2026-11-21 por la tarde) |
+| B3 | ✅ | Luis escribió al número de Nexo y «REPORTE» respondió con texto dentro de la ventana, sin plantilla |
+| B4 | ⏳ | Depende de la aprobación de `nx_reporte_pdf`. Con la ventana abierta el PDF ya sale como documento sin plantilla (`spike.test.ts`) |
+| B5 | ✅ | La entrega del reporte pasó a `entregado` y `leido` con los estados que Meta mandó al webhook de producción |
+| B6 | ✅ | Verificación real: código pedido en `app.nexo.lol`, mensaje desde WhatsApp, número verificado (20:28 UTC) |
+
+**Hallazgos de la pista B (corregidos el mismo día):**
+
+1. **La app de Meta sin publicar sí recibe los mensajes reales** del número de pruebas en el webhook, aunque el panel dice que solo recibirá webhooks de prueba. Publicarla pide la verificación del negocio (ignorada hasta nuevo aviso), así que no hizo falta.
+2. **Meta separó la «cuenta de WhatsApp» (el número) de la «cuenta de mensajes» (plantillas).** El usuario del sistema necesita las dos; con solo la primera el token envía pero no ve plantillas (error 100, subcódigo 33).
+3. **La gente manda solo el código.** El enlace `wa.me` no siempre llena el texto y la pantalla decía «manda el código»: Nexo respondía «No tienes avisos pendientes». Migraciones `0034` (el texto se limpia de espacios duros, marcas invisibles y puntuación) y `0035` (con un código pendiente vale el código solo); pruebas P232 y P233.
+4. **«REPORTE» fallaba con `#132001`** porque intentaba la plantilla `nx_resumen_enlace`, aún sin aprobar. Con la ventana abierta ya no se usan plantillas: el resumen va como texto con enlace y el PDF como documento.
+5. **La API no arrancó** la primera vez: faltaban `WHATSAPP_APP_SECRET` y `WHATSAPP_VERIFY_TOKEN` en Render (la API se niega a arrancar en producción con `real` si falta alguna). Render dejó en línea la versión anterior.
+6. **Diseño:** el código se perdía frente a la pregunta del formato. Ahora verificar es un paso destacado (código grande, mensaje exacto, «Abrir WhatsApp», «Copiar mensaje», la pantalla se actualiza sola) y el formato aparece al verificar, plegado.
 
 ### 16.3 Retrabajo medido
 
@@ -543,3 +554,5 @@ Además: modo «ambos» sin duplicar (P222), estado del aviso derivado de sus en
 ### 16.4 Decisión
 
 **Go técnico, condicionado a la pista B.** El canal directo convive con el de grupo sin romper nada y el retrabajo es bajo. Para cerrar la pista B falta: (1) que Meta apruebe las plantillas o, si quedan como marketing, aceptar ese costo o reescribirlas como utilidad; (2) token permanente y webhook en producción (mejora pendiente) para B3, B5 y B6.
+
+**Actualización (2026-11-21, tarde):** token permanente y webhook en producción listos (`operacion.md` §15). B1, B3, B5 y B6 comprobadas con el número de Luis desde `app.nexo.lol`. Solo quedan B2 y B4, que dependen de que Meta apruebe las plantillas. Mientras tanto, todo lo que va dentro de la ventana de 24 h funciona sin plantillas.

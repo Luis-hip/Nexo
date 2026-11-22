@@ -16,5 +16,6 @@ export * from './chat';
 export * from './autenticacion';
 export * from './whatsapp';
 export * from './pendientes';
+export * from './contacto';
 export * from './respuestas';
 export * from './color';

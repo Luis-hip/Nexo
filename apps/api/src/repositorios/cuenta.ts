@@ -73,16 +73,3 @@ export function guardarPerfil(db: Ejecutor, actorId: string, cambios: CambiosPer
     esquemaUsuarioSesion,
   );
 }
-
-/** `proc_contacto_enviar`: mensaje del formulario público (sin sesión). */
-export function enviarContacto(
-  db: Ejecutor,
-  datos: { nombre: string; correo: string; asunto: string; mensaje: string },
-) {
-  return llamarProceso(
-    db,
-    'proc_contacto_enviar',
-    [datos.nombre, datos.correo, datos.asunto, datos.mensaje],
-    z.object({ recibido: z.boolean() }),
-  );
-}

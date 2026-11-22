@@ -154,14 +154,60 @@ export interface ComentariosTarea {
   texto: string;
 }
 
-export interface ContactoMensajes {
-  asunto: string;
-  atendido_en: Timestamp | null;
-  correo: string;
+export interface ContactoEventos {
+  autor_id: string | null;
+  contenido: string | null;
   creado_en: Generated<Timestamp>;
   id: Generated<string>;
+  mensaje_id: string;
+  metadatos: Generated<Json>;
+  tipo_evento: string;
+}
+
+export interface ContactoIntentos {
+  clave_hash: string;
+  creado_en: Generated<Timestamp>;
+  id: Generated<string>;
+  tipo_clave: string;
+}
+
+export interface ContactoMensajes {
+  actualizado_en: Generated<Timestamp>;
+  anonimizado: Generated<boolean>;
+  asignado_a: string | null;
+  asunto: string;
+  atendido_en: Timestamp | null;
+  contexto: Generated<Json>;
+  correo: string;
+  creado_en: Generated<Timestamp>;
+  estado: Generated<string>;
+  folio: string;
+  id: Generated<string>;
+  ip_hash: string | null;
   mensaje: string;
   nombre: string;
+  prioridad: Generated<string>;
+  resuelto_en: Timestamp | null;
+  tipo: string;
+  token_seguimiento_hash: string;
+  user_agent: string | null;
+  usuario_id: string | null;
+}
+
+export interface ContactoOutbox {
+  canal: Generated<string>;
+  creado_en: Generated<Timestamp>;
+  datos: Generated<Json>;
+  destinatario: string;
+  enviado_en: Timestamp | null;
+  estado: Generated<string>;
+  evento_id: string | null;
+  id: Generated<string>;
+  intentos: Generated<number>;
+  mensaje_id: string;
+  plantilla: string;
+  proximo_intento: Generated<Timestamp>;
+  ultimo_error: string | null;
 }
 
 export interface Conversaciones {
@@ -185,7 +231,19 @@ export interface ConversacionLecturas {
 
 export interface Credenciales2fa {
   confirmado_en: Timestamp | null;
+  creado_en: Generated<Timestamp>;
   secreto_cifrado: string;
+  ultimo_paso: Generated<Int8>;
+  usuario_id: string;
+}
+
+export interface Desafios2fa {
+  creado_en: Generated<Timestamp>;
+  expira_en: Timestamp;
+  id: Generated<string>;
+  intentos: Generated<number>;
+  metodo: string;
+  token_hash: Buffer;
   usuario_id: string;
 }
 
@@ -339,6 +397,12 @@ export interface Notificaciones {
   usuario_id: string;
 }
 
+export interface PermisosSistema {
+  otorgado_en: Generated<Timestamp>;
+  permiso: string;
+  usuario_id: string;
+}
+
 export interface PlantillaElementos {
   orden: number;
   plantilla_id: string;
@@ -452,6 +516,15 @@ export interface SolicitudesInvitado {
   resuelta_por: string | null;
   tipo: TipoSolicitudInvitado;
   usuario_id: string;
+}
+
+export interface SoporteBitacora {
+  accion: string;
+  actor_id: string | null;
+  creado_en: Generated<Timestamp>;
+  detalles: Generated<Json>;
+  id: Generated<string>;
+  usuario_id: string | null;
 }
 
 export interface SprintCapacidad {
@@ -581,6 +654,10 @@ export interface Usuarios {
   id: Generated<string>;
   intentos_fallidos: Generated<number>;
   nombre: string;
+  /**
+   * persona (usa Nexo) o soporte (atiende Nexo; docs/15). Lo fija db:soporte.
+   */
+  tipo_cuenta: Generated<string>;
   ultima_actividad_en: Timestamp | null;
   zona_horaria: Generated<string>;
 }
@@ -733,10 +810,14 @@ export interface DB {
   archivos: Archivos;
   codigos_respaldo_2fa: CodigosRespaldo2fa;
   comentarios_tarea: ComentariosTarea;
+  contacto_eventos: ContactoEventos;
+  contacto_intentos: ContactoIntentos;
   contacto_mensajes: ContactoMensajes;
+  contacto_outbox: ContactoOutbox;
   conversacion_lecturas: ConversacionLecturas;
   conversaciones: Conversaciones;
   credenciales_2fa: Credenciales2fa;
+  desafios_2fa: Desafios2fa;
   eleccion_candidatos: EleccionCandidatos;
   eleccion_votos: EleccionVotos;
   elecciones: Elecciones;
@@ -750,6 +831,7 @@ export interface DB {
   mensaje_reacciones: MensajeReacciones;
   mensajes: Mensajes;
   notificaciones: Notificaciones;
+  permisos_sistema: PermisosSistema;
   plantilla_elementos: PlantillaElementos;
   plantillas: Plantillas;
   preferencias_notificacion: PreferenciasNotificacion;
@@ -761,6 +843,7 @@ export interface DB {
   reuniones: Reuniones;
   sesiones: Sesiones;
   solicitudes_invitado: SolicitudesInvitado;
+  soporte_bitacora: SoporteBitacora;
   sprint_capacidad: SprintCapacidad;
   sprint_instantaneas: SprintInstantaneas;
   sprints: Sprints;

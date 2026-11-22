@@ -20,8 +20,14 @@ export interface ExportacionDatos {
   datos: Record<string, unknown>;
 }
 
+/**
+ * FALT-09. Se confirma con la contraseña; las cuentas solo con Google (docs/13 1.2) confirman con un
+ * código de la verificación en dos pasos si la tienen, o escribiendo su correo.
+ */
 export const esquemaEliminarCuenta = z.object({
-  contrasena: z.string().min(1, 'Escribe tu contraseña.').max(200),
+  contrasena: z.string().max(200).optional(),
+  codigo: z.string().trim().max(12).optional(),
+  correo: z.string().trim().max(254).optional(),
   confirmacion: z.literal('ELIMINAR', { message: 'Escribe ELIMINAR para confirmar.' }),
 });
 export type EliminarCuenta = z.input<typeof esquemaEliminarCuenta>;

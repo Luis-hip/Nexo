@@ -332,15 +332,18 @@ DO $$ DECLARE u uuid := pg_temp.usuario('Nombre Viejo'); r jsonb; ok boolean := 
   RAISE NOTICE 'OK P21: proc_usuario_perfil_guardar';
 END $$;
 
--- P22. proc_contacto_enviar: guarda el mensaje; uno demasiado corto lo rechaza la tabla.
+-- P22. Formulario de contacto (PUB-08; desde 0039, proc_contacto_crear): guarda el mensaje con
+--      folio; uno demasiado corto se rechaza (NX010).
 DO $$ DECLARE ok boolean := false; BEGIN
-  IF NOT (proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Un mensaje de prueba válido')->>'recibido')::boolean THEN
+  IF (proc_contacto_crear('{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"Un mensaje de prueba válido"}',
+                          NULL, 'hash-P22', 'c', NULL, NULL, NULL)->>'folio') IS NULL THEN
     RAISE EXCEPTION 'FALLO P22';
   END IF;
-  BEGIN PERFORM proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'corto');
-  EXCEPTION WHEN check_violation THEN ok := true; END;
+  BEGIN PERFORM proc_contacto_crear('{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"corto"}',
+                                    NULL, 'hash-P22b', 'c', NULL, NULL, NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := true; END;
   IF NOT ok THEN RAISE EXCEPTION 'FALLO P22: aceptó un mensaje corto'; END IF;
-  RAISE NOTICE 'OK P22: proc_contacto_enviar';
+  RAISE NOTICE 'OK P22: proc_contacto_crear (formulario público)';
 END $$;
 
 -- ---------------------------------------------------------------------------------------------
@@ -775,7 +778,8 @@ DO $$ DECLARE malos text; ok int := 0; BEGIN
   EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
   BEGIN PERFORM proc_dev_usuarios();
   EXCEPTION WHEN insufficient_privilege THEN ok := ok + 1; END;
-  IF NOT (proc_contacto_enviar('Ana', 'ana@prueba.mx', 'Duda', 'Mensaje enviado con el rol nexo_app')->>'recibido')::boolean THEN
+  IF (proc_contacto_crear('{"tipo":"duda","nombre":"Ana","correo":"ana@prueba.mx","asunto":"Duda","mensaje":"Mensaje enviado con el rol nexo_app"}',
+                          NULL, 'hash-P52', 'c', NULL, NULL, NULL)->>'folio') IS NULL THEN
     RAISE EXCEPTION 'FALLO P52: nexo_app no pudo ejecutar un proceso';
   END IF;
   RESET ROLE;
@@ -3260,3 +3264,458 @@ DO $$ DECLARE u uuid := pg_temp.usuario(); c jsonb; r jsonb; BEGIN
   RAISE NOTICE 'OK P233: código solo';
 END $$;
 
+-- P234. WhatsApp al empezar: al aceptar una invitación, quien tiene número verificado queda con los
+--       avisos del equipo aceptados; quien no, queda sin responder y la respuesta lo indica.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); v uuid := pg_temp.usuario('Vera Verificada'); n uuid := pg_temp.usuario('Nico Sin Número');
+               c1 text; c2 text; r jsonb; BEGIN
+  INSERT INTO preferencias_usuario (usuario_id) VALUES (v), (n);
+  PERFORM proc_wa_usuario_guardar(v, '{"numero": "+5215500002341", "consentimiento": true}');
+  UPDATE whatsapp_usuario SET verificado_en = now() WHERE usuario_id = v;
+  c1 := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  c2 := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  r := proc_invitacion_aceptar(v, c1);
+  IF NOT (r->>'whatsapp_activo')::boolean
+     OR (SELECT consentimiento_wa FROM membresias WHERE equipo_id = e AND usuario_id = v) IS NOT TRUE THEN
+    RAISE EXCEPTION 'FALLO P234: verificada: %', r;
+  END IF;
+  r := proc_invitacion_aceptar(n, c2);
+  IF (r->>'whatsapp_activo')::boolean
+     OR (SELECT consentimiento_wa FROM membresias WHERE equipo_id = e AND usuario_id = n) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P234: sin número: %', r;
+  END IF;
+  RAISE NOTICE 'OK P234: consentimiento al unirse con número verificado';
+END $$;
+
+
+-- P235. 2FA · activar: iniciar guarda el secreto sin confirmar; confirmar activa y guarda 10 códigos
+--       de respaldo; con la 2FA activa no se puede iniciar otra vez (NX007); la cuenta lo refleja.
+DO $$ DECLARE u uuid := pg_temp.usuario('Ana Dos Pasos'); e jsonb; ok int := 0; BEGIN
+  e := proc_2fa_iniciar(u, 'cifrado-prueba');
+  IF (e->>'activa')::boolean OR fn_2fa_activa(u) THEN RAISE EXCEPTION 'FALLO P235: activa antes de confirmar'; END IF;
+  BEGIN PERFORM proc_2fa_confirmar(u, 100, ARRAY['a','b']); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  e := proc_2fa_confirmar(u, 100, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  IF NOT (e->>'activa')::boolean OR (e->>'codigos_restantes')::int <> 10 THEN RAISE EXCEPTION 'FALLO P235: %', e; END IF;
+  BEGIN PERFORM proc_2fa_iniciar(u, 'otro'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF NOT (proc_auth_cuenta(u)->>'dos_pasos')::boolean THEN RAISE EXCEPTION 'FALLO P235: cuenta sin dos_pasos'; END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P235: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P235: activar la verificación en dos pasos';
+END $$;
+
+-- P236. 2FA · inicio de sesión: con la 2FA activa, la contraseña correcta devuelve «2fa» y un desafío,
+--       sin sesión; el segundo paso con un código válido crea la sesión y borra el desafío.
+DO $$ DECLARE u uuid := pg_temp.usuario('Beto Dos Pasos'); r jsonb; d jsonb; BEGIN
+  UPDATE usuarios SET hash_contrasena = '$argon2id$prueba' WHERE id = u;
+  PERFORM proc_2fa_iniciar(u, 'cifrado');
+  PERFORM proc_2fa_confirmar(u, 100, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  r := proc_auth_entrar(u, true, sha256('desafio-P236'), '127.0.0.1', 'prueba', now() + interval '1 day');
+  IF r->>'estado' <> '2fa' OR EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u) THEN RAISE EXCEPTION 'FALLO P236: %', r; END IF;
+  d := proc_2fa_desafio(sha256('desafio-P236'));
+  IF d->>'usuario_id' <> u::text OR d->>'secreto_cifrado' <> 'cifrado' OR (d->>'ultimo_paso')::bigint <> 100 THEN
+    RAISE EXCEPTION 'FALLO P236: desafío %', d;
+  END IF;
+  r := proc_2fa_completar(sha256('desafio-P236'), 101, NULL, sha256('sesion-P236'), '127.0.0.1', 'prueba', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR NOT EXISTS (SELECT 1 FROM sesiones WHERE usuario_id = u AND token_hash = sha256('sesion-P236'))
+     OR EXISTS (SELECT 1 FROM desafios_2fa WHERE usuario_id = u) THEN
+    RAISE EXCEPTION 'FALLO P236: %', r;
+  END IF;
+  RAISE NOTICE 'OK P236: contraseña + segundo paso';
+END $$;
+
+-- P237. 2FA · un código no sirve dos veces (paso igual o anterior), el código de respaldo es de un
+--       solo uso, y al quinto fallo el desafío se borra («agotado»).
+DO $$ DECLARE u uuid := pg_temp.usuario('Caro Dos Pasos'); r jsonb; i int; ok int := 0; BEGIN
+  PERFORM proc_2fa_iniciar(u, 'cifrado');
+  PERFORM proc_2fa_confirmar(u, 200, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  PERFORM fn_2fa_crear_desafio(u, sha256('desafio-P237a'), 'contrasena');
+  r := proc_2fa_completar(sha256('desafio-P237a'), 200, NULL, sha256('s1'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'fallo' THEN RAISE EXCEPTION 'FALLO P237: paso repetido %', r; END IF;
+  r := proc_2fa_completar(sha256('desafio-P237a'), NULL, 'h3', sha256('s2'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' THEN RAISE EXCEPTION 'FALLO P237: respaldo %', r; END IF;
+  PERFORM fn_2fa_crear_desafio(u, sha256('desafio-P237b'), 'contrasena');
+  FOR i IN 1..5 LOOP
+    r := proc_2fa_completar(sha256('desafio-P237b'), NULL, 'h3', sha256('s3'), '', '', now() + interval '1 day');
+  END LOOP;
+  IF r->>'estado' <> 'agotado' OR EXISTS (SELECT 1 FROM desafios_2fa WHERE token_hash = sha256('desafio-P237b')) THEN
+    RAISE EXCEPTION 'FALLO P237: agotado %', r;
+  END IF;
+  BEGIN PERFORM proc_2fa_desafio(sha256('desafio-P237b')); EXCEPTION WHEN SQLSTATE 'NX011' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P237: desafío borrado seguía vivo'; END IF;
+  RAISE NOTICE 'OK P237: sin reutilizar códigos y tope de intentos';
+END $$;
+
+-- P238. 2FA · desactivar y regenerar respaldo piden un factor válido (NX010 si no); al desactivar se
+--       borran secreto, códigos y desafíos.
+DO $$ DECLARE u uuid := pg_temp.usuario('Dani Dos Pasos'); e jsonb; ok int := 0; BEGIN
+  PERFORM proc_2fa_iniciar(u, 'cifrado');
+  PERFORM proc_2fa_confirmar(u, 300, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  BEGIN PERFORM proc_2fa_respaldo_regenerar(u, 300, NULL, ARRAY(SELECT 'n' || g FROM generate_series(1, 10) g));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  e := proc_2fa_respaldo_regenerar(u, 301, NULL, ARRAY(SELECT 'n' || g FROM generate_series(1, 10) g));
+  IF (e->>'codigos_restantes')::int <> 10 OR EXISTS (SELECT 1 FROM codigos_respaldo_2fa WHERE usuario_id = u AND hash_codigo = 'h1') THEN
+    RAISE EXCEPTION 'FALLO P238: regenerar %', e;
+  END IF;
+  BEGIN PERFORM proc_2fa_desactivar(u, NULL, 'no-existe'); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  e := proc_2fa_desactivar(u, NULL, 'n1');
+  IF (e->>'activa')::boolean OR EXISTS (SELECT 1 FROM credenciales_2fa WHERE usuario_id = u)
+     OR EXISTS (SELECT 1 FROM codigos_respaldo_2fa WHERE usuario_id = u) THEN
+    RAISE EXCEPTION 'FALLO P238: desactivar %', e;
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P238: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P238: desactivar y regenerar con segundo factor';
+END $$;
+
+-- P239. Google · entrar crea la cuenta con el correo verificado (si Google lo verificó) y la sesión;
+--       la segunda vez entra a la misma cuenta, sin crear otra.
+DO $$ DECLARE r jsonb; v_id uuid; BEGIN
+  r := proc_auth_google('sub-P239', 'Nueva.Google@P239.test', true, 'Gina Google', NULL,
+                        sha256('s-P239a'), '127.0.0.1', 'prueba', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR NOT (r->>'nuevo')::boolean THEN RAISE EXCEPTION 'FALLO P239: %', r; END IF;
+  SELECT id INTO v_id FROM usuarios WHERE correo = 'nueva.google@p239.test'
+     AND google_sub = 'sub-P239' AND correo_verificado_en IS NOT NULL AND hash_contrasena IS NULL;
+  IF v_id IS NULL OR NOT EXISTS (SELECT 1 FROM sesiones WHERE token_hash = sha256('s-P239a')) THEN
+    RAISE EXCEPTION 'FALLO P239: cuenta o sesión';
+  END IF;
+  r := proc_auth_google('sub-P239', 'nueva.google@p239.test', true, 'Gina', NULL,
+                        sha256('s-P239b'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR (r->>'nuevo')::boolean OR (r->'usuario'->>'id')::uuid <> v_id THEN
+    RAISE EXCEPTION 'FALLO P239: segunda vez %', r;
+  END IF;
+  IF (proc_auth_cuenta(v_id)->>'google')::boolean IS NOT TRUE THEN RAISE EXCEPTION 'FALLO P239: cuenta sin google'; END IF;
+  RAISE NOTICE 'OK P239: entrar con Google crea la cuenta verificada';
+END $$;
+
+-- P240. Google · una cuenta existente con el correo SIN verificar no se vincula sola (NX012); con el
+--       correo verificado sí. Con sesión se vincula aunque no esté verificada, y el correo queda
+--       verificado si coincide. Un sub de Google no se puede vincular a dos cuentas.
+DO $$ DECLARE a uuid; b uuid; r jsonb; ok int := 0; BEGIN
+  INSERT INTO usuarios (correo, nombre, hash_contrasena) VALUES ('sinverif@p240.test', 'Sin Verificar', '$argon2id$x') RETURNING id INTO a;
+  INSERT INTO usuarios (correo, nombre, hash_contrasena, correo_verificado_en) VALUES ('verif@p240.test', 'Verificada', '$argon2id$x', now()) RETURNING id INTO b;
+  BEGIN PERFORM proc_auth_google('sub-P240a', 'sinverif@p240.test', true, 'X', NULL, sha256('s-P240-1'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF (SELECT google_sub FROM usuarios WHERE id = a) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P240: se vinculó sola'; END IF;
+  r := proc_auth_google('sub-P240b', 'verif@p240.test', true, 'X', NULL, sha256('s-P240-2'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'ok' OR (SELECT google_sub FROM usuarios WHERE id = b) <> 'sub-P240b' THEN RAISE EXCEPTION 'FALLO P240: verificada %', r; END IF;
+  r := proc_auth_google('sub-P240a', 'sinverif@p240.test', true, 'X', a, sha256('s-P240-3'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> 'vinculada' OR (SELECT correo_verificado_en FROM usuarios WHERE id = a) IS NULL THEN
+    RAISE EXCEPTION 'FALLO P240: vincular con sesión %', r;
+  END IF;
+  BEGIN PERFORM proc_auth_google('sub-P240a', 'otra@p240.test', true, 'X', b, sha256('s-P240-4'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P240: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P240: vincular Google sin apoderarse de cuentas';
+END $$;
+
+-- P241. Google · con la 2FA activa pide el segundo paso (desafío «google», sin sesión); desvincular
+--       exige contraseña (NX007 sin ella); proc_2fa_verificar consume un factor válido.
+DO $$ DECLARE r jsonb; v uuid; ok int := 0; BEGIN
+  r := proc_auth_google('sub-P241', 'dos@p241.test', true, 'Dos Factores', NULL, sha256('s-P241a'), '', '', now() + interval '1 day');
+  v := (r->'usuario'->>'id')::uuid;
+  PERFORM proc_2fa_iniciar(v, 'cifrado');
+  PERFORM proc_2fa_confirmar(v, 500, ARRAY(SELECT 'h' || g FROM generate_series(1, 10) g));
+  r := proc_auth_google('sub-P241', 'dos@p241.test', true, 'Dos Factores', NULL, sha256('s-P241b'), '', '', now() + interval '1 day');
+  IF r->>'estado' <> '2fa' OR EXISTS (SELECT 1 FROM sesiones WHERE token_hash = sha256('s-P241b'))
+     OR (SELECT metodo FROM desafios_2fa WHERE token_hash = sha256('s-P241b')) <> 'google' THEN
+    RAISE EXCEPTION 'FALLO P241: %', r;
+  END IF;
+  BEGIN PERFORM proc_auth_google_desvincular(v); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF (proc_2fa_verificar(v, 500, NULL)->>'valido')::boolean THEN RAISE EXCEPTION 'FALLO P241: paso repetido valió'; END IF;
+  IF NOT (proc_2fa_verificar(v, NULL, 'h4')->>'valido')::boolean THEN RAISE EXCEPTION 'FALLO P241: respaldo no valió'; END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P241: desvincular sin contraseña'; END IF;
+  RAISE NOTICE 'OK P241: Google con dos pasos y desvincular';
+END $$;
+
+-- ===========================================================================================
+-- Contacto (0039, docs/12_Plan_Contacto.md). Auxiliar: una persona con un permiso de sistema.
+-- ===========================================================================================
+CREATE FUNCTION pg_temp.con_permiso(p_nombre text, p_permiso text) RETURNS uuid AS $$
+DECLARE v uuid;
+BEGIN
+  v := pg_temp.usuario(p_nombre);
+  -- Desde 0040 el panel es solo de cuentas de soporte con verificación en dos pasos (docs/15).
+  IF p_permiso IS NOT NULL THEN
+    UPDATE usuarios SET tipo_cuenta = 'soporte' WHERE id = v;
+    INSERT INTO credenciales_2fa (usuario_id, secreto_cifrado, confirmado_en) VALUES (v, 'x', now());
+    INSERT INTO permisos_sistema (usuario_id, permiso) VALUES (v, p_permiso);
+  END IF;
+  RETURN v;
+END $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION pg_temp.mensaje_contacto(p_asunto text DEFAULT 'No carga mi tablero') RETURNS uuid AS $$
+  SELECT (proc_contacto_crear(jsonb_build_object('tipo', 'error', 'nombre', 'Ana Pérez', 'correo', 'Ana@Correo.test',
+            'asunto', p_asunto, 'mensaje', 'Al abrir el tablero aparece en blanco desde ayer.',
+            'contexto', jsonb_build_object('url', '/app/e/1')),
+          NULL, encode(sha256(convert_to('token-' || p_asunto, 'UTF8')), 'hex'), 'v1.cifrado', 'iphash', 'Firefox', 'equipo@nexo.test')->>'id')::uuid;
+$$ LANGUAGE sql;
+
+-- P242. Contacto · crear: folio NX-AAAA-NNNNNN, evento «creado», aviso al equipo y confirmación
+--       (con el token cifrado) en el outbox; correo en minúsculas; con sesión toma nombre y correo
+--       de la cuenta; datos inválidos → NX010.
+DO $$ DECLARE v uuid := pg_temp.usuario('Rita Registrada'); r jsonb; v_id uuid; ok int := 0; BEGIN
+  v_id := pg_temp.mensaje_contacto('P242 crear');
+  SELECT jsonb_build_object('folio', folio, 'correo', correo::text) INTO r FROM contacto_mensajes WHERE contacto_mensajes.id = v_id;
+  IF r->>'folio' !~ '^NX-\d{4}-\d{6}$' OR r->>'correo' <> 'ana@correo.test' THEN RAISE EXCEPTION 'FALLO P242: %', r; END IF;
+  IF (SELECT count(*) FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento = 'creado') <> 1
+     OR (SELECT string_agg(plantilla || ':' || destinatario, ',' ORDER BY plantilla) FROM contacto_outbox WHERE mensaje_id = v_id)
+        <> 'aviso_equipo:equipo@nexo.test,confirmacion_remitente:ana@correo.test'
+     OR (SELECT datos->>'token_cifrado' FROM contacto_outbox WHERE mensaje_id = v_id AND plantilla = 'confirmacion_remitente') <> 'v1.cifrado' THEN
+    RAISE EXCEPTION 'FALLO P242: evento u outbox';
+  END IF;
+  r := proc_contacto_crear('{"tipo":"duda","nombre":"Otro","correo":"otro@x.test","asunto":"Pregunta","mensaje":"¿Cómo invito a alguien?"}',
+                           v, 'h-P242', 'c', NULL, NULL, NULL);
+  IF (SELECT nombre || '|' || (usuario_id = v)::text FROM contacto_mensajes WHERE folio = r->>'folio') <> 'Rita Registrada|true'
+     OR (SELECT count(*) FROM contacto_outbox o JOIN contacto_mensajes m ON m.id = o.mensaje_id WHERE m.folio = r->>'folio') <> 1 THEN
+    RAISE EXCEPTION 'FALLO P242: con sesión';
+  END IF;
+  BEGIN PERFORM proc_contacto_crear('{"tipo":"queja","nombre":"X Y","correo":"x@y.test","asunto":"Hola","mensaje":"mensaje largo suficiente"}', NULL, 'h', 'c', NULL, NULL, NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_contacto_crear('{"tipo":"duda","nombre":"X Y","correo":"x@y.test","asunto":"Hola","mensaje":"corto"}', NULL, 'h', 'c', NULL, NULL, NULL);
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P242: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P242: proc_contacto_crear';
+END $$;
+
+-- P243. Contacto · límites: por IP 3 por hora (el 4.º es NX013 con retry_after) y por correo 3 por día.
+DO $$ DECLARE i int; ok int := 0; d text; BEGIN
+  FOR i IN 1..3 LOOP PERFORM proc_contacto_verificar_limite('ip-P243', 'correo-P243-' || i); END LOOP;
+  BEGIN PERFORM proc_contacto_verificar_limite('ip-P243', 'correo-P243-x');
+  EXCEPTION WHEN SQLSTATE 'NX013' THEN GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL; ok := ok + 1; END;
+  IF (d::jsonb->>'retry_after')::int NOT BETWEEN 1 AND 3600 THEN RAISE EXCEPTION 'FALLO P243: retry_after %', d; END IF;
+  FOR i IN 1..3 LOOP PERFORM proc_contacto_verificar_limite('ip-P243-' || i, 'correo-P243-mismo'); END LOOP;
+  BEGIN PERFORM proc_contacto_verificar_limite('ip-P243-4', 'correo-P243-mismo');
+  EXCEPTION WHEN SQLSTATE 'NX013' THEN ok := ok + 1; END;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P243: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P243: límites por IP y por correo';
+END $$;
+
+-- P244. Contacto · permisos: sin permiso NX005; con «ver» lista pero no gestiona; «gestionar» incluye ver.
+DO $$ DECLARE nadie uuid := pg_temp.con_permiso('Sin Permiso', NULL); ve uuid := pg_temp.con_permiso('Solo Ve', 'contacto.ver');
+               ge uuid := pg_temp.con_permiso('Gestiona', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P244'); ok int := 0; BEGIN
+  BEGIN PERFORM proc_contacto_listar(nadie, '{}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  PERFORM proc_contacto_listar(ve, '{}');
+  BEGIN PERFORM proc_contacto_cambiar_estado(ve, v_id, 'en_revision'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF NOT (proc_contacto_permisos(ge)->>'ver')::boolean OR (proc_contacto_permisos(ve)->>'gestionar')::boolean THEN
+    RAISE EXCEPTION 'FALLO P244: permisos %', proc_contacto_permisos(ge);
+  END IF;
+  PERFORM proc_contacto_obtener(ge, v_id);
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P244: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P244: permisos de sistema del panel';
+END $$;
+
+-- P245. Contacto · matriz de transiciones: las válidas pasan, las inválidas son NX007; atendido_en se
+--       fija una vez; resuelto_en se fija al resolver y se limpia al reabrir.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Gestor Estados', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P245');
+               a1 timestamptz; ok int := 0; m jsonb; BEGIN
+  BEGIN PERFORM proc_contacto_cambiar_estado(ge, v_id, 'esperando_usuario'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  PERFORM proc_contacto_cambiar_estado(ge, v_id, 'en_revision');
+  SELECT atendido_en INTO a1 FROM contacto_mensajes WHERE contacto_mensajes.id = v_id;
+  PERFORM proc_contacto_cambiar_estado(ge, v_id, 'esperando_usuario');
+  m := proc_contacto_cambiar_estado(ge, v_id, 'resuelto');
+  IF m->>'resuelto_en' IS NULL OR (SELECT atendido_en FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) <> a1 THEN
+    RAISE EXCEPTION 'FALLO P245: fechas %', m;
+  END IF;
+  BEGIN PERFORM proc_contacto_cambiar_estado(ge, v_id, 'descartado'); EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  m := proc_contacto_cambiar_estado(ge, v_id, 'en_revision');
+  IF m->>'resuelto_en' IS NOT NULL THEN RAISE EXCEPTION 'FALLO P245: reabrir no limpió resuelto_en'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento = 'cambio_estado'
+                   AND metadatos = '{"de": "resuelto", "a": "en_revision"}'::jsonb) THEN
+    RAISE EXCEPTION 'FALLO P245: evento sin de/a';
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P245: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P245: transiciones de estado';
+END $$;
+
+-- P246. Contacto · responder y seguimiento: responder desde «nuevo» lo pasa a «en revisión» y luego al
+--       estado pedido, encola el correo al remitente; el seguimiento con el token correcto ve solo las
+--       respuestas (nunca la nota interna); token malo y folio inexistente dan el MISMO error.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Gestor Respuestas', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P246');
+               f text; s jsonb; e1 text; e2 text; BEGIN
+  SELECT folio INTO f FROM contacto_mensajes WHERE contacto_mensajes.id = v_id;
+  PERFORM proc_contacto_agregar_nota(ge, v_id, 'Nota secreta del equipo');
+  PERFORM proc_contacto_responder(ge, v_id, 'Ya lo revisamos: borra la caché.', 'esperando_usuario');
+  IF (SELECT estado FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) <> 'esperando_usuario'
+     OR NOT EXISTS (SELECT 1 FROM contacto_outbox WHERE mensaje_id = v_id AND plantilla = 'respuesta_remitente') THEN
+    RAISE EXCEPTION 'FALLO P246: responder';
+  END IF;
+  s := proc_contacto_seguimiento(lower(f), encode(sha256(convert_to('token-P246', 'UTF8')), 'hex'));
+  IF jsonb_array_length(s->'respuestas') <> 1 OR s::text LIKE '%Nota secreta%' OR s ? 'correo' THEN
+    RAISE EXCEPTION 'FALLO P246: seguimiento %', s;
+  END IF;
+  BEGIN PERFORM proc_contacto_seguimiento(f, 'malo'); EXCEPTION WHEN SQLSTATE 'NX006' THEN GET STACKED DIAGNOSTICS e1 = MESSAGE_TEXT; END;
+  BEGIN PERFORM proc_contacto_seguimiento('NX-1999-999999', 'malo'); EXCEPTION WHEN SQLSTATE 'NX006' THEN GET STACKED DIAGNOSTICS e2 = MESSAGE_TEXT; END;
+  IF e1 IS NULL OR e1 <> e2 THEN RAISE EXCEPTION 'FALLO P246: errores distintos «%» «%»', e1, e2; END IF;
+  RAISE NOTICE 'OK P246: responder y seguimiento público';
+END $$;
+
+-- P247. Contacto · outbox: tomar marca «procesando» y suma el intento; un fallo reprograma con espera;
+--       al quinto intento queda «fallido»; reintentar lo devuelve a pendiente; ok borra los datos;
+--       los «procesando» de más de 10 min se recuperan.
+DO $$ DECLARE v_id uuid := pg_temp.mensaje_contacto('P247'); o uuid; t jsonb; r jsonb; i int; BEGIN
+  UPDATE contacto_outbox SET proximo_intento = now() + interval '1 day' WHERE estado = 'pendiente' AND mensaje_id <> v_id;
+  SELECT x.id INTO o FROM contacto_outbox x WHERE mensaje_id = v_id AND plantilla = 'confirmacion_remitente';
+  t := proc_contacto_outbox_tomar(50);
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(t) e WHERE (e->>'id')::uuid = o AND (e->>'intentos')::int = 1 AND e->>'folio' LIKE 'NX-%') THEN
+    RAISE EXCEPTION 'FALLO P247: tomar %', t;
+  END IF;
+  r := proc_contacto_outbox_resultado(o, false, 'Resend 500');
+  IF r->>'estado' <> 'pendiente' OR (SELECT proximo_intento FROM contacto_outbox WHERE contacto_outbox.id = o) < now() + interval '50 seconds' THEN
+    RAISE EXCEPTION 'FALLO P247: backoff %', r;
+  END IF;
+  FOR i IN 2..5 LOOP
+    UPDATE contacto_outbox SET proximo_intento = now() - interval '1 second' WHERE contacto_outbox.id = o;
+    PERFORM proc_contacto_outbox_tomar(50);
+    r := proc_contacto_outbox_resultado(o, false, 'Resend 500');
+  END LOOP;
+  IF r->>'estado' <> 'fallido' THEN RAISE EXCEPTION 'FALLO P247: no quedó fallido %', r; END IF;
+  PERFORM proc_contacto_outbox_reintentar(pg_temp.con_permiso('Reintenta', 'contacto.gestionar'), v_id);
+  PERFORM proc_contacto_outbox_tomar(50);
+  UPDATE contacto_outbox SET proximo_intento = now() - interval '11 minutes' WHERE contacto_outbox.id = o;
+  t := proc_contacto_outbox_tomar(50);
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(t) e WHERE (e->>'id')::uuid = o) THEN RAISE EXCEPTION 'FALLO P247: no se recuperó'; END IF;
+  r := proc_contacto_outbox_resultado(o, true, NULL);
+  IF r->>'estado' <> 'enviado' OR (SELECT datos FROM contacto_outbox WHERE contacto_outbox.id = o) <> '{}'::jsonb THEN
+    RAISE EXCEPTION 'FALLO P247: ok %', r;
+  END IF;
+  RAISE NOTICE 'OK P247: outbox con reintentos y recuperación';
+END $$;
+
+-- P248. Contacto · asignar (solo a quien gestiona; «nuevo» pasa a «en revisión»), bandeja con
+--       filtros y búsqueda en español, exportar y métricas.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Asigna', 'contacto.gestionar'); otro uuid := pg_temp.con_permiso('No Gestiona', 'contacto.ver');
+               v_id uuid := pg_temp.mensaje_contacto('Problema con tableros P248'); l jsonb; ok int := 0; met jsonb; BEGIN
+  BEGIN PERFORM proc_contacto_asignar(ge, v_id, otro); EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  PERFORM proc_contacto_asignar(ge, v_id, ge);
+  IF (SELECT estado FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) <> 'en_revision' THEN RAISE EXCEPTION 'FALLO P248: asignar no pasó a revisión'; END IF;
+  l := proc_contacto_listar(ge, '{"asignado":"yo","q":"tablero"}');
+  IF (l->>'total')::int < 1 OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(l->'datos') d WHERE (d->>'id')::uuid = v_id AND d ? 'extracto' AND NOT d ? 'mensaje') THEN
+    RAISE EXCEPTION 'FALLO P248: bandeja %', l;
+  END IF;
+  l := proc_contacto_listar(ge, jsonb_build_object('q', (SELECT folio FROM contacto_mensajes WHERE contacto_mensajes.id = v_id)));
+  IF (l->>'total')::int <> 1 THEN RAISE EXCEPTION 'FALLO P248: buscar por folio %', l->>'total'; END IF;
+  IF (proc_contacto_listar(ge, '{"estado":["descartado"],"asignado":"yo"}')->>'total')::int <> 0 THEN RAISE EXCEPTION 'FALLO P248: filtro estado'; END IF;
+  IF jsonb_array_length(proc_contacto_exportar(ge, '{"asignado":"yo"}')) < 1 THEN RAISE EXCEPTION 'FALLO P248: exportar'; END IF;
+  met := proc_contacto_metricas(ge, now() - interval '1 day', now() + interval '1 day');
+  IF (met->>'total')::int < 1 OR NOT met ? 'por_tipo' OR NOT met ? 'primera_respuesta_horas' THEN RAISE EXCEPTION 'FALLO P248: métricas %', met; END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P248: asignar a quien no gestiona'; END IF;
+  RAISE NOTICE 'OK P248: asignar, bandeja, exportar y métricas';
+END $$;
+
+-- P249. Contacto · anonimizar borra nombre, correo, mensaje y contenido de eventos y cancela envíos;
+--       purgar anonimiza lo resuelto de hace más de N meses.
+DO $$ DECLARE ge uuid := pg_temp.con_permiso('Anonimiza', 'contacto.gestionar'); v_id uuid := pg_temp.mensaje_contacto('P249a');
+               viejo uuid := pg_temp.mensaje_contacto('P249b'); r jsonb; BEGIN
+  PERFORM proc_contacto_responder(ge, v_id, 'Respuesta con datos', NULL);
+  PERFORM proc_contacto_anonimizar(ge, v_id);
+  IF (SELECT nombre || correo::text || mensaje FROM contacto_mensajes WHERE contacto_mensajes.id = v_id) LIKE '%Ana%'
+     OR EXISTS (SELECT 1 FROM contacto_eventos WHERE mensaje_id = v_id AND tipo_evento <> 'sistema' AND contenido LIKE '%datos%')
+     OR EXISTS (SELECT 1 FROM contacto_outbox WHERE mensaje_id = v_id AND estado = 'pendiente') THEN
+    RAISE EXCEPTION 'FALLO P249: anonimizar';
+  END IF;
+  UPDATE contacto_mensajes SET estado = 'resuelto', resuelto_en = now() - interval '13 months' WHERE contacto_mensajes.id = viejo;
+  r := proc_contacto_purgar(12);
+  IF (r->>'anonimizados')::int < 1 OR NOT (SELECT anonimizado FROM contacto_mensajes WHERE contacto_mensajes.id = viejo) THEN
+    RAISE EXCEPTION 'FALLO P249: purgar %', r;
+  END IF;
+  RAISE NOTICE 'OK P249: anonimizar y purgar';
+END $$;
+
+-- ===========================================================================================
+-- Rol de soporte (0040, docs/15_Rol_Soporte.md)
+-- ===========================================================================================
+
+-- P250. Soporte · una cuenta de soporte no se une a equipos, no los crea y no tiene tareas (NX005).
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Sin Equipo', 'contacto.ver'); e uuid := pg_temp.equipo_con(1); ok int := 0; c text; BEGIN
+  c := proc_invitacion_crear(pg_temp.lider(e), e, '{"rol_destino":"integrante"}')->>'codigo';
+  BEGIN PERFORM proc_invitacion_aceptar(s, c); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN INSERT INTO equipos (nombre, creado_por) VALUES ('Equipo de soporte', s); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN INSERT INTO tareas (dueno_id, codigo, titulo) VALUES (s, 1, 'Tarea'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P250: % de 3 bloqueos', ok; END IF;
+  IF fn_usuario_json(s)->>'tipo_cuenta' <> 'soporte' THEN RAISE EXCEPTION 'FALLO P250: tipo_cuenta en la sesión'; END IF;
+  RAISE NOTICE 'OK P250: soporte sin equipos ni tareas';
+END $$;
+
+-- P251. Soporte · el panel exige cuenta de soporte Y verificación en dos pasos: una persona con el
+--       permiso no entra; una de soporte sin 2FA recibe «dos_pasos_requerido».
+DO $$ DECLARE p uuid := pg_temp.usuario('Persona Con Permiso'); s uuid := pg_temp.usuario('Soporte Sin 2FA'); h text; ok int := 0; BEGIN
+  INSERT INTO permisos_sistema (usuario_id, permiso) VALUES (p, 'contacto.gestionar'), (s, 'contacto.gestionar');
+  UPDATE usuarios SET tipo_cuenta = 'soporte' WHERE id = s;
+  BEGIN PERFORM proc_contacto_listar(p, '{}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_contacto_listar(s, '{}'); EXCEPTION WHEN SQLSTATE 'NX005' THEN GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT; END;
+  IF h <> 'dos_pasos_requerido' THEN RAISE EXCEPTION 'FALLO P251: sin 2FA dio %', h; END IF;
+  INSERT INTO credenciales_2fa (usuario_id, secreto_cifrado, confirmado_en) VALUES (s, 'x', now());
+  PERFORM proc_contacto_listar(s, '{}');
+  IF (proc_contacto_permisos(p)->>'ver')::boolean OR NOT (proc_contacto_permisos(s)->>'soporte')::boolean THEN
+    RAISE EXCEPTION 'FALLO P251: permisos %', proc_contacto_permisos(p);
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P251: la persona entró al panel'; END IF;
+  RAISE NOTICE 'OK P251: panel solo para soporte con 2FA';
+END $$;
+
+-- P252. Soporte · no entra ni se vincula con Google (NX005).
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Google', 'contacto.ver'); ok int := 0; v_correo text; BEGIN
+  SELECT correo INTO v_correo FROM usuarios WHERE id = s;
+  UPDATE usuarios SET correo_verificado_en = now() WHERE id = s;
+  BEGIN PERFORM proc_auth_google('sub-P252', v_correo, true, 'X', NULL, sha256('s-P252a'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_auth_google('sub-P252b', 'otro-p252@x.test', true, 'X', s, sha256('s-P252b'), '', '', now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  IF ok <> 2 OR (SELECT google_sub FROM usuarios WHERE id = s) IS NOT NULL THEN RAISE EXCEPTION 'FALLO P252: % de 2', ok; END IF;
+  RAISE NOTICE 'OK P252: soporte sin Google';
+END $$;
+
+-- P253. Soporte · ayuda con cuentas: buscar por correo exacto (sin contenido de equipos; no encuentra
+--       cuentas de soporte), desbloquear y reenviar la verificación; todo queda en la bitácora.
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Ayuda', 'cuentas.ayudar'); otra uuid := pg_temp.con_permiso('Otra Soporte', 'contacto.ver');
+               p uuid := pg_temp.usuario('Persona Bloqueada'); v_correo text; r jsonb; ok int := 0; BEGIN
+  UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = now() + interval '10 minutes' WHERE id = p;
+  SELECT correo INTO v_correo FROM usuarios WHERE id = p;
+  r := proc_soporte_buscar_cuenta(s, upper(v_correo))->'cuenta';
+  IF r->>'bloqueada_hasta' IS NULL OR (r->>'correo_verificado')::boolean OR r ? 'tareas' THEN RAISE EXCEPTION 'FALLO P253: %', r; END IF;
+  IF (proc_soporte_buscar_cuenta(s, 'parte')->>'encontrada')::boolean THEN RAISE EXCEPTION 'FALLO P253: búsqueda parcial'; END IF;
+  IF (proc_soporte_buscar_cuenta(s, (SELECT correo FROM usuarios WHERE id = otra))->>'encontrada')::boolean THEN
+    RAISE EXCEPTION 'FALLO P253: encontró otra cuenta de soporte';
+  END IF;
+  r := proc_soporte_desbloquear(s, p);
+  IF r->>'bloqueada_hasta' IS NOT NULL THEN RAISE EXCEPTION 'FALLO P253: sigue bloqueada'; END IF;
+  r := proc_soporte_reenviar_verificacion(s, p, sha256('ver-P253'), now() + interval '1 day');
+  IF NOT EXISTS (SELECT 1 FROM tokens_verificacion WHERE usuario_id = p AND token_hash = sha256('ver-P253') AND tipo = 'verificar_correo') THEN
+    RAISE EXCEPTION 'FALLO P253: sin token';
+  END IF;
+  UPDATE usuarios SET correo_verificado_en = now() WHERE id = p;
+  BEGIN PERFORM proc_soporte_reenviar_verificacion(s, p, sha256('ver-P253b'), now() + interval '1 day');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF (SELECT count(*) FROM soporte_bitacora WHERE actor_id = s) <> 5 THEN
+    RAISE EXCEPTION 'FALLO P253: bitácora %', (SELECT count(*) FROM soporte_bitacora WHERE actor_id = s);
+  END IF;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P253: reenviar con el correo verificado no se rechazó'; END IF;
+  RAISE NOTICE 'OK P253: ayuda con cuentas y bitácora';
+END $$;
+
+-- P254. Soporte · cifras de la plataforma sin datos personales (no cuenta las cuentas de soporte).
+DO $$ DECLARE s uuid := pg_temp.con_permiso('Soporte Cifras', 'contacto.ver'); r jsonb; b jsonb; BEGIN
+  r := proc_soporte_plataforma(s);
+  IF (r->>'cuentas')::int <> (SELECT count(*) FROM usuarios WHERE eliminado_en IS NULL AND tipo_cuenta = 'persona')
+     OR jsonb_array_length(r->'altas_por_semana') <> 8 OR r::text LIKE '%@%' THEN
+    RAISE EXCEPTION 'FALLO P254: %', r;
+  END IF;
+  RAISE NOTICE 'OK P254: cifras de la plataforma';
+END $$;
+
+-- P255. Soporte · alta de otra cuenta de soporte: solo con «soporte.alta»; un correo con cuenta no se
+--       convierte (NX012); la nueva no tiene contraseña, tiene los permisos y un enlace de un solo uso.
+DO $$ DECLARE sin uuid := pg_temp.con_permiso('Soporte Sin Alta', 'contacto.gestionar'); con uuid := pg_temp.con_permiso('Soporte Alta', 'soporte.alta');
+               r jsonb; ok int := 0; v uuid; BEGIN
+  BEGIN PERFORM proc_soporte_crear_cuenta(sin, 'nueva-p255@soporte.test', 'Nueva Soporte', false, sha256('t-P255a'), now() + interval '3 days');
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_soporte_crear_cuenta(con, (SELECT correo FROM usuarios WHERE id = sin), 'Ya Existe', false, sha256('t-P255b'), now() + interval '3 days');
+  EXCEPTION WHEN SQLSTATE 'NX012' THEN ok := ok + 1; END;
+  r := proc_soporte_crear_cuenta(con, 'Nueva-P255@Soporte.test', 'Nueva Soporte', false, sha256('t-P255c'), now() + interval '3 days');
+  v := (r->>'id')::uuid;
+  IF (SELECT tipo_cuenta || '|' || (hash_contrasena IS NULL)::text FROM usuarios WHERE id = v) <> 'soporte|true'
+     OR (SELECT string_agg(permiso, ',' ORDER BY permiso) FROM permisos_sistema WHERE usuario_id = v) <> 'contacto.gestionar,contacto.ver,cuentas.ayudar'
+     OR NOT EXISTS (SELECT 1 FROM tokens_verificacion WHERE usuario_id = v AND tipo = 'restablecer_contrasena' AND token_hash = sha256('t-P255c'))
+     OR NOT EXISTS (SELECT 1 FROM soporte_bitacora WHERE actor_id = con AND accion = 'crear_soporte' AND usuario_id = v) THEN
+    RAISE EXCEPTION 'FALLO P255: %', r;
+  END IF;
+  IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P255: % de 2 rechazos', ok; END IF;
+  RAISE NOTICE 'OK P255: alta de cuentas de soporte';
+END $$;

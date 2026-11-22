@@ -69,5 +69,71 @@ export interface CuentaAuth {
   correo: string;
   correo_verificado: boolean;
   tiene_contrasena: boolean;
+  /** AUTH-07: verificación en dos pasos activa. */
+  dos_pasos: boolean;
+  /** AUTH-07: cuenta de Google vinculada. */
+  google: boolean;
   sesiones_activas: number;
 }
+
+// --- AUTH-07 · Verificación en dos pasos (docs/13, 1.2) -----------------------------------------
+
+/** Código del segundo paso: 6 dígitos de la app o un código de respaldo (XXXX-XXXX). */
+export const esquemaCodigoDosPasos = z.object({
+  codigo: z
+    .string()
+    .trim()
+    .regex(
+      /^(\d{6}|[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})$/,
+      'Escribe los 6 dígitos o un código de respaldo.',
+    ),
+});
+export type CodigoDosPasos = z.infer<typeof esquemaCodigoDosPasos>;
+
+/** Segundo paso del inicio de sesión: el desafío que devolvió «entrar» y el código. */
+export const esquemaSegundoPaso = esquemaCodigoDosPasos.extend({
+  desafio: z.string().min(20).max(200),
+});
+export type SegundoPaso = z.infer<typeof esquemaSegundoPaso>;
+
+export interface EstadoDosPasos {
+  activa: boolean;
+  desde: string | null;
+  codigos_restantes: number;
+}
+
+/** Al empezar a activar: el secreto (para escribirlo a mano), el enlace otpauth y su QR en SVG. */
+export interface InicioDosPasos {
+  secreto: string;
+  uri: string;
+  qr_svg: string;
+}
+
+/** Al confirmar o regenerar: los 10 códigos de respaldo, que solo se muestran esta vez. */
+export interface CodigosRespaldo {
+  estado: EstadoDosPasos;
+  codigos: string[];
+}
+
+/** Respuesta de «entrar» cuando falta el segundo paso. */
+export interface PideDosPasos {
+  dos_pasos: true;
+  desafio: string;
+}
+
+/** Métodos de acceso disponibles en este servidor (el botón de Google solo sale si está configurado). */
+export interface ProveedoresAcceso {
+  google: boolean;
+}
+
+/** Mensajes del regreso de Google (`?google=<código>` en /entrar o en Ajustes → Cuenta). */
+export const MENSAJES_GOOGLE: Record<string, string> = {
+  cancelado: 'Cancelaste el acceso con Google.',
+  expirado: 'El acceso con Google tardó demasiado. Inténtalo de nuevo.',
+  error: 'No se pudo completar el acceso con Google. Inténtalo de nuevo.',
+  cuenta_existente: 'Ya existe una cuenta con ese correo. Entra con tu contraseña.',
+  google_en_uso: 'Esa cuenta de Google ya está vinculada a otra cuenta de Nexo.',
+  cuenta_bloqueada: 'La cuenta está bloqueada por intentos fallidos. Espera 15 minutos.',
+  soporte_sin_google: 'Las cuentas de soporte entran con contraseña y verificación en dos pasos.',
+  vinculada: 'Listo: tu cuenta de Google quedó vinculada.',
+};
