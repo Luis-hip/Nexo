@@ -73,11 +73,17 @@ export function EquipoGuard() {
     return (
       <EquipoCtx.Provider value={contexto}>
         <Outlet />
-        {/* Capas del equipo: se abren con ?tarea=<id> y ?nueva=tarea desde cualquier pantalla. */}
+        {/* Capas del equipo: se abren con ?tarea=<id> y ?nueva=tarea|propuesta desde cualquier
+            pantalla («tarea» abre en «Asignar», «propuesta» en «Proponer a votación»; DEC-040). */}
         {tareaId && <DetalleTareaEquipo id={tareaId} onCerrar={() => quitar('tarea')} />}
-        {sp.get('nueva') === 'tarea' && contexto.puede('crear_tarea').permitido && (
-          <TareaFormEquipo abierto onCerrar={() => quitar('nueva')} />
-        )}
+        {(sp.get('nueva') === 'tarea' || sp.get('nueva') === 'propuesta') &&
+          contexto.puede('crear_tarea').permitido && (
+            <TareaFormEquipo
+              abierto
+              modoInicial={sp.get('nueva') === 'propuesta' ? 'votacion' : 'asignar'}
+              onCerrar={() => quitar('nueva')}
+            />
+          )}
       </EquipoCtx.Provider>
     );
   }

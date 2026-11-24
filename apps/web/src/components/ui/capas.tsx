@@ -399,6 +399,7 @@ export function Popover({
   children,
   ancho = 360,
   etiqueta,
+  alinear = 'fin',
 }: {
   abierto: boolean;
   onCerrar: () => void;
@@ -406,13 +407,25 @@ export function Popover({
   children: ReactNode;
   ancho?: number;
   etiqueta: string;
+  /** Borde del ancla con el que se alinea: «inicio» (izquierdo) o «fin» (derecho). */
+  alinear?: 'inicio' | 'fin';
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0, width: ancho });
   useEffect(() => {
     if (!abierto) return;
-    const r = anclaRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right - 8) });
+    // Se calcula la posición izquierda y se acota a la ventana (8 px de margen por lado), para
+    // que el menú nunca se salga aunque el ancla sea más angosta que él o esté pegada a un borde.
+    const colocar = () => {
+      const r = anclaRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const vw = document.documentElement.clientWidth;
+      const width = Math.min(ancho, vw - 16);
+      const deseado = alinear === 'inicio' ? r.left : r.right - width;
+      setPos({ top: r.bottom + 8, left: Math.min(Math.max(8, deseado), vw - width - 8), width });
+    };
+    colocar();
+    window.addEventListener('resize', colocar);
     const cerrar = (e: MouseEvent) =>
       !ref.current?.contains(e.target as Node) &&
       !anclaRef.current?.contains(e.target as Node) &&
@@ -422,6 +435,7 @@ export function Popover({
     document.addEventListener('mousedown', cerrar);
     document.addEventListener('keydown', tecla);
     return () => {
+      window.removeEventListener('resize', colocar);
       document.removeEventListener('mousedown', cerrar);
       document.removeEventListener('keydown', tecla);
     };
@@ -433,8 +447,13 @@ export function Popover({
       role="dialog"
       aria-label={etiqueta}
       data-cmp="cmp/capas/popover"
-      style={{ top: pos.top, right: pos.right, width: `min(${ancho}px, calc(100vw - 16px))` }}
-      className="anim-fade fixed z-[75] overflow-hidden rounded-[16px] border border-line bg-raised shadow-modal"
+      style={{
+        top: pos.top,
+        left: pos.left,
+        width: pos.width,
+        maxHeight: `calc(100dvh - ${pos.top + 8}px)`,
+      }}
+      className="anim-fade fixed z-[75] overflow-y-auto rounded-[16px] border border-line bg-raised shadow-modal"
     >
       {children}
     </div>,

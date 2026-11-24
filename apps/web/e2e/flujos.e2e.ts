@@ -115,10 +115,12 @@ test('1 · crear equipo e invitar: la otra persona se une con el código', async
 });
 
 test('2 · crear, asignar y completar una tarea', async () => {
-  // Ana propone la tarea con Beto de responsable (DEC-024: entra a votación).
+  // Ana propone la tarea con Beto de responsable: «Nueva tarea» abre en «Asignar tarea» y ella
+  // elige «Proponer a votación» (DEC-024 y DEC-040), así el flujo cubre también la votación.
   await paginaAna.goto(`${urlEquipo}/tareas`);
   await sinRecorrido(paginaAna);
-  await paginaAna.getByRole('button', { name: 'Nueva propuesta' }).first().click();
+  await paginaAna.getByRole('button', { name: 'Nueva tarea' }).first().click();
+  await paginaAna.getByRole('radio', { name: 'Proponer a votación' }).click();
   await paginaAna.getByLabel('Título', { exact: true }).fill(tituloTarea);
   await paginaAna.getByLabel('Responsable (opcional)').selectOption({ label: beto.nombre });
   await paginaAna.getByRole('button', { name: 'Enviar a votación' }).click();

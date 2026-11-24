@@ -27,7 +27,7 @@
 | DEC-021 | 2026-11-15 | Orden con índice fraccionario y concurrencia | Vigente |
 | DEC-022 | 2026-11-15 | Los eventos de dominio se registran; aún nadie los consume | Vigente |
 | DEC-023 | 2026-11-15 | Lo que la Fase 2 deja para la Fase 3 | Vigente |
-| DEC-024 | 2026-11-16 | El triaje pasa a ser votación de los integrantes sobre propuestas del líder | Vigente; V-10 y V-11 por confirmar |
+| DEC-024 | 2026-11-16 | El triaje pasa a ser votación de los integrantes sobre propuestas del líder | Vigente; V-10 resuelta por DEC-040 |
 | DEC-025 | 2026-11-16 | Procesos almacenados en la BD; la API sin SQL de negocio | Vigente |
 | DEC-026 | 2026-11-16 | Política de secretos y claves | Vigente |
 | DEC-027 | 2026-11-16 | Alojamiento: Vercel + Render + dominio propio (Fase 3.5) | Vigente; D-03 resuelta |
@@ -219,7 +219,7 @@ Queda sin construir, con «Próximamente» en la web: sprints (planear, cerrar, 
 
 El **líder propone** las tareas junto con sus subtareas (una sola operación; estado `propuesta`) y los **integrantes activos votan** aceptar o rechazar (con comentario opcional; pueden cambiar su voto mientras siga abierta). Valores confirmados el 2026-11-16: **V-1** acepta la mayoría simple de **todos** los integrantes activos; **V-2** el líder no vota y los invitados tampoco; **V-3** sin plazo (el líder puede retirarla); **V-4** empate o sin mayoría → sigue en `propuesta`, el líder puede retirarla (`cancelada`) o reformularla; **V-5** sin integrantes el líder acepta directamente; **V-8** se muestra el conteo y quién ya votó, **no** el voto de los demás (la API no lo devuelve mientras está abierta, ni al líder); cada integrante ve el suyo. Un integrante ya no crea ni propone tareas. Quien sale o es expulsado pierde sus votos de propuestas **abiertas**.
 
-**Por confirmar (marcados para revisión de Luis):** **V-10** toda tarea nueva del líder entra en votación (desaparece el destino «backlog directo» de DEC-020); **V-11** la asignación y su aceptación se mantienen (DEC-020), y si el responsable la rechaza el líder **reasigna directamente**, sin nueva votación.
+**Por confirmar (marcados para revisión de Luis):** **V-10** *(resuelta el 2026-11-24 por DEC-040: el líder también asigna tareas sin votación)* toda tarea nueva del líder entra en votación (desaparece el destino «backlog directo» de DEC-020); **V-11** la asignación y su aceptación se mantienen (DEC-020), y si el responsable la rechaza el líder **reasigna directamente**, sin nueva votación.
 
 **Sigue vigente de DEC-020:** la asignación, que el responsable acepte o rechace con motivo, la máquina de estados compartida y el orden por índice fraccionario.
 
@@ -477,3 +477,11 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - **Resultado (S6):** go técnico (A1–A13 en verde, retrabajo fuera de la capa de WhatsApp de 97 líneas); la pista B queda pendiente de la aprobación de plantillas y del token permanente con webhook en producción. Meta reclasificó `nx_aviso_ver` y `nx_resumen_enlace` como marketing (V1).
 - **Pista B en producción (2026-11-21):** con token permanente y webhook, B1, B3, B5 y B6 en verde con el número de Luis. Decisiones del día: (a) **con la ventana de 24 h abierta no se usan plantillas** (resumen como texto con enlace, PDF como documento), así «REPORTE» funciona sin depender de Meta; (b) **el código solo verifica** si hay uno pendiente; (c) la app de Meta se queda sin publicar (recibe los mensajes reales igual y publicarla pide la verificación del negocio, ignorada hasta nuevo aviso). Pendiente: B2 y B4 (plantillas en revisión).
 
+## DEC-040 · El líder asigna tareas (principal) o las propone a votación (secundaria)
+
+**Fecha:** 2026-11-24 · **Fuente:** pruebas de usabilidad de la v1.0 (decisión de Luis) · **Resuelve:** V-10 de DEC-024.
+
+- El líder tiene **dos formas** de crear una tarea con sus subtareas. **Asignar tarea** es la principal: nace `aceptada`, con `origen = 'directa'`, **responsable obligatorio** (puede ser el propio líder) y, si hay sprint activo, **dentro de él**, como si se hubiera planeado al inicio; no pasa por votación. **Proponer a votación** es la secundaria y no cambia (DEC-024).
+- El responsable acepta o rechaza la asignación como siempre (V-11): si es otra persona queda pendiente y recibe el aviso de `tarea.asignada`; si la rechaza, la tarea sigue aceptada y sin responsable.
+- Proceso nuevo `proc_tarea_asignar_nueva` (migración aditiva `0041`, pruebas P260–P263). `POST /equipos/:id/tareas` recibe `modo: 'asignar' | 'votacion'`; sin `modo` sigue siendo votación, para no romper clientes ni pruebas anteriores. Reformular siempre vuelve a votación.
+- Web: el formulario se llama «Nueva tarea» y abre en «Asignar tarea»; un selector cambia a «Proponer a votación». El botón «Nueva propuesta» de la pantalla de votación abre directamente en esa forma (`?nueva=propuesta`).

@@ -73,7 +73,7 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
 
   app.post('/equipos/:equipoId/tareas', async (req, res) => {
     const { ctx, actor } = await contexto(req, true);
-    // Solo el líder crea tareas: nacen como propuesta, con sus subtareas, y van a votación (DEC-024).
+    // Solo el líder crea tareas, con sus subtareas: asignadas o en votación según `modo` (DEC-040).
     requierePermiso(ctx, 'crear_tarea');
     const tarea = await servicio.crear(db, ctx, actor, validar(esquemaCrearTareaEquipo, req.body));
     return res.status(201).send(tarea);
