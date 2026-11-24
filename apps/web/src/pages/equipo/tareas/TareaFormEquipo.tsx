@@ -98,8 +98,12 @@ export function TareaFormEquipo({
     setNuevaSub('');
   };
 
-  /** Misma validación (Zod) que el servidor; devuelve los datos o `null`. */
-  const validar = () => {
+  /**
+   * Misma validación (Zod) que el servidor; devuelve los datos o `null`. Con `soloTitulo` (al salir
+   * del título) solo marca el título y no mueve el foco: el responsable obligatorio de «Asignar
+   * tarea» no debe aparecer en error ni robar el foco antes de que la persona llegue a él.
+   */
+  const validar = (soloTitulo = false) => {
     const e: Partial<Record<keyof Valores, string>> = {};
     const venceIso = v.vence ? deInputFecha(v.vence) : undefined;
     // Lo que quedó escrito sin pulsar «Agregar» también cuenta como subtarea.
@@ -127,6 +131,10 @@ export function TareaFormEquipo({
     }
     if (proponiendo && venceIso && new Date(venceIso).getTime() < Date.now() - 86_400_000) {
       e.vence = 'La fecha de entrega no puede estar en el pasado.';
+    }
+    if (soloTitulo) {
+      setErrores((x) => ({ ...x, titulo: e.titulo }));
+      return null;
     }
     setErrores(e);
     const primero = Object.keys(e)[0];
@@ -299,7 +307,7 @@ export function TareaFormEquipo({
             data-campo="titulo"
             value={v.titulo}
             onChange={(e) => set('titulo', e.target.value)}
-            onBlur={() => v.titulo && validar()}
+            onBlur={() => v.titulo && validar(true)}
             placeholder="Por ejemplo: Revisar el flujo de notificaciones"
             maxLength={140}
             autoFocus
