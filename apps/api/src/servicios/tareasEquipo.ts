@@ -84,8 +84,9 @@ export async function obtener(
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Solo el líder crea tareas: cada una nace como **propuesta** con sus subtareas y entra en
- * votación (V-10). Las reglas viven en el proceso `proc_tarea_proponer`.
+ * Solo el líder crea tareas, con sus subtareas, de dos formas (DEC-040):
+ * - `asignar`: nace aceptada, con responsable y en el sprint activo (`proc_tarea_asignar_nueva`).
+ * - `votacion`: nace como **propuesta** y la votan los integrantes (`proc_tarea_proponer`).
  */
 export async function crear(
   db: BaseDatos,
@@ -93,7 +94,10 @@ export async function crear(
   actor: Actor,
   datos: CrearTareaEquipo,
 ): Promise<TareaEquipoDetalle> {
-  const { id } = await repoVotacion.proponer(db, actor.id, ctx.equipoId, datos);
+  const { id } =
+    datos.modo === 'asignar'
+      ? await repoVotacion.asignarNueva(db, actor.id, ctx.equipoId, datos)
+      : await repoVotacion.proponer(db, actor.id, ctx.equipoId, datos);
   return obtener(db, ctx, id);
 }
 

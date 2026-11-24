@@ -152,20 +152,39 @@ export function normalizarCodigoInvitacion(entrada: string): string {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Cuerpo de POST /equipos/:id/tareas (EQ-07, solo el líder): la tarea entra en votación con sus
- * subtareas en una sola operación (DEC-024, V-10). También es el cuerpo de …/reformular.
+ * Cómo crea el líder una tarea (DEC-040):
+ * - `asignar` (la principal): nace aceptada, con responsable y en el sprint activo si lo hay; no se vota.
+ * - `votacion` (la secundaria): entra en votación de los integrantes (DEC-024).
  */
-export const esquemaCrearTareaEquipo = z.object({
-  titulo,
-  descripcion: descripcion.default(''),
-  prioridad: z.enum(PRIORIDADES_TAREA).default('media'),
-  vence_en: fecha.nullable().default(null),
-  etiquetas: etiquetas.default([]),
-  /** El líder puede asignar al proponer (V-11); el responsable acepta o rechaza la asignación. */
-  responsable_id: id.nullable().default(null),
-  /** Pasos de la tarea; se crean junto con la propuesta. */
-  subtareas: z.array(titulo).max(30, 'Una propuesta admite hasta 30 subtareas.').default([]),
-});
+export const MODOS_CREAR_TAREA = ['asignar', 'votacion'] as const;
+export type ModoCrearTarea = (typeof MODOS_CREAR_TAREA)[number];
+
+/**
+ * Cuerpo de POST /equipos/:id/tareas (EQ-07, solo el líder): la tarea y sus subtareas se crean en
+ * una sola operación, asignada o en votación según `modo` (DEC-040). También es el cuerpo de
+ * …/reformular, que siempre vuelve a votación (ahí `modo` no se usa).
+ */
+export const esquemaCrearTareaEquipo = z
+  .object({
+    /** Sin `modo`, la API la manda a votación (como antes de DEC-040); la web siempre lo envía. */
+    modo: z.enum(MODOS_CREAR_TAREA).default('votacion'),
+    titulo,
+    descripcion: descripcion.default(''),
+    prioridad: z.enum(PRIORIDADES_TAREA).default('media'),
+    vence_en: fecha.nullable().default(null),
+    etiquetas: etiquetas.default([]),
+    /**
+     * Obligatorio al asignar; opcional al proponer (V-11). Si es otra persona, acepta o rechaza
+     * la asignación.
+     */
+    responsable_id: id.nullable().default(null),
+    /** Pasos de la tarea; se crean junto con ella. */
+    subtareas: z.array(titulo).max(30, 'Una tarea admite hasta 30 subtareas.').default([]),
+  })
+  .refine((d) => d.modo !== 'asignar' || d.responsable_id !== null, {
+    path: ['responsable_id'],
+    message: 'Elige a la persona responsable de la tarea.',
+  });
 export type CrearTareaEquipo = z.infer<typeof esquemaCrearTareaEquipo>;
 
 /** Cuerpo de PATCH /equipos/:id/tareas/:tareaId. */

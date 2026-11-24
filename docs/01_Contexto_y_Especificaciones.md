@@ -45,7 +45,7 @@ Nexo es una aplicación web de **trabajo colaborativo tipo tablero (estilo Trell
 | Perfil | Quién es | Resumen |
 |---|---|---|
 | **Personal** | Cualquier usuario en su espacio privado | Sus tareas son privadas; no hay otros roles. |
-| **Líder** | Una persona por equipo | **Propone tareas con sus subtareas**, las asigna, gestiona sprints, configura y envía WhatsApp, invita y expulsa, modera el chat. |
+| **Líder** | Una persona por equipo | **Asigna tareas con sus subtareas** (sin votación) o **las propone a votación** (DEC-040), gestiona sprints, configura y envía WhatsApp, invita y expulsa, modera el chat. |
 | **Integrante** | Miembro activo del equipo | **Vota las propuestas** del líder, cambia el estado de **sus** tareas, comenta, chatea, participa en retros y votaciones. |
 | **Invitado** | Observador externo (con caducidad) | Ve y comenta **solo** lo que se le comparte; usa el canal de Invitados; no adjunta, no vota, no tiene mensajes directos. |
 
@@ -92,7 +92,7 @@ Leyenda: **✔** sí · **✖** no · **(p)** solo lo propio · **(c)** solo lo 
 
 1. Un equipo tiene **un solo líder**.
 2. Elección de líder: votación de **72 horas** por mayoría, con **24 horas** de desempate; el líder saliente **no vota** y queda como interino hasta el resultado.
-3. El **líder propone** las tareas (con sus subtareas); los **integrantes votan** si se aceptan para el sprint (mayoría simple de los integrantes activos; DEC-024).
+3. El **líder asigna** las tareas (con sus subtareas y responsable; entran al sprint activo sin votación) o, como forma secundaria, **las propone** y los **integrantes votan** si se aceptan para el sprint (mayoría simple de los integrantes activos; DEC-024 y DEC-040).
 4. El invitado **ve, comenta y chatea solo en lo compartido**. Los invitados caducan.
 5. Unirse a un equipo requiere **enlace o código** de invitación.
 6. WhatsApp se configura **a nivel de grupo**, con **consentimiento individual**.

@@ -45,6 +45,7 @@
 | Proceso | Dominio | Migración | Estado |
 |---|---|---|---|
 | `proc_tarea_proponer` | Tareas · votación | `0003_votacion.sql` | Vigente |
+| `proc_tarea_asignar_nueva` | Tareas · asignación directa del líder | `0041_tarea_asignada.sql` | Vigente |
 | `proc_tarea_votar` | Tareas · votación | `0003_votacion.sql` | Vigente |
 | `proc_tarea_retirar` | Tareas · votación | `0003_votacion.sql` | Vigente |
 | `proc_tarea_reformular` | Tareas · votación | `0003_votacion.sql` | Vigente |
@@ -202,6 +203,20 @@
 - **Pruebas:** `db/tests/pruebas_procesos.sql` P10, P11; `rutas/tareasEquipo.test.ts` «proponer (EQ-07)».
 - **Ejemplo de llamada:** `select proc_tarea_proponer($1, $2, '{"titulo":"Exportar reportes","subtareas":["Diseñar","Programar"]}')`
 - **Historial:** 2026-11-16 · creación · `0003`.
+
+### proc_tarea_asignar_nueva
+- **Migración:** `0041_tarea_asignada.sql`
+- **Propósito:** el líder crea una tarea de equipo **ya asignada**, con sus subtareas, sin votación (DEC-040). Es la forma principal; proponer a votación es la secundaria.
+- **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_datos jsonb` · igual que en `proc_tarea_proponer`, con `responsable_id` **obligatorio**.
+- **Retorno:** `jsonb` `{ id, codigo, estado }` (`estado` = `aceptada`).
+- **Reglas y validaciones:** el actor debe ser el **líder activo**; el equipo no puede estar archivado; el responsable debe ser líder o integrante activo (queda con la asignación pendiente si no es el propio líder, V-11); `origen = directa`, `proponente_id` nulo; entra al **sprint activo** si lo hay; va al final de la columna `aceptada`.
+- **Errores:** `NX005` · el actor no es el líder · «Solo el líder asigna tareas…». `NX006` · el actor no pertenece al equipo. `NX009` · equipo archivado. `NX010` · sin responsable (`responsable_requerido`) o responsable que no es miembro (`responsable_invalido`).
+- **Tablas que toca:** lectura `membresias`, `equipos`, `sprints`, `usuarios`; escritura `tareas`, `subtareas`, `etiquetas`, `tarea_etiquetas`, `eventos_dominio`, `actividad`.
+- **Eventos que genera:** `tarea.creada` («Valeria creó T-10 «…» en el sprint activo») y, si el responsable no es el líder, `tarea.asignada` (aviso al responsable para aceptar).
+- **Lo llama:** `repositorios/votacion.ts` → `asignarNueva()`; `POST /equipos/:equipoId/tareas` con `modo: 'asignar'`.
+- **Pruebas:** `db/tests/pruebas_procesos.sql` P260–P263; `rutas/tareasEquipo.test.ts` «asignar tarea nueva (EQ-07, DEC-040)».
+- **Ejemplo de llamada:** `select proc_tarea_asignar_nueva($1, $2, '{"titulo":"Exportar reportes","responsable_id":"…","subtareas":["Diseñar","Programar"]}')`
+- **Historial:** 2026-11-24 · creación · `0041`.
 
 ### proc_tarea_votar
 - **Migración:** `0003_votacion.sql`

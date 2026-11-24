@@ -34,13 +34,13 @@ const SIN_ACCESO = 'Tu rol en este espacio no incluye esta acción.';
 export const MATRIZ_PERMISOS = {
   // --- Las 30 filas de la tabla de docs/01, 2.2, en el mismo orden ---
   ver_resumen: fila('si', 'si', 'si', 'compartido', 'Solo puedes ver lo compartido contigo.'),
-  // Fase 2.5 (DEC-024): el líder propone con subtareas y los integrantes votan.
+  // DEC-024 y DEC-040: el líder asigna o propone (con subtareas); los integrantes votan las propuestas.
   crear_tarea: fila(
     'si',
     'si',
     'no',
     'no',
-    'Solo el líder propone tareas; tú votas si se aceptan. Comparte tus ideas en el chat o en los comentarios.',
+    'Solo el líder asigna o propone tareas; tú votas las propuestas. Comparte tus ideas en el chat o en los comentarios.',
   ),
   votar_propuesta: fila(
     'na',

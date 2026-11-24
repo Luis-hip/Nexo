@@ -1,9 +1,10 @@
-import type { Perfil, Yo } from '@nexo/shared';
+import type { ModoCrearTarea, Perfil, Yo } from '@nexo/shared';
 import { createContext, useContext } from 'react';
 
 /** Acciones globales que ofrece el shell a cualquier pantalla. */
 export interface AccionesGlobales {
-  nuevaTarea: () => void;
+  /** En un equipo, `modo` elige cómo abre el formulario del líder (DEC-040); por defecto, asignar. */
+  nuevaTarea: (modo?: ModoCrearTarea) => void;
   abrirTarea: (id: string) => void;
 }
 

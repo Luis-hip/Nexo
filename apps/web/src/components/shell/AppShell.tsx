@@ -139,11 +139,11 @@ function Shell({ yo }: { yo: Yo }) {
 
   const acciones: AccionesGlobales = {
     // En un equipo, el formulario y el detalle los pinta el propio equipo (ver EquipoGuard).
-    nuevaTarea: () =>
+    nuevaTarea: (modo) =>
       equipoId
         ? setSp((previo) => {
             const p = new URLSearchParams(previo);
-            p.set('nueva', 'tarea');
+            p.set('nueva', modo === 'votacion' ? 'propuesta' : 'tarea');
             return p;
           })
         : setFormTarea(true),
@@ -160,14 +160,14 @@ function Shell({ yo }: { yo: Yo }) {
     setSp(p, { replace: true });
   };
 
-  // Acción de crear según el perfil: en un equipo solo el líder propone tareas (DEC-024);
-  // el integrante vota y el invitado no participa. En el espacio personal cada quien crea las suyas.
+  // Acción de crear según el perfil: en un equipo solo el líder crea tareas, asignadas o en votación
+  // (DEC-040); el integrante vota y el invitado no participa. En el espacio personal cada quien crea las suyas.
   const crear =
     perfil === 'invitado' || perfil === 'integrante'
       ? null
       : {
-          etiqueta: perfil === 'lider' ? 'Nueva propuesta' : 'Nueva tarea',
-          accion: acciones.nuevaTarea,
+          etiqueta: 'Nueva tarea',
+          accion: () => acciones.nuevaTarea(),
         };
   const membresia = yo.equipos.find((e) => e.id === equipoId);
   // Se fija al montar: el aviso de caducidad no necesita precisión de segundos.
@@ -562,6 +562,7 @@ export function SelectorEspacios({
         anclaRef={ref}
         etiqueta="Cambiar de espacio"
         ancho={320}
+        alinear="inicio"
       >
         <div className="p-2">
           <p className="px-2 py-1.5 text-xs font-medium text-muted uppercase">Espacios</p>

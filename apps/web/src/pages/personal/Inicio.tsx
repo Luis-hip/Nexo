@@ -89,7 +89,7 @@ export function InicioPersonal() {
                 <Boton
                   variante="primario"
                   icono={<Plus className="size-4" />}
-                  onClick={acc.nuevaTarea}
+                  onClick={() => acc.nuevaTarea()}
                 >
                   Nueva tarea
                 </Boton>
