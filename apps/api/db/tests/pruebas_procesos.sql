@@ -3719,3 +3719,72 @@ DO $$ DECLARE sin uuid := pg_temp.con_permiso('Soporte Sin Alta', 'contacto.gest
   IF ok <> 2 THEN RAISE EXCEPTION 'FALLO P255: % de 2 rechazos', ok; END IF;
   RAISE NOTICE 'OK P255: alta de cuentas de soporte';
 END $$;
+
+-- Tareas asignadas del líder (0041, DEC-040). Pruebas P260 a P263.
+
+-- P260. Asignar tarea nueva · solo el líder (NX005), con responsable obligatorio (NX010) y que no sea invitado (NX010).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); ok int := 0; BEGIN
+  BEGIN PERFORM proc_tarea_asignar_nueva(pg_temp.integrante(e, 1), e,
+          jsonb_build_object('titulo', 'No debería', 'responsable_id', pg_temp.integrante(e, 1)));
+  EXCEPTION WHEN SQLSTATE 'NX005' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_asignar_nueva(pg_temp.lider(e), e, '{"titulo":"Sin responsable"}');
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  BEGIN PERFORM proc_tarea_asignar_nueva(pg_temp.lider(e), e,
+          jsonb_build_object('titulo', 'Al invitado', 'responsable_id', pg_temp.invitado(e)));
+  EXCEPTION WHEN SQLSTATE 'NX010' THEN ok := ok + 1; END;
+  IF ok <> 3 THEN RAISE EXCEPTION 'FALLO P260: % de 3 rechazos', ok; END IF;
+  IF EXISTS (SELECT 1 FROM tareas WHERE equipo_id = e) THEN RAISE EXCEPTION 'FALLO P260: quedó una tarea'; END IF;
+  RAISE NOTICE 'OK P260: asignar tarea nueva es del líder y exige responsable';
+END $$;
+
+-- P261. Con sprint activo, la tarea asignada entra a él sin votación: aceptada, directa, con sus
+--       subtareas, pendiente de que el responsable acepte, y avisa (tarea.creada y tarea.asignada).
+DO $$ DECLARE e uuid := pg_temp.equipo_con(3); s uuid := pg_temp.planear(e); r jsonb; t tareas; ok int := 0; BEGIN
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  r := proc_tarea_asignar_nueva(pg_temp.lider(e), e, jsonb_build_object(
+         'titulo', 'Tarea asignada', 'responsable_id', pg_temp.integrante(e, 2),
+         'subtareas', jsonb_build_array('Paso 1', 'Paso 2', 'Paso 3'), 'etiquetas', jsonb_build_array('ux')));
+  SELECT * INTO t FROM tareas WHERE id = (r->>'id')::uuid;
+  IF r->>'estado' <> 'aceptada' OR t.estado <> 'aceptada' OR t.origen <> 'directa' OR t.sprint_id IS DISTINCT FROM s
+     OR t.responsable_id <> pg_temp.integrante(e, 2) OR NOT t.asignacion_pendiente OR t.proponente_id IS NOT NULL
+     OR (SELECT count(*) FROM subtareas WHERE tarea_id = t.id) <> 3
+     OR (SELECT count(*) FROM tarea_etiquetas WHERE tarea_id = t.id) <> 1 THEN
+    RAISE EXCEPTION 'FALLO P261: %', row_to_json(t);
+  END IF;
+  IF (SELECT string_agg(tipo, ',' ORDER BY tipo) FROM eventos_dominio WHERE objeto_id = t.id) <> 'tarea.asignada,tarea.creada' THEN
+    RAISE EXCEPTION 'FALLO P261: eventos %', (SELECT string_agg(tipo, ',') FROM eventos_dominio WHERE objeto_id = t.id);
+  END IF;
+  BEGIN PERFORM proc_tarea_votar(pg_temp.integrante(e, 1), e, t.id, 'aceptar');
+  EXCEPTION WHEN SQLSTATE 'NX007' THEN ok := ok + 1; END;
+  IF ok <> 1 THEN RAISE EXCEPTION 'FALLO P261: se pudo votar una tarea asignada'; END IF;
+  RAISE NOTICE 'OK P261: la tarea asignada entra al sprint activo sin votación';
+END $$;
+
+-- P262. Sin sprint activo queda aceptada fuera de sprint; asignada a la propia líder no queda
+--       pendiente ni genera «tarea.asignada».
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); r jsonb; t tareas; BEGIN
+  r := proc_tarea_asignar_nueva(pg_temp.lider(e), e,
+         jsonb_build_object('titulo', 'Para mí', 'responsable_id', pg_temp.lider(e)));
+  SELECT * INTO t FROM tareas WHERE id = (r->>'id')::uuid;
+  IF t.estado <> 'aceptada' OR t.sprint_id IS NOT NULL OR t.asignacion_pendiente
+     OR EXISTS (SELECT 1 FROM eventos_dominio WHERE objeto_id = t.id AND tipo = 'tarea.asignada') THEN
+    RAISE EXCEPTION 'FALLO P262: %', row_to_json(t);
+  END IF;
+  RAISE NOTICE 'OK P262: tarea asignada sin sprint activo y a la propia líder';
+END $$;
+
+-- P263. El responsable acepta la asignación igual que en una tarea votada (V-11); si la rechaza,
+--       la tarea sigue aceptada y sin responsable para que la líder la reasigne.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid; b uuid; BEGIN
+  a := (proc_tarea_asignar_nueva(pg_temp.lider(e), e,
+         jsonb_build_object('titulo', 'Aceptar', 'responsable_id', pg_temp.integrante(e, 1)))->>'id')::uuid;
+  b := (proc_tarea_asignar_nueva(pg_temp.lider(e), e,
+         jsonb_build_object('titulo', 'Rechazar', 'responsable_id', pg_temp.integrante(e, 2)))->>'id')::uuid;
+  PERFORM proc_tarea_responder_asignacion(pg_temp.integrante(e, 1), e, a, true);
+  PERFORM proc_tarea_responder_asignacion(pg_temp.integrante(e, 2), e, b, false, 'No me da tiempo');
+  IF (SELECT asignacion_pendiente OR responsable_id <> pg_temp.integrante(e, 1) FROM tareas WHERE id = a)
+     OR (SELECT estado::text || '|' || coalesce(responsable_id::text, 'sin') FROM tareas WHERE id = b) <> 'aceptada|sin' THEN
+    RAISE EXCEPTION 'FALLO P263';
+  END IF;
+  RAISE NOTICE 'OK P263: aceptar o rechazar una tarea asignada';
+END $$;

@@ -24,6 +24,21 @@ export function proponer(db: Ejecutor, actorId: string, equipoId: string, datos:
   );
 }
 
+/** `proc_tarea_asignar_nueva`: el líder crea una tarea ya asignada, sin votación (DEC-040). */
+export function asignarNueva(
+  db: Ejecutor,
+  actorId: string,
+  equipoId: string,
+  datos: CrearTareaEquipo,
+) {
+  return llamarProceso(
+    db,
+    'proc_tarea_asignar_nueva',
+    [actorId, equipoId, json(datos)],
+    esquemaRefTarea,
+  );
+}
+
 /** `proc_tarea_votar`: un integrante vota o cambia su voto; puede cerrar la votación. */
 export function votar(
   db: Ejecutor,

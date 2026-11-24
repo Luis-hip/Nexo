@@ -61,16 +61,16 @@ export function TareasLayout() {
         titulo="Tareas"
         descripcion={sprint ? `Sprint ${sprint.numero} activo` : 'Sin sprint activo'}
         acciones={
-          // Solo el líder propone tareas (DEC-024); los integrantes votan.
+          // Solo el líder crea tareas, asignadas o en votación (DEC-040); los integrantes votan.
           esLider ? (
             <Boton
               variante="primario"
               tamano="sm"
               className="sm:hidden"
               icono={<Plus className="size-4" />}
-              onClick={acc.nuevaTarea}
+              onClick={() => acc.nuevaTarea()}
             >
-              Proponer
+              Nueva tarea
             </Boton>
           ) : undefined
         }
@@ -167,8 +167,8 @@ export function ListaTareas() {
             }
             accion={
               equipo.mi_rol === 'lider' ? (
-                <Boton variante="primario" onClick={acc.nuevaTarea}>
-                  Nueva propuesta
+                <Boton variante="primario" onClick={() => acc.nuevaTarea()}>
+                  Nueva tarea
                 </Boton>
               ) : undefined
             }
@@ -274,7 +274,9 @@ export function Backlog() {
             icono={<Archive />}
             titulo="El backlog está vacío"
             texto="Las tareas aceptadas que el líder aparta del tablero aparecen aquí."
-            accion={esLider ? <Boton onClick={acc.nuevaTarea}>Nueva propuesta</Boton> : undefined}
+            accion={
+              esLider ? <Boton onClick={() => acc.nuevaTarea()}>Nueva tarea</Boton> : undefined
+            }
           />
         }
       >

@@ -267,7 +267,7 @@ export function Votacion() {
         tono="info"
         accion={
           esLider ? (
-            <Boton tamano="sm" variante="primario" onClick={acc.nuevaTarea}>
+            <Boton tamano="sm" variante="primario" onClick={() => acc.nuevaTarea('votacion')}>
               Nueva propuesta
             </Boton>
           ) : undefined

@@ -156,7 +156,7 @@ describe.skipIf(!DATABASE_URL)('tareas de equipo', () => {
         cuerpo: {
           codigo: 'sin_permiso',
           mensaje:
-            'Solo el líder propone tareas; tú votas si se aceptan. Comparte tus ideas en el chat o en los comentarios.',
+            'Solo el líder asigna o propone tareas; tú votas las propuestas. Comparte tus ideas en el chat o en los comentarios.',
         },
       });
       expect((await post(invitada, '/tareas', { titulo: 'x' })).estado).toBe(403);
@@ -173,6 +173,54 @@ describe.skipIf(!DATABASE_URL)('tareas de equipo', () => {
         responsable_id: ID.mariana,
       });
       expect(r).toMatchObject({ estado: 400, cuerpo: { codigo: 'responsable_invalido' } });
+    });
+  });
+
+  describe('asignar tarea nueva (EQ-07, DEC-040)', () => {
+    it('la líder asigna con subtareas: nace aceptada, sin votación, y el responsable la acepta', async () => {
+      const r = await post(lider, '/tareas', {
+        modo: 'asignar',
+        titulo: 'Tarea asignada',
+        responsable_id: ID.carlos,
+        subtareas: ['Paso 1', 'Paso 2'],
+      });
+      expect(r.estado, JSON.stringify(r.cuerpo)).toBe(201);
+      const t: TareaEquipoDetalle = r.cuerpo;
+      expect(t).toMatchObject({
+        estado: 'aceptada',
+        origen: 'directa',
+        asignacion_pendiente: true,
+        responsable: { usuario_id: ID.carlos },
+      });
+      expect(t.subtareas.map((s) => s.titulo)).toEqual(['Paso 1', 'Paso 2']);
+      // No es una propuesta: nadie la vota.
+      expect((await votar(daniela, t.id, 'aceptar')).estado).toBe(422);
+      const acepta = await post(carlos, `/tareas/${t.id}/asignacion`, { acepta: true });
+      expect(acepta.estado, JSON.stringify(acepta.cuerpo)).toBe(200);
+      expect(acepta.cuerpo).toMatchObject({ estado: 'aceptada', asignacion_pendiente: false });
+    });
+
+    it('exige responsable; un integrante no asigna (403)', async () => {
+      expect(
+        await post(lider, '/tareas', { modo: 'asignar', titulo: 'Sin responsable' }),
+      ).toMatchObject({
+        estado: 400,
+        cuerpo: { mensaje: 'Elige a la persona responsable de la tarea.' },
+      });
+      const r = await post(carlos, '/tareas', {
+        modo: 'asignar',
+        titulo: 'x',
+        responsable_id: ID.carlos,
+      });
+      expect(r.estado).toBe(403);
+    });
+
+    it('con modo «votacion» (o sin modo) sigue entrando en votación', async () => {
+      const r = await post(lider, '/tareas', { modo: 'votacion', titulo: 'A votación' });
+      expect(r).toMatchObject({
+        estado: 201,
+        cuerpo: { estado: 'propuesta', origen: 'propuesta' },
+      });
     });
   });
 
