@@ -3,10 +3,12 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 /**
  * Fase 5.4 · Los 3 flujos críticos de docs/03, de punta a punta en el navegador:
  *  1. Crear equipo e invitar: Ana se registra, crea un equipo e invita; Beto se registra y se une con el código.
- *  2. Crear, asignar y completar una tarea: Ana propone una tarea para Beto; Beto la vota, acepta la
+ *  2. Crear, asignar y completar una tarea: Ana propone una tarea para Beto («Nueva tarea» → «Proponer a votación»); Beto la vota, acepta la
  *     asignación, la empieza y la completa.
  *  3. Chat: Ana y Beto, en dos navegadores, intercambian mensajes en tiempo real. (El aviso de WhatsApp
  *     simulado se sumará al juntar la rama de WhatsApp.)
+ *  4. Asignar sin votación (DEC-040): Ana asigna una tarea con subtarea a Beto, que no pasa por
+ *     «Votación»; Beto la acepta. Va al final para que, si falla, no se salten los demás flujos.
  * Las cuentas son nuevas en cada corrida (correo con marca de tiempo, dominio de pruebas `.test`).
  *
  * Fase 6 · F6-2, prueba de humo en producción: con `E2E_PRODUCCION=1`, `E2E_WEB_URL` y `E2E_API_URL`
@@ -234,4 +236,34 @@ test('3b · aviso de WhatsApp simulado: conectar, encolar, enviar e historial', 
   await expect(paginaBeto).toHaveURL(/\/whatsapp\/historial$/);
   await expect(paginaBeto.getByText(/Reunión «Demo con WhatsApp» el/).first()).toBeVisible();
   await expect(paginaBeto.getByText('Enviado por Ana Prueba').first()).toBeVisible();
+});
+
+test('4 · el líder asigna una tarea sin votación y el responsable la acepta (DEC-040)', async () => {
+  const titulo = `Revisar el informe ${String(marca).slice(-5)}`;
+  // «Nueva tarea» abre en «Asignar tarea»: el responsable es obligatorio y no hay votación.
+  await paginaAna.goto(`${urlEquipo}/tareas`);
+  await sinRecorrido(paginaAna);
+  await paginaAna.getByRole('button', { name: 'Nueva tarea' }).first().click();
+  const form = paginaAna.getByRole('dialog', { name: 'Nueva tarea' });
+  await expect(form.getByRole('radio', { name: 'Asignar tarea' })).toBeChecked();
+  await form.getByLabel('Título', { exact: true }).fill(titulo);
+  await form.getByLabel('Nueva subtarea').fill('Leer el borrador');
+  await form.getByLabel('Nueva subtarea').press('Enter');
+  // Salir del título no marca al responsable en error antes de tiempo.
+  await expect
+    .soft(form.getByLabel('Responsable', { exact: true }))
+    .not.toHaveAttribute('aria-invalid', 'true');
+  await form.getByLabel('Responsable', { exact: true }).selectOption({ label: beto.nombre });
+  await form.getByRole('button', { name: 'Asignar tarea', exact: true }).click();
+  await expect(form).toBeHidden();
+
+  // No pasa por «Votación»: Beto la ve ya en la lista y acepta la asignación.
+  await paginaBeto.goto(`${urlEquipo}/tareas/votacion`);
+  await expect(paginaBeto.getByText(titulo)).toBeHidden();
+  await paginaBeto.goto(`${urlEquipo}/tareas/lista`);
+  await paginaBeto.getByText(titulo).first().click();
+  const panel = paginaBeto.getByRole('dialog');
+  await expect(panel.getByText('Leer el borrador')).toBeVisible();
+  await panel.getByRole('button', { name: 'Aceptar' }).click();
+  await expect(panel.getByRole('button', { name: 'Rechazar' })).toBeHidden();
 });
