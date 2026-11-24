@@ -1,11 +1,21 @@
 import {
   esquemaCrearTareaEquipo,
+  type ModoCrearTarea,
   type PrioridadTarea,
   type TareaEquipoDetalle,
 } from '@nexo/shared';
-import { Inbox, Plus, X } from 'lucide-react';
+import { Inbox, Plus, UserCheck, X } from 'lucide-react';
 import { useState } from 'react';
-import { AreaTexto, Banner, Boton, Campo, Entrada, Modal, Selector } from '@/components/ui';
+import {
+  AreaTexto,
+  Banner,
+  Boton,
+  Campo,
+  Entrada,
+  Modal,
+  Segmentado,
+  Selector,
+} from '@/components/ui';
 import { mensajeDeError } from '@/lib/api';
 import { useAccionesTarea } from '@/lib/consultasEquipo';
 import { aInputFecha, deInputFecha } from '@/lib/fechas';
@@ -27,26 +37,37 @@ interface Valores {
 const MAX_SUBTAREAS = 30;
 
 /**
- * EQ-07: el **líder** propone una tarea junto con sus subtareas (DEC-024). La propuesta entra en
- * votación: los integrantes deciden si se acepta para el sprint. El mismo formulario sirve para
- * editar una tarea y para **reformular** una propuesta rechazada o retirada (nace una nueva).
+ * EQ-07: el **líder** crea una tarea junto con sus subtareas, de dos formas (DEC-040):
+ * - **Asignar tarea** (la principal): nace aceptada, con responsable y, si hay sprint activo,
+ *   dentro de él, como si se hubiera planeado al inicio. No se vota.
+ * - **Proponer a votación** (la secundaria): los integrantes deciden si se acepta (DEC-024).
+ * El mismo formulario sirve para editar una tarea y para **reformular** una propuesta rechazada o
+ * retirada (nace una propuesta nueva, que siempre vuelve a votación).
  */
 export function TareaFormEquipo({
   abierto,
   onCerrar,
   editar,
   reformular,
+  modoInicial = 'asignar',
 }: {
   abierto: boolean;
   onCerrar: () => void;
   editar?: TareaEquipoDetalle;
   /** Propuesta rechazada por votación o retirada que se vuelve a proponer. */
   reformular?: TareaEquipoDetalle;
+  /** Con qué forma abre al crear; el líder puede cambiarla en el formulario. */
+  modoInicial?: ModoCrearTarea;
 }) {
   const { equipo, usuarioId } = useEquipoActual();
   const acciones = useAccionesTarea(equipo.id);
   const origen = editar ?? reformular;
   const proponiendo = !editar;
+  const [modo, setModo] = useState<ModoCrearTarea>(reformular ? 'votacion' : modoInicial);
+  /** Crear con la opción de elegir la forma (no al editar ni al reformular). */
+  const eligeModo = proponiendo && !reformular;
+  const asignando = eligeModo && modo === 'asignar';
+  const sprintActivo = equipo.sprints.find((s) => s.estado === 'activo');
   const integrantes = equipo.miembros.filter((m) => m.rol === 'integrante').length;
   const inicial: Valores = {
     titulo: origen?.titulo ?? '',
@@ -84,6 +105,7 @@ export function TareaFormEquipo({
     // Lo que quedó escrito sin pulsar «Agregar» también cuenta como subtarea.
     const subtareas = [...v.subtareas, nuevaSub].map((s) => s.trim()).filter(Boolean);
     const r = esquemaCrearTareaEquipo.safeParse({
+      modo: asignando ? 'asignar' : 'votacion',
       titulo: v.titulo,
       descripcion: v.descripcion.trim(),
       prioridad: v.prioridad,
@@ -94,7 +116,12 @@ export function TareaFormEquipo({
     });
     if (!r.success) {
       for (const i of r.error.issues) {
-        const campo = i.path[0] === 'vence_en' ? 'vence' : (i.path[0] as keyof Valores);
+        const campo =
+          i.path[0] === 'vence_en'
+            ? 'vence'
+            : i.path[0] === 'responsable_id'
+              ? 'responsableId'
+              : (i.path[0] as keyof Valores);
         e[campo] ??= i.message;
       }
     }
@@ -136,10 +163,15 @@ export function TareaFormEquipo({
       return;
     }
     const alCrear = (t: TareaEquipoDetalle) => {
+      const responsable = equipo.miembros.find((m) => m.usuario_id === datos.responsable_id);
       toast(
-        t.estado === 'propuesta'
-          ? `Propuesta ${codigoTarea(t.codigo)} enviada a votación.`
-          : `Tarea ${codigoTarea(t.codigo)} aceptada (el equipo aún no tiene integrantes que voten).`,
+        asignando
+          ? datos.responsable_id === usuarioId
+            ? `Tarea ${codigoTarea(t.codigo)} creada y asignada a ti.`
+            : `Tarea ${codigoTarea(t.codigo)} asignada a ${responsable?.nombre.split(' ')[0] ?? 'la persona elegida'}; debe aceptarla.`
+          : t.estado === 'propuesta'
+            ? `Propuesta ${codigoTarea(t.codigo)} enviada a votación.`
+            : `Tarea ${codigoTarea(t.codigo)} aceptada (el equipo aún no tiene integrantes que voten).`,
       );
       if (otra && !reformular) {
         setV({ ...inicial, prioridad: v.prioridad });
@@ -161,27 +193,31 @@ export function TareaFormEquipo({
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
-      nombre="NX/EQ-07-Proponer-tarea"
+      nombre="NX/EQ-07-Nueva-tarea"
       movil="completa"
       titulo={
         editar
           ? `Editar ${codigoTarea(editar.codigo)}`
           : reformular
             ? `Reformular ${codigoTarea(reformular.codigo)}`
-            : 'Nueva propuesta'
+            : 'Nueva tarea'
       }
       descripcion={
         editar
           ? `Equipo: ${equipo.nombre}`
           : reformular
             ? `Se creará una propuesta nueva que vuelve a votarse; ${codigoTarea(reformular.codigo)} se conserva como historial.`
-            : integrantes > 0
-              ? `Entrará en votación: se acepta para el sprint con ${Math.floor(integrantes / 2) + 1} de ${integrantes} ${integrantes === 1 ? 'integrante' : 'integrantes'} a favor.`
-              : 'El equipo aún no tiene integrantes que voten: la tarea quedará aceptada directamente.'
+            : asignando
+              ? sprintActivo
+                ? `Entra directo al sprint ${sprintActivo.numero}, sin votación, como si se hubiera planeado al inicio.`
+                : 'Queda aceptada sin votación, lista para el próximo sprint.'
+              : integrantes > 0
+                ? `Entrará en votación: se acepta para el sprint con ${Math.floor(integrantes / 2) + 1} de ${integrantes} ${integrantes === 1 ? 'integrante' : 'integrantes'} a favor.`
+                : 'El equipo aún no tiene integrantes que voten: la tarea quedará aceptada directamente.'
       }
       pie={
         <>
-          {proponiendo && !reformular && (
+          {eligeModo && (
             <label className="mr-auto flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -189,7 +225,7 @@ export function TareaFormEquipo({
                 onChange={(e) => setOtra(e.target.checked)}
                 className="size-5 accent-[var(--brand-primary)]"
               />
-              Proponer y agregar otra
+              {asignando ? 'Asignar y agregar otra' : 'Proponer y agregar otra'}
             </label>
           )}
           <Boton onClick={onCerrar}>Cancelar</Boton>
@@ -197,9 +233,15 @@ export function TareaFormEquipo({
             variante="primario"
             onClick={guardar}
             cargando={guardando}
-            icono={proponiendo ? <Inbox className="size-4" /> : undefined}
+            icono={
+              asignando ? (
+                <UserCheck className="size-4" />
+              ) : proponiendo ? (
+                <Inbox className="size-4" />
+              ) : undefined
+            }
           >
-            {editar ? 'Guardar cambios' : 'Enviar a votación'}
+            {editar ? 'Guardar cambios' : asignando ? 'Asignar tarea' : 'Enviar a votación'}
           </Boton>
         </>
       }
@@ -212,6 +254,30 @@ export function TareaFormEquipo({
         className="space-y-4"
         noValidate
       >
+        {eligeModo && (
+          <Segmentado
+            etiqueta="Cómo crear la tarea"
+            valor={modo}
+            onChange={(m) => {
+              setModo(m);
+              setErrores({});
+              setErrorGuardar('');
+            }}
+            className="w-full [&>button]:flex-1"
+            opciones={[
+              {
+                valor: 'asignar',
+                etiqueta: 'Asignar tarea',
+                icono: <UserCheck className="size-4" aria-hidden />,
+              },
+              {
+                valor: 'votacion',
+                etiqueta: 'Proponer a votación',
+                icono: <Inbox className="size-4" aria-hidden />,
+              },
+            ]}
+          />
+        )}
         {errorGuardar && (
           <Banner
             tono="danger"
@@ -252,7 +318,11 @@ export function TareaFormEquipo({
             etiqueta="Subtareas"
             opcional
             error={errores.subtareas}
-            ayuda="Los pasos de la tarea. Se crean junto con la propuesta y el equipo los ve al votar."
+            ayuda={
+              asignando
+                ? 'Los pasos de la tarea. Se crean junto con ella.'
+                : 'Los pasos de la tarea. Se crean junto con la propuesta y el equipo los ve al votar.'
+            }
           >
             <div className="space-y-2" data-name="NX/EQ-07-Subtareas">
               {v.subtareas.length > 0 && (
@@ -311,24 +381,30 @@ export function TareaFormEquipo({
           {proponiendo && (
             <Campo
               etiqueta="Responsable"
-              opcional
+              opcional={!asignando}
+              error={errores.responsableId}
               ayuda={
                 v.responsableId && v.responsableId !== usuarioId
                   ? 'Deberá aceptar la asignación.'
-                  : 'También puedes asignarla cuando se acepte.'
+                  : asignando
+                    ? 'Puedes asignártela a ti.'
+                    : 'También puedes asignarla cuando se acepte.'
               }
             >
               <Selector
                 data-campo="responsableId"
                 value={v.responsableId}
-                onChange={(e) => set('responsableId', e.target.value)}
+                onChange={(e) => {
+                  set('responsableId', e.target.value);
+                  setErrores((x) => ({ ...x, responsableId: undefined }));
+                }}
               >
-                <option value="">Sin asignar</option>
+                <option value="">{asignando ? 'Elige a la persona' : 'Sin asignar'}</option>
                 {equipo.miembros
                   .filter((m) => m.rol !== 'invitado')
                   .map((m) => (
                     <option key={m.usuario_id} value={m.usuario_id}>
-                      {m.nombre}
+                      {m.usuario_id === usuarioId ? `${m.nombre} (tú)` : m.nombre}
                     </option>
                   ))}
               </Selector>

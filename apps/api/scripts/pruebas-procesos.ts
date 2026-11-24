@@ -15,6 +15,7 @@ const ESPERADAS = [
   ...rango(200, 208), // Fase 5 · Autenticación (desde P200; P150–P199 siguen reservadas a WhatsApp)
   ...rango(210, 219), // Pendientes tras la Fase 5 (0032, desde P210)
   ...rango(220, 255), // Spike WhatsApp 1 a 1 (0033, reservado P220–P249)
+  ...rango(260, 263), // Tareas asignadas del líder (0041, DEC-040)
 ];
 
 await ejecutarPruebasSql('tests/pruebas_procesos.sql', ESPERADAS);

@@ -177,8 +177,8 @@ function ResumenMiembro() {
               }
               accion={
                 esLider ? (
-                  <Boton variante="primario" onClick={acc.nuevaTarea}>
-                    Nueva propuesta
+                  <Boton variante="primario" onClick={() => acc.nuevaTarea()}>
+                    Nueva tarea
                   </Boton>
                 ) : undefined
               }

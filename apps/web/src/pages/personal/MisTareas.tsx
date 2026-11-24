@@ -87,7 +87,7 @@ export function MisTareas() {
             variante="primario"
             tamano="sm"
             icono={<Plus className="size-4" />}
-            onClick={acc.nuevaTarea}
+            onClick={() => acc.nuevaTarea()}
             className="sm:hidden"
           >
             Nueva
@@ -129,7 +129,7 @@ export function MisTareas() {
             titulo="Sin tareas"
             texto="Crea tu primera tarea personal."
             accion={
-              <Boton variante="primario" onClick={acc.nuevaTarea}>
+              <Boton variante="primario" onClick={() => acc.nuevaTarea()}>
                 Nueva tarea
               </Boton>
             }

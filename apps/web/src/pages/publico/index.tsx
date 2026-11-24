@@ -163,63 +163,62 @@ export function PublicoLayout() {
             {abierto ? <X className="size-6" /> : <MenuIcon className="size-6" />}
           </button>
         </div>
-        {abierto && (
-          <div
-            className="anim-fade fixed inset-x-0 top-[calc(64px+env(safe-area-inset-top))] bottom-0 z-40 overflow-y-auto bg-canvas px-4 pt-4 pb-10 lg:hidden"
-            role="dialog"
-            aria-label="Menú"
-          >
-            <nav
-              className="flex flex-col"
-              aria-label="Menú móvil"
-              onClick={() => setAbierto(false)}
-            >
-              {[
-                ...nav,
-                ['/para-quien', 'Para quién'],
-                ['/acerca', 'Acerca de'],
-                ['/contacto', 'Contacto'],
-              ].map(([r = '/', t]) => (
-                <Link
-                  key={r}
-                  to={r}
-                  className="flex min-h-14 items-center border-b border-line text-lg font-medium"
-                >
-                  {t}
-                </Link>
-              ))}
-            </nav>
-            <div className="mt-6 space-y-3">
-              <SelectorTema />
-              {cuenta.conSesion ? (
-                <Link
-                  to={cuenta.destino}
-                  className="flex h-12 items-center justify-center gap-2 rounded-[10px] bg-brand font-medium text-on-brand"
-                >
-                  Ir a Nexo <ArrowRight className="size-4" aria-hidden />
-                </Link>
-              ) : (
-                !cuenta.cargando && (
-                  <>
-                    <Link
-                      to="/registro"
-                      className="flex h-12 items-center justify-center rounded-[10px] bg-brand font-medium text-on-brand"
-                    >
-                      Empezar gratis
-                    </Link>
-                    <Link
-                      to="/entrar"
-                      className="flex h-12 items-center justify-center rounded-[10px] border border-line font-medium"
-                    >
-                      Iniciar sesión
-                    </Link>
-                  </>
-                )
-              )}
-            </div>
-          </div>
-        )}
       </header>
+      {/* El menú móvil va fuera del <header>: su backdrop-blur (backdrop-filter) vuelve al
+          encabezado el bloque contenedor de los hijos «fixed», y el panel quedaba del alto del
+          encabezado, recortado y con su propio scroll (Chrome, Safari, Brave…). */}
+      {abierto && (
+        <div
+          className="anim-fade fixed inset-x-0 top-[calc(64px+env(safe-area-inset-top))] bottom-0 z-40 overflow-y-auto overscroll-contain bg-canvas px-4 pt-4 pb-10 lg:hidden"
+          role="dialog"
+          aria-label="Menú"
+        >
+          <nav className="flex flex-col" aria-label="Menú móvil" onClick={() => setAbierto(false)}>
+            {[
+              ...nav,
+              ['/para-quien', 'Para quién'],
+              ['/acerca', 'Acerca de'],
+              ['/contacto', 'Contacto'],
+            ].map(([r = '/', t]) => (
+              <Link
+                key={r}
+                to={r}
+                className="flex min-h-14 items-center border-b border-line text-lg font-medium"
+              >
+                {t}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-6 space-y-3">
+            <SelectorTema />
+            {cuenta.conSesion ? (
+              <Link
+                to={cuenta.destino}
+                className="flex h-12 items-center justify-center gap-2 rounded-[10px] bg-brand font-medium text-on-brand"
+              >
+                Ir a Nexo <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            ) : (
+              !cuenta.cargando && (
+                <>
+                  <Link
+                    to="/registro"
+                    className="flex h-12 items-center justify-center rounded-[10px] bg-brand font-medium text-on-brand"
+                  >
+                    Empezar gratis
+                  </Link>
+                  <Link
+                    to="/entrar"
+                    className="flex h-12 items-center justify-center rounded-[10px] border border-line font-medium"
+                  >
+                    Iniciar sesión
+                  </Link>
+                </>
+              )
+            )}
+          </div>
+        </div>
+      )}
       <main id="contenido" className="flex-1">
         <Outlet />
       </main>
