@@ -373,9 +373,7 @@ export function Landing() {
             Tu equipo, en una sola conversación
           </h1>
           <p className="mt-4 max-w-xl text-lg text-muted">
-            Para equipos de desarrollo, ingeniería y proyectos de tecnología que organizan su
-            trabajo en sprints, ciclos cortos con una meta clara. Tareas, chat y avisos en un mismo
-            lugar, para que nada se pierda entre grupos y hojas de cálculo.
+            Tareas, chat y avisos de tu equipo en un mismo lugar. Pensado para equipos de desarrollo, ingeniería y tecnología.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -441,48 +439,79 @@ export function Landing() {
               </p>
             )}
           </div>
-          <div className="space-y-4 text-sm">
-            <h3 className="font-semibold">Leyenda</h3>
-            <ul className="space-y-2">
-              {(['triangulo', 'circulo', 'cuadrado'] as const).map((f, i) => (
-                <li key={f} className="flex items-center gap-2">
-                  <FormaSvg forma={f} color="var(--text-secondary)" tamano={16} />
-                  {
-                    [
-                      'Triángulo: atascada',
-                      'Círculo: avanza con normalidad',
-                      'Cuadrado: completada',
-                    ][i]
-                  }
+          {/* Leyenda en cuatro claves, dichas como frases: lugar en la colina, forma, anillo y color. */}
+          <div className="space-y-5 text-sm">
+            <h3 className="font-semibold">Cada figura es una tarea y con verla nos dice que:</h3>
+            <div>
+              <p className="font-medium">Su lugar en la colina muestra en qué etapa va:</p>
+              <ul className="mt-1.5 space-y-1 text-muted">
+                <li>
+                  <strong className="font-medium text-fg">Subida:</strong> aún se está definiendo
+                  qué hacer.
                 </li>
-              ))}
-            </ul>
-            <ul className="space-y-2">
-              <li className="flex items-center gap-2">
-                <FormaSvg forma="circulo" color="var(--text-secondary)" tamano={16} anillo="warn" />{' '}
-                Anillo ámbar: vence pronto
-              </li>
-              <li className="flex items-center gap-2">
-                <FormaSvg
-                  forma="circulo"
-                  color="var(--text-secondary)"
-                  tamano={16}
-                  anillo="danger"
-                />{' '}
-                Anillo rojo: vencida
-              </li>
-            </ul>
-            <p className="flex flex-wrap items-center gap-1.5 text-muted">
-              El color identifica al responsable:{' '}
-              {[1, 2, 3, 4].map((i) => (
-                <span
-                  key={i}
-                  className="inline-block size-3 rounded-full"
-                  style={{ background: colorDeIntegrante(i, tema) }}
-                  aria-hidden
-                />
-              ))}
-            </p>
+                <li>
+                  <strong className="font-medium text-fg">Bajada:</strong> ya se sabe y se está
+                  haciendo.
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium">Su forma dice cómo avanza:</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {(
+                  [
+                    ['circulo', 'En marcha, sin problemas'],
+                    ['triangulo', 'Atascada: algo la frena'],
+                    ['cuadrado', 'Terminada'],
+                  ] as const
+                ).map(([f, texto]) => (
+                  <li key={f} className="flex items-center gap-2">
+                    <FormaSvg forma={f} color="var(--text-secondary)" tamano={16} />
+                    {texto}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium">Un anillo avisa si urge:</p>
+              <ul className="mt-1.5 space-y-1.5">
+                <li className="flex items-center gap-2">
+                  <FormaSvg
+                    forma="circulo"
+                    color="var(--text-secondary)"
+                    tamano={16}
+                    anillo="warn"
+                  />
+                  Ámbar: vence en menos de 2 días
+                </li>
+                <li className="flex items-center gap-2">
+                  <FormaSvg
+                    forma="circulo"
+                    color="var(--text-secondary)"
+                    tamano={16}
+                    anillo="danger"
+                  />
+                  Rojo: ya pasó su fecha
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium">Y su color, a quién le toca:</p>
+              <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-muted">
+                {[...new Map(tareas.map((x) => [x.colorIdx, x.responsable])).entries()].map(
+                  ([i, nombre]) => (
+                    <li key={nombre} className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-block size-3 rounded-full"
+                        style={{ background: colorDeIntegrante(i ?? 0, tema) }}
+                        aria-hidden
+                      />
+                      {nombre}
+                    </li>
+                  ),
+                )}
+              </ul>
+            </div>
           </div>
         </div>
       </section>
