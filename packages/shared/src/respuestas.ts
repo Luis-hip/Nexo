@@ -48,6 +48,7 @@ import {
   type Retrospectiva,
   type RetroResumen,
   type Sprint,
+  type ExpectativaSprint,
   type SprintDetalle,
 } from './sprints';
 import {
@@ -363,9 +364,17 @@ const esquemaPuntoBurndown = z.object({
   completadas: z.number().int(),
 }) satisfies z.ZodType<PuntoBurndown>;
 
+const esquemaExpectativa = z.object({
+  inicial: z.number().int(),
+  sin_fecha: z.number().int(),
+  despues_del_fin: z.number().int(),
+  pasos: z.array(z.object({ momento: fechaIso, tareas: z.number().int() })),
+}) satisfies z.ZodType<ExpectativaSprint>;
+
 export const esquemaSprintDetalle = esquemaSprint.extend({
   capacidad: z.array(esquemaCapacidadMiembro),
   serie: z.array(esquemaPuntoBurndown),
+  expectativa: esquemaExpectativa.nullable(),
   tareas: z.array(esquemaTareaEquipo),
 }) satisfies z.ZodType<SprintDetalle>;
 

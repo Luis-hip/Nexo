@@ -1,4 +1,4 @@
-import type { PuntoBurndown, TareaEquipo } from '@nexo/shared';
+import type { ExpectativaSprint, PuntoBurndown, TareaEquipo } from '@nexo/shared';
 import { useId, useMemo, useState } from 'react';
 import { useColorDe } from '@/components/ui';
 import { fechaCorta, fechaDia, hora } from '@/lib/fechas';
@@ -28,6 +28,14 @@ export interface DatosBurndown {
   t1: number;
   /** Tareas del sprint al iniciar: de ahí parte la Expectativa. */
   inicial: number;
+  /**
+   * Escalones de la Expectativa (plan congelado al iniciar, DEC-042): momento y tareas pendientes
+   * después de bajar. Vacío si el sprint no tiene plan: entonces es una recta de `inicial` a 0.
+   */
+  plan: { t: number; pendientes: number }[];
+  conPlan: boolean;
+  sinFecha: number;
+  despuesDelFin: number;
   /** Tareas con las que parte el Avance (incluye las agregadas después del inicio). */
   total: number;
   agregadas: number;
@@ -47,8 +55,10 @@ export interface DatosBurndown {
 }
 
 /**
- * Calcula el burndown (retroalimentación, bloque 6). La Expectativa baja de las tareas del inicio
- * (primera instantánea del sprint) a cero al terminar el último día. El Avance parte de las tareas
+ * Calcula el burndown (retroalimentación, bloque 6). La Expectativa sale del plan congelado al
+ * iniciar el sprint: baja 1 al terminar el día de término planificado de cada tarea (las de un
+ * mismo día, juntas) y llega a 0 al final. Sin plan (sprints cerrados antes de la 0042), es una
+ * recta de las tareas de la primera instantánea a cero. El Avance parte de las tareas
  * del sprint y baja 1 en el momento real en que se completa cada una; una tarea reabierta deja de
  * estar completada y su nodo desaparece solo.
  */
@@ -59,6 +69,7 @@ export function calcularBurndown({
   tareas,
   ahora,
   cerradoEn,
+  expectativa,
 }: {
   inicio: string;
   fin: string;
@@ -66,6 +77,7 @@ export function calcularBurndown({
   tareas: TareaEquipo[];
   ahora: number;
   cerradoEn?: string | null;
+  expectativa?: ExpectativaSprint | null;
 }): DatosBurndown {
   const t0 = medianoche(inicio);
   const finDia = medianoche(fin) + MS_DIA;
@@ -74,7 +86,14 @@ export function calcularBurndown({
   const fotos = [...serie].sort((a, b) => a.dia.localeCompare(b.dia));
   // Al cerrar, las tareas sin terminar pasan al siguiente sprint: la última foto conserva el total.
   const total = Math.max(tareas.length, fotos.at(-1)?.total ?? 0);
-  const inicial = Math.min(total, fotos.find((p) => p.dia >= inicio)?.total ?? total) || total;
+  const inicial =
+    expectativa?.inicial ??
+    (Math.min(total, fotos.find((p) => p.dia >= inicio)?.total ?? total) || total);
+  let quedan = inicial;
+  const plan = (expectativa?.pasos ?? []).map((p) => {
+    quedan -= p.tareas;
+    return { t: Math.max(t0, Date.parse(p.momento)), pendientes: quedan };
+  });
   const completadas = tareas
     .filter((t) => t.estado === 'completada' && t.completada_en)
     .map((t) => ({ tarea: t, t: Math.max(t0, Date.parse(t.completada_en as string)) }))
@@ -93,7 +112,9 @@ export function calcularBurndown({
     : nodos.map((n) => ({ t: n.t, pendientes: n.pendientes }));
   const pendientes = escalones.filter((e) => e.t <= tFinal).at(-1)?.pendientes ?? total;
   const fraccion = Math.min(1, Math.max(0, (tFinal - t0) / (finDia - t0)));
-  const esperadas = Math.round(inicial * (1 - fraccion));
+  const esperadas = expectativa
+    ? (plan.filter((p) => p.t <= tFinal).at(-1)?.pendientes ?? inicial)
+    : Math.round(inicial * (1 - fraccion));
   const ritmo: Ritmo =
     pendientes > esperadas ? 'atrasado' : pendientes < esperadas ? 'adelantado' : 'en_ritmo';
   return {
@@ -101,6 +122,10 @@ export function calcularBurndown({
     tFin: finDia,
     t1,
     inicial,
+    plan,
+    conPlan: !!expectativa,
+    sinFecha: expectativa?.sin_fecha ?? 0,
+    despuesDelFin: expectativa?.despues_del_fin ?? 0,
     total,
     agregadas: Math.max(0, total - inicial),
     nodos,
@@ -158,6 +183,7 @@ export function Burndown({
   tareas,
   hoy,
   cerradoEn,
+  expectativa,
   onAbrir,
   className,
 }: {
@@ -168,6 +194,8 @@ export function Burndown({
   /** Día de hoy en la zona del equipo (sprint activo): el texto dice «Al <hoy>…». */
   hoy?: string;
   cerradoEn?: string | null;
+  /** Plan congelado al iniciar el sprint (`SprintDetalle.expectativa`). */
+  expectativa?: ExpectativaSprint | null;
   onAbrir?: (tareaId: string) => void;
   className?: string;
 }) {
@@ -177,8 +205,8 @@ export function Burndown({
   // Se fija al montar: la línea llega hasta «ahora» sin volver a dibujarse cada segundo.
   const [ahora] = useState(() => Date.now());
   const d = useMemo(
-    () => calcularBurndown({ inicio, fin, serie, tareas, ahora, cerradoEn }),
-    [inicio, fin, serie, tareas, ahora, cerradoEn],
+    () => calcularBurndown({ inicio, fin, serie, tareas, ahora, cerradoEn, expectativa }),
+    [inicio, fin, serie, tareas, ahora, cerradoEn, expectativa],
   );
   const [activo, setActivo] = useState<number | null>(null);
   const [foco, setFoco] = useState<number | null>(null);
@@ -208,6 +236,13 @@ export function Burndown({
     for (const p of visibles) camino += ` H${p.px} V${p.py}`;
   }
   camino += ` H${x(d.tFinal)}`;
+  let caminoExpectativa = `M${x(d.t0)},${y(d.inicial)}`;
+  if (d.conPlan) {
+    for (const p of d.plan) caminoExpectativa += ` H${x(p.t)} V${y(p.pendientes)}`;
+    caminoExpectativa += ` H${x(d.tFin)}`;
+  } else {
+    caminoExpectativa += ` L${x(d.tFin)},${y(0)}`;
+  }
 
   const diaResumen = hoy ? fechaDia(hoy) : fechaCorta(new Date(d.tFinal - 1).toISOString());
   const resumen = resumenBurndown(d, diaResumen);
@@ -304,12 +339,11 @@ export function Burndown({
               >
                 Tareas pendientes del sprint
               </text>
-              {/* Expectativa: completa desde el primer día, de la fecha de inicio a la de fin. */}
-              <line
-                x1={x(d.t0)}
-                y1={y(d.inicial)}
-                x2={x(d.tFin)}
-                y2={y(0)}
+              {/* Expectativa: completa desde el primer día, de la fecha de inicio a la de fin;
+                  escalonada con el plan congelado, recta si el sprint no lo tiene. */}
+              <path
+                d={caminoExpectativa}
+                fill="none"
                 stroke="var(--border-strong)"
                 strokeDasharray="6 5"
                 strokeWidth={2}
@@ -423,6 +457,26 @@ export function Burndown({
           <span className="block">
             Este sprint no guarda cuándo se completó cada tarea: el Avance sale de la foto de cada
             día y no tiene puntos por tarea.
+          </span>
+        )}
+        {d.sinFecha > 0 && (
+          <span className="block">
+            {d.sinFecha === 1
+              ? '1 tarea no tenía fecha de entrega al iniciar el sprint: la Expectativa la cuenta para el último día.'
+              : `${d.sinFecha} tareas no tenían fecha de entrega al iniciar el sprint: la Expectativa las cuenta para el último día.`}
+          </span>
+        )}
+        {d.despuesDelFin > 0 && (
+          <span className="block font-medium text-warn-text">
+            {d.despuesDelFin === 1
+              ? '1 tarea tenía su entrega después del fin del sprint: la Expectativa la cuenta para el último día.'
+              : `${d.despuesDelFin} tareas tenían su entrega después del fin del sprint: la Expectativa las cuenta para el último día.`}
+          </span>
+        )}
+        {!d.conPlan && (
+          <span className="block">
+            Este sprint no guardó su plan al iniciar: la Expectativa es una recta de las tareas
+            iniciales a cero.
           </span>
         )}
         {d.agregadas > 0 && (

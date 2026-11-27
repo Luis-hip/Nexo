@@ -540,6 +540,13 @@ export interface SprintInstantaneas {
   total: number;
 }
 
+export interface SprintPlanTareas {
+  congelado_en: Generated<Timestamp>;
+  sprint_id: string;
+  tarea_id: string;
+  termino_planificado: Timestamp | null;
+}
+
 export interface Sprints {
   cerrado_en: Timestamp | null;
   creado_en: Generated<Timestamp>;
@@ -846,6 +853,7 @@ export interface DB {
   soporte_bitacora: SoporteBitacora;
   sprint_capacidad: SprintCapacidad;
   sprint_instantaneas: SprintInstantaneas;
+  sprint_plan_tareas: SprintPlanTareas;
   sprints: Sprints;
   subtareas: Subtareas;
   tarea_compartida: TareaCompartida;

@@ -3788,3 +3788,81 @@ DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid; b uuid; BEGIN
   END IF;
   RAISE NOTICE 'OK P263: aceptar o rechazar una tarea asignada';
 END $$;
+
+-- =============================================================================================
+-- Plan del sprint congelado al iniciar (0042, DEC-042): la Expectativa escalonada del burndown.
+-- =============================================================================================
+
+-- P264. proc_sprint_iniciar congela el plan: cada tarea del sprint con su `vence_en` de ese momento
+--       (también sin fecha). Si después cambia la fecha o entra otra tarea al sprint, el plan no cambia.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(2); a uuid := pg_temp.aceptada(e, 1, 'Con fecha');
+  b uuid := pg_temp.aceptada(e, 2, 'Sin fecha'); s uuid; hoy date; v timestamptz; n uuid; d jsonb; BEGIN
+  hoy := fn_hoy_equipo(e);
+  v := ((hoy + 3)::timestamp + time '18:00') AT TIME ZONE 'America/Mexico_City';
+  UPDATE tareas SET vence_en = v WHERE id = a;
+  UPDATE tareas SET vence_en = NULL WHERE id = b;
+  s := pg_temp.planear(e, jsonb_build_object('tarea_ids', jsonb_build_array(a, b)));
+  IF EXISTS (SELECT 1 FROM sprint_plan_tareas WHERE sprint_id = s) THEN
+    RAISE EXCEPTION 'FALLO P264: un sprint planificado ya tenía plan';
+  END IF;
+  PERFORM proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  IF (SELECT count(*) FROM sprint_plan_tareas WHERE sprint_id = s) <> 2
+     OR (SELECT termino_planificado FROM sprint_plan_tareas WHERE sprint_id = s AND tarea_id = a) IS DISTINCT FROM v
+     OR (SELECT termino_planificado FROM sprint_plan_tareas WHERE sprint_id = s AND tarea_id = b) IS NOT NULL THEN
+    RAISE EXCEPTION 'FALLO P264: plan al iniciar %', (SELECT jsonb_agg(p) FROM sprint_plan_tareas p WHERE sprint_id = s);
+  END IF;
+  -- Editar la fecha y agregar una tarea al sprint activo no reescriben el plan.
+  UPDATE tareas SET vence_en = v + interval '5 days' WHERE id = a;
+  n := (proc_tarea_asignar_nueva(pg_temp.lider(e), e,
+         jsonb_build_object('titulo', 'Después del inicio', 'responsable_id', pg_temp.integrante(e, 1)))->>'id')::uuid;
+  IF (SELECT sprint_id FROM tareas WHERE id = n) IS DISTINCT FROM s
+     OR EXISTS (SELECT 1 FROM sprint_plan_tareas WHERE tarea_id = n)
+     OR (SELECT termino_planificado FROM sprint_plan_tareas WHERE sprint_id = s AND tarea_id = a) IS DISTINCT FROM v THEN
+    RAISE EXCEPTION 'FALLO P264: el plan cambió después del inicio';
+  END IF;
+  d := proc_sprint_obtener(pg_temp.lider(e), e, s);
+  IF (d->'expectativa'->>'inicial')::int <> 2 OR jsonb_array_length(d->'tareas') <> 3 THEN
+    RAISE EXCEPTION 'FALLO P264: %', d->'expectativa';
+  END IF;
+  RAISE NOTICE 'OK P264: el plan del sprint se congela al iniciar y no cambia después';
+END $$;
+
+-- P265. fn_sprint_expectativa: las tareas que terminan el mismo día bajan juntas al terminar ese día;
+--       sin fecha o con entrega después del fin bajan el último día (y se cuentan aparte), así la
+--       Expectativa llega a 0 al terminar el sprint; antes del inicio, bajan desde el inicio.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); s uuid; hoy date; x jsonb; z text := 'America/Mexico_City';
+  t1 uuid := pg_temp.aceptada(e, 0, 'Día 2, mañana'); t2 uuid := pg_temp.aceptada(e, 0, 'Día 2, noche');
+  t3 uuid := pg_temp.aceptada(e, 0, 'Sin fecha'); t4 uuid := pg_temp.aceptada(e, 0, 'Después del fin');
+  t5 uuid := pg_temp.aceptada(e, 0, 'Antes del inicio'); BEGIN
+  hoy := fn_hoy_equipo(e);
+  UPDATE tareas SET vence_en = ((hoy + 2)::timestamp + time '09:00') AT TIME ZONE z WHERE id = t1;
+  UPDATE tareas SET vence_en = ((hoy + 2)::timestamp + time '23:59') AT TIME ZONE z WHERE id = t2;
+  UPDATE tareas SET vence_en = NULL WHERE id = t3;
+  UPDATE tareas SET vence_en = ((hoy + 30)::timestamp) AT TIME ZONE z WHERE id = t4;
+  UPDATE tareas SET vence_en = ((hoy - 3)::timestamp) AT TIME ZONE z WHERE id = t5;
+  s := pg_temp.planear(e, jsonb_build_object('inicio', hoy, 'fin', hoy + 6,
+         'tarea_ids', jsonb_build_array(t1, t2, t3, t4, t5)));
+  x := proc_sprint_iniciar(pg_temp.lider(e), e, s)->'expectativa';
+  IF (x->>'inicial')::int <> 5 OR (x->>'sin_fecha')::int <> 1 OR (x->>'despues_del_fin')::int <> 1
+     OR jsonb_array_length(x->'pasos') <> 3
+     OR (x->'pasos'->0->>'momento')::timestamptz <> (hoy::timestamp AT TIME ZONE z)
+     OR (x->'pasos'->0->>'tareas')::int <> 1
+     OR (x->'pasos'->1->>'momento')::timestamptz <> ((hoy + 3)::timestamp AT TIME ZONE z)
+     OR (x->'pasos'->1->>'tareas')::int <> 2
+     OR (x->'pasos'->2->>'momento')::timestamptz <> ((hoy + 7)::timestamp AT TIME ZONE z)
+     OR (x->'pasos'->2->>'tareas')::int <> 2 THEN
+    RAISE EXCEPTION 'FALLO P265: %', x;
+  END IF;
+  RAISE NOTICE 'OK P265: la Expectativa baja por día de término y llega a 0 al terminar el sprint';
+END $$;
+
+-- P266. Sin plan no hay Expectativa escalonada: un sprint planificado (sin iniciar) devuelve
+--       `expectativa: null`, igual que uno iniciado sin tareas.
+DO $$ DECLARE e uuid := pg_temp.equipo_con(1); s uuid; d jsonb; BEGIN
+  s := pg_temp.planear(e);
+  d := proc_sprint_obtener(pg_temp.lider(e), e, s);
+  IF NOT d ? 'expectativa' OR d->'expectativa' <> 'null'::jsonb THEN RAISE EXCEPTION 'FALLO P266: %', d->'expectativa'; END IF;
+  d := proc_sprint_iniciar(pg_temp.lider(e), e, s);
+  IF d->'expectativa' <> 'null'::jsonb THEN RAISE EXCEPTION 'FALLO P266: sin tareas %', d->'expectativa'; END IF;
+  RAISE NOTICE 'OK P266: sin plan, la expectativa es null';
+END $$;

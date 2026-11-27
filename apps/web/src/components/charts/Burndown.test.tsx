@@ -62,6 +62,29 @@ describe('Burndown del sprint (EQ-09, retroalimentación bloque 6)', () => {
     expect(d.agregadas).toBe(1);
   });
 
+  it('con plan congelado, la Expectativa es escalonada y llega a 0 al final', () => {
+    const d = calcularBurndown({
+      ...base,
+      tareas: [tarea(1, null), tarea(2, null), tarea(3, null)],
+      ahora: Date.parse(local('2026-11-04', 12)),
+      expectativa: {
+        inicial: 3,
+        sin_fecha: 1,
+        despues_del_fin: 0,
+        pasos: [
+          { momento: local('2026-11-04', 0), tareas: 2 },
+          { momento: local('2026-11-07', 0), tareas: 1 },
+        ],
+      },
+    });
+    expect(d.conPlan).toBe(true);
+    expect(d.plan.map((p) => p.pendientes)).toEqual([1, 0]);
+    // El 4 a mediodía ya debían haberse terminado 2 de 3: falta 1 y faltan 3.
+    expect(d.esperadas).toBe(1);
+    expect(d.ritmo).toBe('atrasado');
+    expect(d.sinFecha).toBe(1);
+  });
+
   it('los nodos se enfocan, dicen qué tarea son y abren su detalle', () => {
     const abrir = vi.fn();
     // jsdom no mide: se da un ancho al contenedor para que el gráfico se dibuje.

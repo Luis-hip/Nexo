@@ -417,4 +417,4 @@ Plan y reporte: `docs/11_Plan_Spike_WhatsApp_1a1.md` (secciones 15 y 16), DEC-03
 - [x] **Bloque 1 · Landing:** Características en acordeón con WhatsApp primero, `/whatsapp-info` redirige, público en portada, subtítulo y FAQ; auditoría de enlaces sin rotos (DEC-043).
 - [x] **Bloque 5 · Tareas:** filtro unificado con contador y chips, vista inicial por rol, Lista ordenable con los datos del Tablero y Backlog solo para el líder con el permiso `ver_backlog` (DEC-041).
 - [x] **Bloque 6a y 6c · Burndown:** Avance y Expectativa, ejes con título, frase de ritmo y un nodo por tarea completada con el color del responsable (DEC-042).
-- [ ] **Bloque 6b · Expectativa escalonada y congelada:** falta decidir cómo guardar el plan de cada tarea al iniciar el sprint y qué hacer con las tareas sin fecha de entrega (DEC-042).
+- [x] **Bloque 6b · Expectativa escalonada y congelada:** tabla `sprint_plan_tareas` que llena `proc_sprint_iniciar` (migración `0042`, pruebas P264–P266); las tareas sin fecha bajan el último día (DEC-042).

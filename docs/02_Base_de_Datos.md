@@ -138,7 +138,7 @@ El prototipo guardaba todo en un objeto `EstadoApp`. Cada propiedad pasó por es
 |---|---|---|
 | Identidad y cuenta | `usuarios`, `credenciales_2fa`, `codigos_respaldo_2fa`, `sesiones`, `tokens_verificacion`, `preferencias_usuario`, `preferencias_notificacion`, `whatsapp_usuario` | Quién es la persona, cómo entra, sus preferencias y su número de WhatsApp con consentimiento |
 | Equipos | `equipos`, `membresias`, `invitaciones`, `solicitudes_invitado` | Equipos (máx. 8 miembros activos), rol y color de cada persona, invitaciones y solicitudes de invitados |
-| Sprints | `sprints`, `sprint_capacidad`, `sprint_instantaneas` | Ciclos de trabajo, capacidad y serie diaria para el burndown |
+| Sprints | `sprints`, `sprint_capacidad`, `sprint_instantaneas`, `sprint_plan_tareas` | Ciclos de trabajo, capacidad, serie diaria para el burndown y plan congelado al iniciar (Expectativa, `0042`, DEC-042) |
 | Tareas | `tareas`, `subtareas`, `etiquetas`, `tarea_etiquetas`, `tarea_compartida`, `comentarios_tarea` | Trabajo, estado, avance, responsable, vencimiento, etiquetas y lo compartido con invitados |
 | Chat | `conversaciones`, `mensajes`, `mensaje_reacciones`, `mensaje_menciones`, `conversacion_lecturas` | Canales, mensajes, hilos, reacciones, menciones y lecturas |
 | Archivos | `archivos` | Metadatos de adjuntos (el binario vive fuera de la BD) |

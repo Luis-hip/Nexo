@@ -101,6 +101,7 @@ export function DetalleSprint({
               tareas={sprint.tareas}
               hoy={hoy}
               cerradoEn={sprint.cerrado_en}
+              expectativa={sprint.expectativa}
               onAbrir={acc.abrirTarea}
             />
           </Tarjeta>
