@@ -298,7 +298,12 @@ function Shell({ yo }: { yo: Yo }) {
                 <kbd className="rounded border border-line px-1.5 text-xs">Ctrl K</kbd>
               </button>
               <div className="hidden flex-1 lg:block" />
-              <BotonIcono etiqueta="Buscar" onClick={() => setBusqueda(true)} className="lg:hidden">
+              <BotonIcono
+                etiqueta="Buscar"
+                onClick={() => setBusqueda(true)}
+                className="lg:hidden"
+                data-tour="buscar-movil"
+              >
                 <Search className="size-5" />
               </BotonIcono>
               {crear && (
