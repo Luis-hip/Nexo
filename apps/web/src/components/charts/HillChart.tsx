@@ -19,7 +19,8 @@ export interface PuntoHill {
   colorIdx?: number | null;
 }
 
-function useAnchoContenedor() {
+/** Ancho del contenedor en píxeles (lo usan el Hill Chart y el Burndown). */
+export function useAnchoContenedor() {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
   useLayoutEffect(() => {
