@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import {
   Menu as MenuIcon,
   X,
@@ -103,7 +103,6 @@ export function PublicoLayout() {
   const nav = [
     ['/caracteristicas', 'Características'],
     ['/como-funciona', 'Cómo funciona'],
-    ['/whatsapp-info', 'WhatsApp'],
     ['/ayuda', 'Ayuda'],
   ];
   return (
@@ -234,7 +233,7 @@ export function PublicoLayout() {
               {[
                 ['/caracteristicas', 'Características'],
                 ['/como-funciona', 'Cómo funciona'],
-                ['/whatsapp-info', 'WhatsApp'],
+                ['/caracteristicas#caracteristicas-whatsapp', 'WhatsApp'],
                 ['/para-quien', 'Para quién'],
               ].map(([r = '/', t]) => (
                 <li key={r}>
@@ -367,15 +366,16 @@ export function Landing() {
       >
         <div>
           <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1 text-xs text-muted">
-            <MessageSquareShare className="size-3.5 text-brand" aria-hidden /> Con avisos al grupo
-            de WhatsApp
+            <MessageSquareShare className="size-3.5 text-brand" aria-hidden /> Con avisos por
+            WhatsApp
           </p>
           <h1 className="text-[28px] leading-tight font-semibold tracking-tight sm:text-[40px]">
             Tu equipo, en una sola conversación
           </h1>
           <p className="mt-4 max-w-xl text-lg text-muted">
-            Tareas, chat y avisos en un mismo lugar, para que nada se pierda entre grupos y hojas de
-            cálculo.
+            Para equipos de desarrollo, ingeniería y proyectos de tecnología que organizan su
+            trabajo en sprints, ciclos cortos con una meta clara. Tareas, chat y avisos en un mismo
+            lugar, para que nada se pierda entre grupos y hojas de cálculo.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -412,7 +412,7 @@ export function Landing() {
               [
                 Bell,
                 'Avisos perdidos',
-                'Notificaciones inteligentes y avisos al grupo de WhatsApp que el líder revisa antes de enviar.',
+                'Notificaciones inteligentes y avisos por WhatsApp que el líder revisa antes de enviar.',
               ],
             ].map(([I, ti, tx]) => {
               const Ic = I as typeof Bell;
@@ -501,7 +501,7 @@ export function Landing() {
               <li className="flex gap-3">
                 <Zap className="mt-0.5 size-5 shrink-0 text-warn-text" aria-hidden />
                 <span>
-                  <strong>Al instante:</strong> reuniones y entregas urgentes llegan al grupo.
+                  <strong>Al instante:</strong> reuniones y entregas urgentes llegan por WhatsApp.
                 </span>
               </li>
               <li className="flex gap-3">
@@ -512,10 +512,10 @@ export function Landing() {
               </li>
             </ul>
             <Link
-              to="/whatsapp-info"
+              to="/caracteristicas#caracteristicas-whatsapp"
               className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-brand"
             >
-              Conocer la integración <ArrowRight className="size-4" aria-hidden />
+              Conocer los avisos por WhatsApp <ArrowRight className="size-4" aria-hidden />
             </Link>
           </div>
           <div className="space-y-3">
@@ -626,91 +626,192 @@ function Pagina({
   );
 }
 
-export function Caracteristicas() {
-  const items: [typeof Flag, string, string, ReactNode][] = [
-    [
-      Layers,
-      'Hill Chart',
-      'Color = responsable, forma = estado y anillo = urgencia. Con vista alternativa en lista.',
-      <MockResumen key="h" />,
-    ],
-    [
-      KanbanSquare,
-      'Tablero y votación',
-      'Columnas del flujo con arrastrar y soltar y menú «Mover a…». El equipo vota las propuestas del líder.',
-      <MiniTablero key="t" />,
-    ],
-    [
-      Flag,
-      'Sprints y retrospectiva',
-      'Planea con capacidad por integrante, sigue el burndown y cierra con retrospectiva.',
+interface Caracteristica {
+  clave: string;
+  icono: typeof Flag;
+  titulo: string;
+  /** 2 o 3 frases: qué es, qué hace por ti y un ejemplo corto, sin jerga. */
+  texto: string;
+  extra?: ReactNode;
+  visual: ReactNode;
+}
+
+/** Lo que antes era la página «/whatsapp-info»: qué se avisa, cuándo y con qué controles. */
+const DETALLE_WHATSAPP: [typeof Flag, string, string][] = [
+  [
+    Zap,
+    'Al instante',
+    'Reuniones nuevas, movidas o canceladas y entregas que vencen en menos de 24 horas.',
+  ],
+  [
+    Clock,
+    'En el resumen',
+    'Tareas aceptadas, asignaciones, cambios de estado o de fecha y resultados de las votaciones.',
+  ],
+  [ShieldCheck, 'El líder revisa', 'Por defecto, el líder revisa cada aviso antes de enviarlo.'],
+  [Users, 'Tú decides', 'Solo recibe avisos quien lo acepta, y puede darse de baja cuando quiera.'],
+  [
+    Moon,
+    'Horas de silencio',
+    'Fuera del horario que elija el equipo no sale nada: los avisos esperan.',
+  ],
+];
+
+/** Orden de la retroalimentación (bloque 1): WhatsApp primero porque es lo que distingue a Nexo. */
+const CARACTERISTICAS: Caracteristica[] = [
+  {
+    clave: 'whatsapp',
+    icono: MessageSquareShare,
+    titulo: 'WhatsApp',
+    texto:
+      'Nexo te avisa por WhatsApp de lo importante del equipo, para que no tengas que estar revisando la app. Lo urgente llega al momento y lo demás se junta en un resumen diario o semanal. Por ejemplo, si cambia la hora de una reunión, te llega un mensaje.',
+    extra: (
+      <ul className="space-y-3 text-sm">
+        {DETALLE_WHATSAPP.map(([I, t, d]) => (
+          <li key={t} className="flex gap-3">
+            <I className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+            <span>
+              <strong className="font-medium text-fg">{t}:</strong> {d}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ),
+    visual: (
+      <div className="space-y-3">
+        <BurbujaWA texto="📅 Reunión «Daily» mañana a las 9:30. Confirma tu asistencia en Nexo." />
+        <BurbujaWA texto="⏰ «Integración con WhatsApp» vence mañana. Responsable: Emilio." />
+        <BurbujaWA texto="🗳️ Votación: se aceptó «Filtro por etiquetas»; se rechazó «Tema de alto contraste»." />
+      </div>
+    ),
+  },
+  {
+    clave: 'hill-chart',
+    icono: Layers,
+    titulo: 'Hill Chart',
+    texto:
+      'Un mapa en forma de colina que muestra, de un vistazo, qué tareas aún se están definiendo y cuáles ya se están ejecutando. Cada tarea es una figura: el color dice quién la tiene; la forma, si avanza, se atascó o terminó, y un anillo avisa si vence pronto. Ejemplo: un triángulo con anillo rojo es una tarea atascada y vencida.',
+    visual: <MockResumen />,
+  },
+  {
+    clave: 'tableros',
+    icono: KanbanSquare,
+    titulo: 'Tableros y votación',
+    texto:
+      'El tablero acomoda las tareas en columnas según cómo van, de «por empezar» a «completada», y las mueves arrastrándolas. El líder asigna tareas o las propone a votación para que el equipo decida si entran al sprint, el ciclo corto de trabajo. Ejemplo: arrastras «Pantalla de inicio» a «En curso».',
+    visual: <MiniTablero />,
+  },
+  {
+    clave: 'sprint',
+    icono: Flag,
+    titulo: 'Sprint y retroalimentación',
+    texto:
+      'Un sprint es un ciclo de trabajo de una a tres semanas con una meta clara. Nexo te ayuda a planearlo según el tiempo de cada persona, a ver en una gráfica de avance (burndown) si van al ritmo esperado y a cerrarlo con una retrospectiva: qué salió bien y qué mejorar.',
+    visual: (
       <MiniLista
-        key="s"
         items={['Sprint 3 · activo · 43 %', 'Sprint 2 · 12 de 14', 'Sprint 1 · 14 de 15']}
-      />,
-    ],
-    [
-      MessageCircle,
-      'Chat',
-      'Equipo, tareas, directos e invitados. Hilos, reacciones y mensajes convertibles en tareas.',
+      />
+    ),
+  },
+  {
+    clave: 'chat',
+    icono: MessageCircle,
+    titulo: 'Chat',
+    texto:
+      'Un chat dentro de Nexo para hablar con tu equipo sin perder el hilo: hay un canal general, una conversación por cada tarea y mensajes directos. Puedes mencionar a alguien con @, responder en hilos y reaccionar. Ejemplo: si en la plática surge un pendiente, el líder lo convierte en tarea desde el mensaje.',
+    visual: (
       <MiniLista
-        key="c"
         items={[
           'Valeria: @Emilio escribo a la asesora',
           'Gabriel: el tablero ya soporta «Mover a…»',
           'Nexo: Carlos completó T-09',
         ]}
-      />,
-    ],
-    [
-      CalendarDays,
-      'Calendario',
-      'Reuniones, entregas con semáforo e hitos de sprint, con aviso de conflictos.',
+      />
+    ),
+  },
+  {
+    clave: 'calendario',
+    icono: CalendarDays,
+    titulo: 'Calendario',
+    texto:
+      'Reúne en una sola vista las reuniones del equipo y las fechas de entrega de cada tarea. Las entregas se marcan con colores tipo semáforo según qué tan cerca están de vencer. Ejemplo: abres la semana y ves la reunión del lunes y la entrega del jueves.',
+    visual: (
       <MiniLista
-        key="ca"
         items={[
           'Mañana 9:30 · Daily',
           'En 6 días 16:00 · Revisión de sprint',
           'En 9 días 11:00 · Demo con la asesora',
         ]}
-      />,
-    ],
-    [
-      BarChart3,
-      'Reportes',
-      'Avance, a tiempo vs. con retraso, velocidad y tendencia. Exporta a PDF o CSV.',
-      <MiniLista
-        key="r"
-        items={[
-          'Avance del sprint · 43 %',
-          'A tiempo · 2 de 3',
-          'Velocidad · 13 tareas por sprint',
-        ]}
-      />,
-    ],
-    [
-      MessageSquareShare,
-      'WhatsApp',
-      'Envío rápido y vista detallada de la cola. El líder siempre revisa.',
-      <BurbujaWA key="w" texto="✅ Se sumó al Sprint 3: «Reporte semanal automático»." />,
-    ],
-  ];
+      />
+    ),
+  },
+  {
+    clave: 'reportes',
+    icono: BarChart3,
+    titulo: 'Reportes',
+    texto:
+      'Resume cómo va el equipo con números sencillos: cuántas tareas hay, cuántas se terminaron a tiempo, cuáles vencieron y el avance de los últimos sprints y de cada persona. Puedes descargarlo en CSV para abrirlo en Excel. Ejemplo: ves que el Sprint 2 cerró con 12 de 14 tareas.',
+    visual: (
+      <MiniLista items={['Completadas · 9 de 14', 'A tiempo · 7 de 9', 'Sprint 2 · 12 de 14']} />
+    ),
+  },
+];
+
+const PREFIJO_ANCLA = 'caracteristicas-';
+const claveDeHash = (hash: string) => {
+  const c = hash.startsWith(`#${PREFIJO_ANCLA}`) ? hash.slice(PREFIJO_ANCLA.length + 1) : '';
+  return CARACTERISTICAS.some((x) => x.clave === c) ? c : null;
+};
+
+/**
+ * Características como acordeón (retroalimentación, bloque 1): todo alineado a la izquierda y en
+ * una sola vista. Uno abierto a la vez, WhatsApp por defecto, y cada ítem con su ancla
+ * (`#caracteristicas-whatsapp`) que lo abre al llegar con ese hash.
+ */
+export function Caracteristicas() {
+  const { hash } = useLocation();
+  const [abierto, setAbierto] = useState<string | null>(() => claveDeHash(hash) ?? 'whatsapp');
+  // Si el hash cambia estando en la página (un enlace a otra característica), se abre esa.
+  const [hashPrevio, setHashPrevio] = useState(hash);
+  if (hash !== hashPrevio) {
+    setHashPrevio(hash);
+    const c = claveDeHash(hash);
+    if (c) setAbierto(c);
+  }
+  useEffect(() => {
+    const c = claveDeHash(hash);
+    if (c) document.getElementById(PREFIJO_ANCLA + c)?.scrollIntoView({ block: 'start' });
+  }, [hash]);
+  const cambiar = (clave: string, abrir: boolean) => {
+    setAbierto(abrir ? clave : null);
+    // La dirección refleja el ítem abierto, para poder compartirlo, sin mover la página.
+    if (abrir) window.history.replaceState(window.history.state, '', `#${PREFIJO_ANCLA}${clave}`);
+  };
   return (
     <Pagina
       titulo="Características"
-      intro="Todo lo que tu equipo necesita para organizarse y conversar en un solo lugar."
+      intro="Lo que tu equipo de desarrollo o de proyectos necesita para organizar el trabajo por sprints, darle seguimiento y conversar en un solo lugar."
       nombre="NX/PUB-02-Caracteristicas"
     >
-      <div className="space-y-12">
-        {items.map(([I, t, d, m], i) => (
-          <section key={t} className="grid items-center gap-6 lg:grid-cols-2">
-            <div className={cx(i % 2 === 1 && 'lg:order-2')}>
-              <I className="size-7 text-brand" aria-hidden />
-              <h2 className="mt-3 text-[22px]">{t}</h2>
-              <p className="mt-2 text-muted">{d}</p>
+      <div className="max-w-5xl border-t border-line">
+        {CARACTERISTICAS.map(({ clave, icono: I, titulo, texto, extra, visual }) => (
+          <Acordeon
+            key={clave}
+            id={PREFIJO_ANCLA + clave}
+            nivel="h2"
+            icono={<I className="size-6 shrink-0 text-brand" aria-hidden />}
+            titulo={<span className="text-lg">{titulo}</span>}
+            abierto={abierto === clave}
+            onCambiar={(v) => cambiar(clave, v)}
+          >
+            <div className="grid items-start gap-6 pt-1 pb-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+              <div className="space-y-4">
+                <p className="max-w-prose text-base leading-relaxed text-fg">{texto}</p>
+                {extra}
+              </div>
+              <div>{visual}</div>
             </div>
-            <div>{m}</div>
-          </section>
+          </Acordeon>
         ))}
       </div>
     </Pagina>
@@ -794,56 +895,6 @@ export function ComoFunciona() {
       >
         Empezar gratis <ArrowRight className="size-4" aria-hidden />
       </Link>
-    </Pagina>
-  );
-}
-
-export function WhatsAppInfo() {
-  return (
-    <Pagina
-      titulo="Integración con WhatsApp"
-      intro="Solo lo importante llega al grupo, y siempre con la revisión del líder."
-      nombre="NX/PUB-04-WhatsApp"
-    >
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Tarjeta className="space-y-4 p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Zap className="size-5 text-warn-text" aria-hidden /> Al instante
-          </h2>
-          <p className="text-muted">
-            Reuniones creadas, movidas o canceladas, y entregas que vencen en menos de 24 horas.
-          </p>
-          <BurbujaWA texto="📅 Reunión «Daily» mañana a las 9:30. Confirma tu asistencia en Nexo." />
-          <BurbujaWA texto="⏰ «Integración con grupo de WhatsApp» vence mañana. Responsable: Emilio." />
-        </Tarjeta>
-        <Tarjeta className="space-y-4 p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Clock className="size-5 text-muted" aria-hidden /> En el reporte diario o semanal
-          </h2>
-          <p className="text-muted">
-            Tareas aceptadas, asignaciones, cambios de estado o fecha y resultados de las
-            votaciones.
-          </p>
-          <BurbujaWA texto="👤 «Documentar la API» ahora es de Hilda." />
-          <BurbujaWA texto="🗳️ Votación: se aceptó «Filtro por etiquetas»; se rechazó «Tema de alto contraste»." />
-        </Tarjeta>
-      </div>
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        {[
-          [ShieldCheck, 'El líder revisa', 'Envío rápido o vista detallada con texto editable.'],
-          [Users, 'Consentimiento', 'Cada integrante decide si acepta ser mencionado.'],
-          [Clock, 'Horas de silencio', 'Los avisos esperan fuera del horario elegido.'],
-        ].map(([I, t, d]) => {
-          const Ic = I as typeof Clock;
-          return (
-            <div key={t as string} className="rounded-[12px] border border-line p-5">
-              <Ic className="size-5 text-brand" aria-hidden />
-              <h3 className="mt-2 font-semibold">{t as string}</h3>
-              <p className="text-sm text-muted">{d as string}</p>
-            </div>
-          );
-        })}
-      </div>
     </Pagina>
   );
 }
