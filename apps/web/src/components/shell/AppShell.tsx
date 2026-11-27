@@ -218,7 +218,15 @@ function Shell({ yo }: { yo: Yo }) {
                 <Logo />
               </Link>
             </div>
-            <div className="px-3 pb-2">
+            {/* Rótulo como los de Trabajo, Comunicación y Gestión: separa el espacio personal de
+                los equipos (retroalimentación, bloque 4a). */}
+            <div className="px-3 pb-2" role="group" aria-labelledby="rotulo-espacios">
+              <p
+                id="rotulo-espacios"
+                className="px-3 pb-1 text-xs font-medium tracking-wide text-muted uppercase"
+              >
+                Espacios
+              </p>
               <SelectorEspacios yo={yo} equipoId={equipoId} ancho />
             </div>
             <nav className="flex-1 overflow-y-auto px-3 py-2">

@@ -7,7 +7,7 @@ const PASOS = [
     sel: '[data-tour="espacios"]',
     titulo: 'Tus espacios',
     texto:
-      'Cambia entre tu Espacio personal y cada equipo. La navegación se adapta a tu rol en cada uno.',
+      'En «Espacios» cambias entre tu Espacio personal y cada equipo. La navegación se adapta a tu rol en cada uno.',
   },
   {
     sel: '[data-cmp="cmp/navegacion/barra-lateral"], [data-cmp="cmp/navegacion/rail"], [data-cmp="cmp/navegacion/barra-inferior"]',
