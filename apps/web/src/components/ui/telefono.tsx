@@ -129,15 +129,18 @@ export function CampoTelefono({
           onClick={() => setAbierto(!abierto)}
           aria-haspopup="dialog"
           aria-expanded={abierto}
-          aria-label={`Lada: ${opcion.nombre}, +${opcion.lada}. Cambiar de país`}
           aria-describedby={describe || undefined}
           className="flex h-11 shrink-0 items-center gap-1.5 rounded-l-[8px] border border-r-0 border-line-strong/50 bg-surface px-3 text-sm text-fg transition-colors hover:border-line-strong focus-visible:relative focus-visible:z-10 focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25 focus-visible:outline-none"
           data-cmp="cmp/formularios/telefono-lada"
         >
+          {/* Nombre accesible desde el contenido, sin aria-label: incluye el texto visible
+              («MX +52») y lo completa para lectores de pantalla (WCAG 2.5.3). */}
+          <span className="sr-only">Lada: </span>
           <span className="rounded-[4px] bg-canvas px-1 text-[11px] font-semibold tracking-wide text-muted">
             {pais}
-          </span>
+          </span>{' '}
           <span className="tabular">+{opcion.lada}</span>
+          <span className="sr-only">{` (${opcion.nombre}). Cambiar de país`}</span>
           <ChevronDown className="size-4 text-muted" aria-hidden />
         </button>
         <Entrada
