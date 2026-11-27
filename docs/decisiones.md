@@ -126,7 +126,7 @@ Quedan en `pnpm-lock.yaml`. Principales: Node ≥ 22 (CI con 22), pnpm 10, React
 `packages/shared/src/permisos.ts` implementa la matriz de `01`, sección 2.2, con una prueba parametrizada (una fila de la tabla = un caso por perfil).
 
 - Los **textos de motivo** son los de `src/lib/permisos.ts` del prototipo. Tres acciones no traían texto (`ver_resumen`, `salir_equipo`, `canal_invitados`) y usan uno genérico.
-- El prototipo define **10 acciones más** que la tabla de `01` (guardas de vistas: `archivar_equipo`, `ver_actividad`, `crear_plantilla`, `usar_plantilla`, `ver_miembros`, `ver_calendario`, `ver_archivos`, `ver_sprints`, `configurar_equipo`, `canal_invitados`). Se conservan con sus mismos valores; los nombres pasan de `kebab-case` a `snake_case`.
+- El prototipo define **10 acciones más** que la tabla de `01` (guardas de vistas: `archivar_equipo`, `ver_actividad`, `crear_plantilla`, `usar_plantilla`, `ver_miembros`, `ver_calendario`, `ver_archivos`, `ver_sprints`, `configurar_equipo`, `canal_invitados`). Se conservan con sus mismos valores; los nombres pasan de `kebab-case` a `snake_case`. (DEC-041 agrega `ver_backlog`: son 11.)
 - **Diferencia deliberada con el prototipo:** allí las reglas (p) y (c) se daban por cumplidas si no se pasaba contexto. Aquí `puede()` es **estricta**: (p) exige `esPropio: true` y (c) exige `esCompartido: true`. El servidor nunca supone.
 - El resultado negativo incluye `oculto` (como en el prototipo) para que la web sepa si esconder el control o mostrarlo deshabilitado con el motivo.
 
@@ -485,3 +485,12 @@ Ningún secreto en el repositorio; el navegador no recibe secretos; producción 
 - El responsable acepta o rechaza la asignación como siempre (V-11): si es otra persona queda pendiente y recibe el aviso de `tarea.asignada`; si la rechaza, la tarea sigue aceptada y sin responsable.
 - Proceso nuevo `proc_tarea_asignar_nueva` (migración aditiva `0041`, pruebas P260–P263). `POST /equipos/:id/tareas` recibe `modo: 'asignar' | 'votacion'`; sin `modo` sigue siendo votación, para no romper clientes ni pruebas anteriores. Reformular siempre vuelve a votación.
 - Web: el formulario se llama «Nueva tarea» y abre en «Asignar tarea»; un selector cambia a «Proponer a votación». El botón «Nueva propuesta» de la pantalla de votación abre directamente en esa forma (`?nueva=propuesta`).
+
+## DEC-041 · Lista y Backlog: dos vistas distintas; el Backlog solo para el líder
+
+**Fecha:** 2026-11-26 · **Fuente:** retroalimentación de la profesora tras la presentación de avances (bloque 5).
+
+- **Auditoría.** Antes del cambio la **Lista** leía la vista `todas` y quitaba propuestas, rechazadas y canceladas: mostraba lo del tablero **más** lo del backlog, en tabla, sin ordenar ni filtrar. El **Backlog** lee la vista `backlog` (`estado = 'backlog'`): tareas ya aceptadas que el líder apartó del sprint, en orden de prioridad, con «Mover arriba/abajo» y «Pasar al tablero» solo para el líder; el integrante solo lo leía (no tenía ninguna acción ahí; desde DEC-040 tampoco propone tareas).
+- **Decisión: son distintas y se conservan las dos.** **Backlog** = trabajo pendiente que aún no entra a un sprint, ordenado por prioridad; lo usa el líder para planear. **Lista** = las tareas del tablero (vista `tablero`, las mismas que el Tablero) en una tabla ordenable por columna, con el mismo filtro que el Tablero.
+- **El Backlog solo lo ve el líder.** Acción nueva `ver_backlog` en la matriz (`packages/shared/src/permisos.ts`, líder ✔, integrante e invitado ✖): la API responde 403 a `GET /equipos/:id/tareas?vista=backlog` y la web oculta la pestaña; quien entra por la URL vuelve al tablero con el aviso «El backlog solo lo ve el líder…». Las acciones adicionales de la matriz pasan de 10 a 11. `proc_tarea_listar` no cambia (el permiso se aplica en la ruta, como `ver_sprints`).
+- **Filtro unificado (5b).** Un botón «Filtros» con Responsable, Prioridad y Plazo (A tiempo / Con retraso / Vencida, el mismo semáforo de la tarjeta), contador y chips. Lo usan el Tablero y la Lista; **cada vista guarda su propio estado** (no se comparte). Vista inicial del Tablero por rol (no es un permiso): el integrante empieza con «Responsable: Yo»; el líder ve todo; el invitado no tiene tablero (ve «Tareas compartidas»). La Lista no aplica la regla por rol.

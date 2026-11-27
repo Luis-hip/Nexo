@@ -308,6 +308,7 @@ describe.skipIf(!DATABASE_URL)('matriz de permisos completa contra la API (5.3)'
     ],
     ver_archivos: [{ metodo: 'GET', url: `${E}/archivos` }],
     ver_sprints: [{ metodo: 'GET', url: `${E}/sprints` }],
+    ver_backlog: [{ metodo: 'GET', url: `${E}/tareas?vista=backlog` }],
     configurar_equipo: [{ metodo: 'PATCH', url: `${E}/configuracion`, cuerpo: {} }],
     canal_invitados: [{ metodo: 'GET', url: `/chat/conversaciones/${obj.cInvitados}/mensajes` }],
     configurar_whatsapp: [{ metodo: 'GET', url: `${E}/whatsapp` }],

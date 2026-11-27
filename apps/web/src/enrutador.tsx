@@ -190,19 +190,8 @@ const rutas: RouteObject[] = [
                 children: [
                   { index: true, lazy: diferida(equipo, (m) => m.TableroRuta) },
                   { path: 'lista', lazy: diferida(equipo, (m) => m.ListaRuta) },
-                  {
-                    path: 'backlog',
-                    lazy: async () => {
-                      const { Backlog } = await equipo();
-                      return {
-                        element: (
-                          <Requiere permiso="ver_sprints">
-                            <Backlog />
-                          </Requiere>
-                        ),
-                      };
-                    },
-                  },
+                  // Solo el líder (ver_backlog); a los demás los lleva al tablero con un aviso.
+                  { path: 'backlog', lazy: diferida(equipo, (m) => m.BacklogRuta) },
                   {
                     path: 'votacion',
                     lazy: async () => {

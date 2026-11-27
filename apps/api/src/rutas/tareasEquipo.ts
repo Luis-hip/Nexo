@@ -52,7 +52,8 @@ export const rutasTareasEquipo: FastifyPluginAsync<{ db: BaseDatos }> = async (a
     const { vista } = validar(consultaLista, req.query);
     // Un invitado ve solo lo compartido (lo filtra el servicio); no hay backlog ni votación para él.
     requierePermiso(ctx, 'ver_resumen', { esCompartido: true });
-    if (vista === 'backlog' || vista === 'votacion') requierePermiso(ctx, 'ver_sprints');
+    if (vista === 'backlog') requierePermiso(ctx, 'ver_backlog');
+    if (vista === 'votacion') requierePermiso(ctx, 'ver_sprints');
     if (vista === 'mias') requierePermiso(ctx, 'ver_sprints');
     return servicio.listar(db, ctx, vista);
   });

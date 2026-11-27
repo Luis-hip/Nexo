@@ -51,7 +51,7 @@ describe('matriz de permisos (docs/01, 2.2)', () => {
 
   it('las acciones adicionales del prototipo nunca dan acceso a un invitado salvo su canal', () => {
     const extras = ACCIONES.slice(30);
-    expect(extras).toHaveLength(10);
+    expect(extras).toHaveLength(11);
     for (const accion of extras) {
       const r = puede(accion, { perfil: 'invitado', esPropio: true, esCompartido: true });
       expect(r.permitido, accion).toBe(accion === 'canal_invitados');

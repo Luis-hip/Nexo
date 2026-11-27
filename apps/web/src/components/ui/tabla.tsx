@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { cx } from './cx';
 
 export interface ColumnaTabla<T> {
@@ -8,6 +9,8 @@ export interface ColumnaTabla<T> {
   /** Alinea números a la derecha con cifras tabulares. */
   numerica?: boolean;
   className?: string;
+  /** Si se da, la columna se puede ordenar con un clic en su encabezado. */
+  orden?: (a: T, b: T) => number;
 }
 
 /**
@@ -30,6 +33,12 @@ export function Tabla<T>({
   vacio?: ReactNode;
   className?: string;
 }) {
+  const [orden, setOrden] = useState<{ clave: string; asc: boolean } | null>(null);
+  const comparar = orden && columnas.find((c) => c.clave === orden.clave)?.orden;
+  const signo = orden?.asc === false ? -1 : 1;
+  const ordenadas = comparar ? [...filas].sort((a, b) => signo * comparar(a, b)) : filas;
+  const ordenar = (clave: string) =>
+    setOrden((o) => (o?.clave === clave ? { clave, asc: !o.asc } : { clave, asc: true }));
   return (
     <div
       data-cmp="cmp/datos/tabla"
@@ -41,22 +50,41 @@ export function Tabla<T>({
         <caption className="sr-only">{titulo}</caption>
         <thead>
           <tr className="border-b border-line bg-surface text-xs text-muted">
-            {columnas.map((c) => (
-              <th
-                key={c.clave}
-                scope="col"
-                className={cx(
-                  'px-4 py-2.5 font-medium whitespace-nowrap',
-                  c.numerica && 'text-right',
-                )}
-              >
-                {c.titulo}
-              </th>
-            ))}
+            {columnas.map((c) => {
+              const activa = orden?.clave === c.clave;
+              const Flecha = !activa ? ArrowUpDown : orden.asc ? ArrowUp : ArrowDown;
+              return (
+                <th
+                  key={c.clave}
+                  scope="col"
+                  aria-sort={activa ? (orden.asc ? 'ascending' : 'descending') : undefined}
+                  className={cx(
+                    'px-4 py-2.5 font-medium whitespace-nowrap',
+                    c.numerica && 'text-right',
+                  )}
+                >
+                  {c.orden ? (
+                    <button
+                      type="button"
+                      onClick={() => ordenar(c.clave)}
+                      className={cx(
+                        '-mx-1 inline-flex items-center gap-1 rounded-[6px] px-1 hover:text-fg',
+                        activa && 'text-fg',
+                      )}
+                    >
+                      {c.titulo}
+                      <Flecha className={cx('size-3.5', !activa && 'opacity-50')} aria-hidden />
+                    </button>
+                  ) : (
+                    c.titulo
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {filas.map((f) => (
+          {ordenadas.map((f) => (
             <tr key={idFila(f)} className="border-b border-line last:border-0 hover:bg-surface/60">
               {columnas.map((c) => (
                 <td
