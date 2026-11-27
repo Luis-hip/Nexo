@@ -6,7 +6,7 @@ export { Liderazgo } from './Liderazgo';
 export { MiembroDetalle } from './MiembroDetalle';
 export { Miembros } from './Miembros';
 export { Resumen } from './Resumen';
-export { Backlog, TareaRuta, TareasLayout, Votacion } from './tareas';
+export { Backlog, BacklogRuta, TareaRuta, TareasLayout, Votacion } from './tareas';
 
 /** El invitado no tiene tablero ni lista: ve sus tareas compartidas (IN-02) en el layout. */
 export function TableroRuta() {

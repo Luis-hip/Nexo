@@ -76,7 +76,7 @@ jobs:
       - name: Pruebas SQL (deben salir 11 OK)
         run: pnpm db:test
 
-      - name: Pruebas de los procesos de la BD (deben salir 208 OK, P1–P103, chat P104–P129, WhatsApp P150–P169, autenticación P200–P208, pendientes P210–P219, spike P220–P255 y tareas asignadas P260–P263)
+      - name: Pruebas de los procesos de la BD (deben salir 211 OK, P1–P103, chat P104–P129, WhatsApp P150–P169, autenticación P200–P208, pendientes P210–P219, spike P220–P255, tareas asignadas P260–P263 y plan del sprint P264–P266)
         run: pnpm db:test:procesos
 
       - name: Procesos de la BD documentados en docs/08

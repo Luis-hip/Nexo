@@ -168,10 +168,14 @@ export const ARTICULOS: {
 ];
 
 export const FAQ = [
+  [
+    '¿Para quién es Nexo?',
+    'Para equipos pequeños, de hasta 8 personas, que trabajan en desarrollo, ingeniería o proyectos de tecnología y quieren seguir una metodología ágil: dividir el trabajo en sprints (ciclos de una a tres semanas), repartir las tareas y revisar juntos cómo van. También puedes usarlo solo, con tu Espacio personal.',
+  ],
   ['¿Nexo es gratis?', 'Sí. Nexo no tiene planes de pago ni facturación.'],
   [
     '¿En qué se diferencia de Trello?',
-    'Pone la comunicación al centro: chat integrado por equipo y por tarea, notificaciones inteligentes y avisos al grupo de WhatsApp.',
+    'Pone la comunicación al centro: chat integrado por equipo y por tarea, notificaciones inteligentes y avisos por WhatsApp.',
   ],
   [
     '¿Puedo usarlo solo?',

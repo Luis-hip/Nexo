@@ -34,7 +34,12 @@ const rutas: RouteObject[] = [
           { index: true, lazy: diferida(publico, (m) => m.Landing) },
           { path: 'caracteristicas', lazy: diferida(publico, (m) => m.Caracteristicas) },
           { path: 'como-funciona', lazy: diferida(publico, (m) => m.ComoFunciona) },
-          { path: 'whatsapp-info', lazy: diferida(publico, (m) => m.WhatsAppInfo) },
+          // La página de WhatsApp pasó a ser el primer ítem de Características (retroalimentación,
+          // bloque 1); la dirección vieja sigue funcionando.
+          {
+            path: 'whatsapp-info',
+            element: <Navigate to="/caracteristicas#caracteristicas-whatsapp" replace />,
+          },
           { path: 'para-quien', lazy: diferida(publico, (m) => m.ParaQuien) },
           { path: 'ayuda', lazy: diferida(publico, (m) => m.AyudaCentro) },
           { path: 'ayuda/:articulo', lazy: diferida(publico, (m) => m.AyudaArticulo) },
@@ -185,19 +190,8 @@ const rutas: RouteObject[] = [
                 children: [
                   { index: true, lazy: diferida(equipo, (m) => m.TableroRuta) },
                   { path: 'lista', lazy: diferida(equipo, (m) => m.ListaRuta) },
-                  {
-                    path: 'backlog',
-                    lazy: async () => {
-                      const { Backlog } = await equipo();
-                      return {
-                        element: (
-                          <Requiere permiso="ver_sprints">
-                            <Backlog />
-                          </Requiere>
-                        ),
-                      };
-                    },
-                  },
+                  // Solo el líder (ver_backlog); a los demás los lleva al tablero con un aviso.
+                  { path: 'backlog', lazy: diferida(equipo, (m) => m.BacklogRuta) },
                   {
                     path: 'votacion',
                     lazy: async () => {

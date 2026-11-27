@@ -1,9 +1,10 @@
 import type { WhatsAppUsuario } from '@nexo/shared';
 import { MessageCircle } from 'lucide-react';
 import { useState } from 'react';
-import { Boton, Campo, Casilla, Entrada, Interruptor } from '@/components/ui';
+import { Boton, CampoTelefono, Casilla, Interruptor, type ValorTelefono } from '@/components/ui';
 import { mensajeDeError } from '@/lib/api';
 import { useAccionesWhatsAppYo } from '@/lib/consultasWhatsApp';
+import { formatoLegible } from '@/lib/telefono';
 import { toast } from '@/lib/toasts';
 import { DirectoPersonal } from './Directo';
 
@@ -20,37 +21,41 @@ export function RegistroWhatsApp({
   variante: 'ajustes' | 'paso';
 }) {
   const acciones = useAccionesWhatsAppYo();
-  const [numero, setNumero] = useState<string | null>(null);
+  // `null` = sin cambios respecto al número guardado.
+  const [numero, setNumero] = useState<ValorTelefono | null>(null);
   const [acepta, setAcepta] = useState(true);
   const [editando, setEditando] = useState(false);
   const [error, setError] = useState<string>();
-  const valor = numero ?? w.numero ?? '';
+  const [validar, setValidar] = useState(false);
+  // El campo se vuelve a montar al guardar, para prellenarse con el número nuevo.
+  const [version, setVersion] = useState(0);
+  const valor = numero?.e164 ?? w.numero ?? '';
+  const valido = numero ? numero.valido : !!w.numero;
   const guardar = (cambios: { numero?: string; consentimiento?: boolean }, ok?: string) => {
     setError(undefined);
     acciones.guardar.mutate(cambios, {
       onSuccess: () => {
         setNumero(null);
         setEditando(false);
+        setValidar(false);
+        setVersion((v) => v + 1);
         if (ok) toast(ok);
       },
       onError: (e) => setError(mensajeDeError(e)),
     });
   };
   const campoNumero = (
-    <Campo
+    <CampoTelefono
+      key={version}
       etiqueta="Tu número de WhatsApp"
+      valorInicial={w.numero}
       error={error}
-      ayuda="Con lada internacional, por ejemplo +5212221234567. Solo se usa para los avisos de Nexo."
-    >
-      <Entrada
-        type="tel"
-        inputMode="tel"
-        autoComplete="tel"
-        value={valor}
-        maxLength={16}
-        onChange={(e) => setNumero(e.target.value)}
-      />
-    </Campo>
+      validar={validar}
+      onCambio={(v) => {
+        setError(undefined);
+        setNumero(v);
+      }}
+    />
   );
 
   if (variante === 'ajustes') {
@@ -59,10 +64,13 @@ export function RegistroWhatsApp({
         {campoNumero}
         <Boton
           cargando={acciones.guardar.isPending}
-          disabled={numero === null}
-          onClick={() =>
-            guardar({ numero: valor.trim() }, valor.trim() ? 'Número guardado.' : 'Número borrado.')
-          }
+          // Hasta que el número sea válido; vacío también se puede guardar (borra el número).
+          disabled={numero === null || (!numero.valido && !numero.vacio)}
+          onClick={() => {
+            setValidar(true);
+            if (!numero || (!numero.valido && !numero.vacio)) return;
+            guardar({ numero: numero.e164 }, numero.e164 ? 'Número guardado.' : 'Número borrado.');
+          }}
         >
           Guardar número
         </Boton>
@@ -82,7 +90,7 @@ export function RegistroWhatsApp({
     return (
       <p className="flex flex-wrap items-center gap-2 text-sm">
         <MessageCircle className="size-4 text-muted" aria-hidden />
-        Tu número: <strong className="tabular">{w.numero}</strong>
+        Tu número: <strong className="tabular">{formatoLegible(w.numero)}</strong>
         <button
           type="button"
           className="text-brand hover:underline"
@@ -98,11 +106,9 @@ export function RegistroWhatsApp({
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!valor.trim()) {
-          setError('Escribe tu número con lada internacional.');
-          return;
-        }
-        guardar({ numero: valor.trim(), consentimiento: acepta });
+        setValidar(true);
+        if (!valor || !valido) return;
+        guardar({ numero: valor, consentimiento: acepta });
       }}
     >
       {campoNumero}
@@ -116,7 +122,7 @@ export function RegistroWhatsApp({
         type="submit"
         variante="primario"
         cargando={acciones.guardar.isPending}
-        disabled={!acepta}
+        disabled={!acepta || !valor || !valido}
       >
         Continuar
       </Boton>

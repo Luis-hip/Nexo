@@ -94,7 +94,16 @@ export function DetalleSprint({
             <h3 id={`bd-${sprint.id}`} className="mb-3 font-semibold">
               Burndown
             </h3>
-            <Burndown inicio={sprint.inicio} fin={sprint.fin} serie={sprint.serie} />
+            <Burndown
+              inicio={sprint.inicio}
+              fin={sprint.fin}
+              serie={sprint.serie}
+              tareas={sprint.tareas}
+              hoy={hoy}
+              cerradoEn={sprint.cerrado_en}
+              expectativa={sprint.expectativa}
+              onAbrir={acc.abrirTarea}
+            />
           </Tarjeta>
         )}
         <Tarjeta as="section" className="p-4 sm:p-5" aria-labelledby={`cap-${sprint.id}`}>

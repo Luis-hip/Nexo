@@ -62,9 +62,24 @@ export interface PuntoBurndown {
   completadas: number;
 }
 
+/**
+ * Expectativa del burndown según el plan congelado al iniciar el sprint (`sprint_plan_tareas`,
+ * DEC-042): cuántas tareas había y en qué momento debía terminar cada grupo.
+ */
+export interface ExpectativaSprint {
+  inicial: number;
+  /** Tareas sin fecha de entrega al iniciar: se planean para el último día. */
+  sin_fecha: number;
+  /** Tareas que vencían después del fin del sprint: también bajan el último día. */
+  despues_del_fin: number;
+  pasos: { momento: string; tareas: number }[];
+}
+
 export interface SprintDetalle extends Sprint {
   capacidad: CapacidadMiembro[];
   serie: PuntoBurndown[];
+  /** `null` si el sprint no tiene plan congelado (no ha iniciado, o se cerró antes de la 0042). */
+  expectativa: ExpectativaSprint | null;
   tareas: TareaEquipo[];
 }
 
