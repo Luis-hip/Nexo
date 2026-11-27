@@ -1,4 +1,5 @@
 import type { ExpectativaSprint, PuntoBurndown, TareaEquipo } from '@nexo/shared';
+import { ChevronRight } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { useColorDe } from '@/components/ui';
 import { fechaCorta, fechaDia, hora } from '@/lib/fechas';
@@ -253,6 +254,32 @@ export function Burndown({
   const etiquetaNodo = (p: (typeof visibles)[number]) =>
     `T-${String(p.tarea.codigo).padStart(2, '0')} ${p.tarea.titulo}. Completada por ${persona(p.tarea)} el ${cuando(p.t)}. Abrir el detalle.`;
 
+  const plural = (n: number, una: string, varias: string) => (n === 1 ? una : varias);
+  const notas = [
+    !d.porFotos && {
+      texto: 'El color de cada punto identifica al responsable de la tarea completada.',
+    },
+    d.porFotos && {
+      texto:
+        'Este sprint no guarda cuándo se completó cada tarea: el Avance sale de la foto de cada día y no tiene puntos por tarea.',
+    },
+    d.sinFecha > 0 && {
+      texto: `${plural(d.sinFecha, '1 tarea no tenía', `${d.sinFecha} tareas no tenían`)} fecha de entrega al iniciar el sprint: la Expectativa ${plural(d.sinFecha, 'la', 'las')} cuenta para el último día.`,
+    },
+    d.despuesDelFin > 0 && {
+      texto: `${plural(d.despuesDelFin, '1 tarea tenía', `${d.despuesDelFin} tareas tenían`)} su entrega después del fin del sprint: la Expectativa ${plural(d.despuesDelFin, 'la', 'las')} cuenta para el último día.`,
+      aviso: true,
+    },
+    !d.conPlan && {
+      texto:
+        'Este sprint no guardó su plan al iniciar: la Expectativa es una recta de las tareas iniciales a cero.',
+    },
+    d.agregadas > 0 && {
+      texto: `${plural(d.agregadas, 'Se agregó 1 tarea', `Se agregaron ${d.agregadas} tareas`)} después de iniciar el sprint: el Avance ${plural(d.agregadas, 'la', 'las')} cuenta desde el inicio; la Expectativa no.`,
+    },
+  ].filter((n): n is { texto: string; aviso?: boolean } => !!n);
+  const avisos = notas.filter((n) => n.aviso).length;
+
   return (
     <figure className={className} data-name="NX/EQ-09-Burndown">
       <div ref={ref} className="relative">
@@ -448,43 +475,30 @@ export function Burndown({
         <span id={`${id}-resumen`} className="block text-sm text-fg">
           {resumen}
         </span>
-        {!d.porFotos && (
-          <span className="block">
-            El color de cada punto identifica al responsable de la tarea completada.
-          </span>
-        )}
-        {d.porFotos && (
-          <span className="block">
-            Este sprint no guarda cuándo se completó cada tarea: el Avance sale de la foto de cada
-            día y no tiene puntos por tarea.
-          </span>
-        )}
-        {d.sinFecha > 0 && (
-          <span className="block">
-            {d.sinFecha === 1
-              ? '1 tarea no tenía fecha de entrega al iniciar el sprint: la Expectativa la cuenta para el último día.'
-              : `${d.sinFecha} tareas no tenían fecha de entrega al iniciar el sprint: la Expectativa las cuenta para el último día.`}
-          </span>
-        )}
-        {d.despuesDelFin > 0 && (
-          <span className="block font-medium text-warn-text">
-            {d.despuesDelFin === 1
-              ? '1 tarea tenía su entrega después del fin del sprint: la Expectativa la cuenta para el último día.'
-              : `${d.despuesDelFin} tareas tenían su entrega después del fin del sprint: la Expectativa las cuenta para el último día.`}
-          </span>
-        )}
-        {!d.conPlan && (
-          <span className="block">
-            Este sprint no guardó su plan al iniciar: la Expectativa es una recta de las tareas
-            iniciales a cero.
-          </span>
-        )}
-        {d.agregadas > 0 && (
-          <span className="block">
-            {d.agregadas === 1
-              ? 'Se agregó 1 tarea después de iniciar el sprint: el Avance la cuenta desde el inicio; la Expectativa no.'
-              : `Se agregaron ${d.agregadas} tareas después de iniciar el sprint: el Avance las cuenta desde el inicio; la Expectativa no.`}
-          </span>
+        {notas.length > 0 && (
+          // Notas plegadas: solo aparecen las que aplican a este sprint. El título dice cuántas son
+          // y cuántos avisos hay, para que el aviso de entregas fuera del sprint no pase inadvertido.
+          <details className="group">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-[6px] py-0.5 font-medium text-fg hover:underline focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+              <ChevronRight
+                className="size-3.5 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
+                aria-hidden
+              />
+              Notas de la gráfica ({notas.length})
+              {avisos > 0 && (
+                <span className="font-medium text-warn-text">
+                  · {avisos === 1 ? '1 aviso' : `${avisos} avisos`}
+                </span>
+              )}
+            </summary>
+            <ul className="mt-1.5 space-y-1 pl-[18px]">
+              {notas.map((n) => (
+                <li key={n.texto} className={n.aviso ? 'font-medium text-warn-text' : undefined}>
+                  {n.texto}
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </figcaption>
     </figure>
