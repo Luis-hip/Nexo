@@ -408,3 +408,13 @@ Plan y reporte: `docs/11_Plan_Spike_WhatsApp_1a1.md` (secciones 15 y 16), DEC-03
 - [x] Pista B: B1, B3, B5 y B6.
 - [ ] Pista B: B2 y B4 (esperan la aprobación de las plantillas en Meta).
 
+
+## Retroalimentación de la profesora (2026-11-26, rama `Dev_Luis`)
+
+- [x] **Bloque 4 · Menú lateral:** rótulo «Espacios»; «Historial» y «Notificaciones» en el equipo (DEC-043).
+- [x] **Bloque 3 · Teléfono:** lada aparte con México +52 por defecto, autodetección al pegar y validación por país; mismo E.164 hacia la API (DEC-043).
+- [x] **Bloque 2 · Recorrido:** resaltado y globo dentro de la ventana en 1366×768, 1920×1080, zoom 125 % y 150 %, tablet y móvil, tema claro y oscuro (DEC-043).
+- [x] **Bloque 1 · Landing:** Características en acordeón con WhatsApp primero, `/whatsapp-info` redirige, público en portada, subtítulo y FAQ; auditoría de enlaces sin rotos (DEC-043).
+- [x] **Bloque 5 · Tareas:** filtro unificado con contador y chips, vista inicial por rol, Lista ordenable con los datos del Tablero y Backlog solo para el líder con el permiso `ver_backlog` (DEC-041).
+- [x] **Bloque 6a y 6c · Burndown:** Avance y Expectativa, ejes con título, frase de ritmo y un nodo por tarea completada con el color del responsable (DEC-042).
+- [ ] **Bloque 6b · Expectativa escalonada y congelada:** falta decidir cómo guardar el plan de cada tarea al iniciar el sprint y qué hacer con las tareas sin fecha de entrega (DEC-042).
