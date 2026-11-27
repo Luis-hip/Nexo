@@ -373,7 +373,8 @@ export function Landing() {
             Tu equipo, en una sola conversación
           </h1>
           <p className="mt-4 max-w-xl text-lg text-muted">
-            Tareas, chat y avisos de tu equipo en un mismo lugar. Pensado para equipos de desarrollo, ingeniería y tecnología.
+            Tareas, chat y avisos de tu equipo en un mismo lugar. Pensado para equipos de
+            desarrollo, ingeniería y tecnología.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
