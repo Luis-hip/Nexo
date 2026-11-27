@@ -120,7 +120,8 @@ El inventario del prototipo (`src/data/inventario.ts`) tiene **109 entradas**: 7
 ### 3.2 Árbol de rutas (se conserva el del prototipo)
 
 ```
-Público (layout público)      /, /caracteristicas, /como-funciona, /whatsapp-info, /para-quien,
+Público (layout público)      /, /caracteristicas, /como-funciona, /whatsapp-info (redirige a
+                              /caracteristicas#caracteristicas-whatsapp, DEC-043), /para-quien,
                               /ayuda, /ayuda/:articulo, /acerca, /contacto, /terminos, /privacidad,
                               /error (500), /* (404)
 Autenticación (layout auth)   /registro, /entrar, /recuperar, /recuperar/enviado, /restablecer,

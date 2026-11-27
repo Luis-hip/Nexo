@@ -1,128 +1,506 @@
-import { serieBurndown, type PuntoBurndown } from '@nexo/shared';
-import { useMemo } from 'react';
-import { fechaDia } from '@/lib/fechas';
+import type { ExpectativaSprint, PuntoBurndown, TareaEquipo } from '@nexo/shared';
+import { ChevronRight } from 'lucide-react';
+import { useId, useMemo, useState } from 'react';
+import { useColorDe } from '@/components/ui';
+import { fechaCorta, fechaDia, hora } from '@/lib/fechas';
+import { useAnchoContenedor } from './HillChart';
+
+const MS_DIA = 86_400_000;
+
+/** Medianoche local de una fecha `AAAA-MM-DD` (las de sprint se leen como día local). */
+const medianoche = (dia: string) =>
+  new Date(+dia.slice(0, 4), +dia.slice(5, 7) - 1, +dia.slice(8, 10)).getTime();
+
+export type Ritmo = 'adelantado' | 'en_ritmo' | 'atrasado';
+
+/** Un punto de la línea de Avance: una tarea completada, en el momento real en que se completó. */
+export interface NodoAvance {
+  tarea: TareaEquipo;
+  t: number;
+  /** Tareas pendientes después de completarse esta. */
+  pendientes: number;
+}
+
+export interface DatosBurndown {
+  t0: number;
+  /** Fin del último día del sprint: ahí la Expectativa llega a cero. */
+  tFin: number;
+  /** Borde derecho del eje (el fin, o el cierre si fue más tarde). */
+  t1: number;
+  /** Tareas del sprint al iniciar: de ahí parte la Expectativa. */
+  inicial: number;
+  /**
+   * Escalones de la Expectativa (plan congelado al iniciar, DEC-042): momento y tareas pendientes
+   * después de bajar. Vacío si el sprint no tiene plan: entonces es una recta de `inicial` a 0.
+   */
+  plan: { t: number; pendientes: number }[];
+  conPlan: boolean;
+  sinFecha: number;
+  despuesDelFin: number;
+  /** Tareas con las que parte el Avance (incluye las agregadas después del inicio). */
+  total: number;
+  agregadas: number;
+  nodos: NodoAvance[];
+  /** Escalones de la línea de Avance (momento y pendientes después de bajar). */
+  escalones: { t: number; pendientes: number }[];
+  /**
+   * Sin tareas completadas con fecha (sprints viejos o datos de demostración que solo guardaron la
+   * foto diaria), el Avance sale de las instantáneas y no lleva nodos por tarea.
+   */
+  porFotos: boolean;
+  /** Hasta dónde llega la línea de Avance: ahora, o el cierre si el sprint ya terminó. */
+  tFinal: number;
+  pendientes: number;
+  esperadas: number;
+  ritmo: Ritmo;
+}
 
 /**
- * Burndown del sprint (EQ-09, EQ-13): tareas por terminar cada día según las instantáneas
- * (`sprint_instantaneas`) contra la línea ideal. SVG propio, como el Hill Chart; la tabla oculta
- * repite los datos para lectores de pantalla.
+ * Calcula el burndown (retroalimentación, bloque 6). La Expectativa sale del plan congelado al
+ * iniciar el sprint: baja 1 al terminar el día de término planificado de cada tarea (las de un
+ * mismo día, juntas) y llega a 0 al final. Sin plan (sprints cerrados antes de la 0042), es una
+ * recta de las tareas de la primera instantánea a cero. El Avance parte de las tareas
+ * del sprint y baja 1 en el momento real en que se completa cada una; una tarea reabierta deja de
+ * estar completada y su nodo desaparece solo.
+ */
+export function calcularBurndown({
+  inicio,
+  fin,
+  serie,
+  tareas,
+  ahora,
+  cerradoEn,
+  expectativa,
+}: {
+  inicio: string;
+  fin: string;
+  serie: PuntoBurndown[];
+  tareas: TareaEquipo[];
+  ahora: number;
+  cerradoEn?: string | null;
+  expectativa?: ExpectativaSprint | null;
+}): DatosBurndown {
+  const t0 = medianoche(inicio);
+  const finDia = medianoche(fin) + MS_DIA;
+  const cierre = cerradoEn ? Date.parse(cerradoEn) : null;
+  const t1 = Math.max(finDia, cierre ?? 0);
+  const fotos = [...serie].sort((a, b) => a.dia.localeCompare(b.dia));
+  // Al cerrar, las tareas sin terminar pasan al siguiente sprint: la última foto conserva el total.
+  const total = Math.max(tareas.length, fotos.at(-1)?.total ?? 0);
+  const inicial =
+    expectativa?.inicial ??
+    (Math.min(total, fotos.find((p) => p.dia >= inicio)?.total ?? total) || total);
+  let quedan = inicial;
+  const plan = (expectativa?.pasos ?? []).map((p) => {
+    quedan -= p.tareas;
+    return { t: Math.max(t0, Date.parse(p.momento)), pendientes: quedan };
+  });
+  const completadas = tareas
+    .filter((t) => t.estado === 'completada' && t.completada_en)
+    .map((t) => ({ tarea: t, t: Math.max(t0, Date.parse(t.completada_en as string)) }))
+    .sort((a, b) => a.t - b.t);
+  const nodos = completadas.map((c, i) => ({ ...c, pendientes: total - i - 1 }));
+  const tFinal = Math.min(cierre ?? ahora, t1);
+  const porFotos = nodos.length === 0 && fotos.some((p) => p.completadas > 0);
+  const escalones = porFotos
+    ? fotos
+        .filter((p) => p.dia >= inicio)
+        .map((p) => ({
+          // La foto se toma al terminar el día.
+          t: Math.min(medianoche(p.dia) + MS_DIA, tFinal),
+          pendientes: p.total - p.completadas,
+        }))
+    : nodos.map((n) => ({ t: n.t, pendientes: n.pendientes }));
+  const pendientes = escalones.filter((e) => e.t <= tFinal).at(-1)?.pendientes ?? total;
+  const fraccion = Math.min(1, Math.max(0, (tFinal - t0) / (finDia - t0)));
+  const esperadas = expectativa
+    ? (plan.filter((p) => p.t <= tFinal).at(-1)?.pendientes ?? inicial)
+    : Math.round(inicial * (1 - fraccion));
+  const ritmo: Ritmo =
+    pendientes > esperadas ? 'atrasado' : pendientes < esperadas ? 'adelantado' : 'en_ritmo';
+  return {
+    t0,
+    tFin: finDia,
+    t1,
+    inicial,
+    plan,
+    conPlan: !!expectativa,
+    sinFecha: expectativa?.sin_fecha ?? 0,
+    despuesDelFin: expectativa?.despues_del_fin ?? 0,
+    total,
+    agregadas: Math.max(0, total - inicial),
+    nodos,
+    escalones,
+    porFotos,
+    tFinal,
+    pendientes,
+    esperadas,
+    ritmo,
+  };
+}
+
+const tareasTxt = (n: number) => `${n} ${n === 1 ? 'tarea' : 'tareas'}`;
+
+/** Frase bajo la gráfica, sin decimales: adelantado, en ritmo o atrasado. */
+export function resumenBurndown(
+  d: Pick<DatosBurndown, 'pendientes' | 'esperadas' | 'ritmo'>,
+  dia: string,
+) {
+  const faltan = `Al ${dia} ${d.pendientes === 1 ? 'falta' : 'faltan'} ${tareasTxt(d.pendientes)}`;
+  const dif = Math.abs(d.pendientes - d.esperadas);
+  if (d.ritmo === 'en_ritmo') return `${faltan}, justo lo planeado. Vas en ritmo.`;
+  const deberian =
+    d.esperadas === 0
+      ? 'según lo planeado ya no debería faltar ninguna'
+      : `según lo planeado ${d.esperadas === 1 ? 'debería faltar' : 'deberían faltar'} ${d.esperadas}`;
+  return d.ritmo === 'atrasado'
+    ? `${faltan}; ${deberian}. Vas atrasado por ${tareasTxt(dif)}.`
+    : `${faltan}; ${deberian}. Vas adelantado por ${tareasTxt(dif)}.`;
+}
+
+/** Marcas enteras del eje Y (cuenta tareas): todas si son pocas; si no, de N en N. */
+function marcasEnteras(maximo: number) {
+  const paso = Math.max(1, Math.ceil(maximo / 6));
+  const marcas: number[] = [];
+  for (let v = 0; v <= maximo; v += paso) marcas.push(v);
+  if (marcas.at(-1) !== maximo) marcas.push(maximo);
+  return marcas;
+}
+
+const ALTO = 280;
+const PAD = { izq: 52, der: 16, arr: 16, aba: 58 };
+const RADIO = 6;
+
+/**
+ * Burndown del sprint (EQ-09, EQ-13): «Avance» (línea sólida) contra «Expectativa» (punteada).
+ * Responde si el equipo va adelantado, en ritmo o atrasado; el Hill Chart dice en qué estado está
+ * cada tarea. Cada tarea completada es un punto del color de su responsable (la misma regla que el
+ * Hill Chart y los avatares) que muestra su nombre y abre su detalle.
  */
 export function Burndown({
   inicio,
   fin,
   serie,
+  tareas,
+  hoy,
+  cerradoEn,
+  expectativa,
+  onAbrir,
   className,
 }: {
   inicio: string;
   fin: string;
   serie: PuntoBurndown[];
+  tareas: TareaEquipo[];
+  /** Día de hoy en la zona del equipo (sprint activo): el texto dice «Al <hoy>…». */
+  hoy?: string;
+  cerradoEn?: string | null;
+  /** Plan congelado al iniciar el sprint (`SprintDetalle.expectativa`). */
+  expectativa?: ExpectativaSprint | null;
+  onAbrir?: (tareaId: string) => void;
   className?: string;
 }) {
-  const dias = useMemo(() => serieBurndown(inicio, fin, serie), [inicio, fin, serie]);
-  const W = 640;
-  const H = 220;
-  const pad = { izq: 36, der: 16, arr: 16, aba: 30 };
-  const maximo = Math.max(1, ...dias.map((d) => Math.max(d.ideal, d.restantes ?? 0)));
-  const x = (i: number) =>
-    pad.izq + (dias.length > 1 ? (i / (dias.length - 1)) * (W - pad.izq - pad.der) : 0);
-  const y = (v: number) => pad.arr + (1 - v / maximo) * (H - pad.arr - pad.aba);
-  const reales = dias.flatMap((d, i) => (d.restantes === null ? [] : [{ i, v: d.restantes }]));
-  const ultimo = reales.at(-1);
-  const resumen = ultimo
-    ? `Faltan ${ultimo.v} ${ultimo.v === 1 ? 'tarea' : 'tareas'} el ${fechaDia(dias[ultimo.i]?.dia ?? inicio)}; la línea ideal marca ${dias[ultimo.i]?.ideal ?? 0}.`
-    : 'Todavía no hay instantáneas de este sprint.';
-  const marcasY = [...new Set([0, Math.round(maximo / 2), maximo])];
+  const id = useId();
+  const colorDe = useColorDe();
+  const { ref, w } = useAnchoContenedor();
+  // Se fija al montar: la línea llega hasta «ahora» sin volver a dibujarse cada segundo.
+  const [ahora] = useState(() => Date.now());
+  const d = useMemo(
+    () => calcularBurndown({ inicio, fin, serie, tareas, ahora, cerradoEn, expectativa }),
+    [inicio, fin, serie, tareas, ahora, cerradoEn, expectativa],
+  );
+  const [activo, setActivo] = useState<number | null>(null);
+  const [foco, setFoco] = useState<number | null>(null);
+
+  const W = Math.max(w, 280);
+  const ancho = W - PAD.izq - PAD.der;
+  const maximo = Math.max(1, d.total, d.inicial);
+  const x = (t: number) => PAD.izq + ((t - d.t0) / (d.t1 - d.t0)) * ancho;
+  const y = (v: number) => PAD.arr + (1 - v / maximo) * (ALTO - PAD.arr - PAD.aba);
+  const dias = Math.round((d.t1 - d.t0) / MS_DIA);
+  const anchoDia = ancho / Math.max(1, dias);
+
+  // Posición de cada nodo; si dos caen casi encima (mismo minuto), se separan lo justo para clicarlos.
+  const puntos = d.nodos.map((n) => ({ ...n, px: x(n.t), py: y(n.pendientes) }));
+  for (let i = 1; i < puntos.length; i++) {
+    const a = puntos[i - 1];
+    const b = puntos[i];
+    if (a && b && Math.hypot(b.px - a.px, b.py - a.py) < RADIO * 2 + 3) {
+      b.px = Math.min(a.px + RADIO * 2 + 3, PAD.izq + ancho);
+    }
+  }
+  const visibles = puntos.filter((p) => p.t <= d.tFinal);
+  let camino = `M${x(d.t0)},${y(d.total)}`;
+  if (d.porFotos) {
+    for (const e of d.escalones) camino += ` H${x(e.t)} V${y(e.pendientes)}`;
+  } else {
+    for (const p of visibles) camino += ` H${p.px} V${p.py}`;
+  }
+  camino += ` H${x(d.tFinal)}`;
+  let caminoExpectativa = `M${x(d.t0)},${y(d.inicial)}`;
+  if (d.conPlan) {
+    for (const p of d.plan) caminoExpectativa += ` H${x(p.t)} V${y(p.pendientes)}`;
+    caminoExpectativa += ` H${x(d.tFin)}`;
+  } else {
+    caminoExpectativa += ` L${x(d.tFin)},${y(0)}`;
+  }
+
+  const diaResumen = hoy ? fechaDia(hoy) : fechaCorta(new Date(d.tFinal - 1).toISOString());
+  const resumen = resumenBurndown(d, diaResumen);
+  const sel = activo !== null ? visibles[activo] : undefined;
+  const persona = (t: TareaEquipo) => t.responsable?.nombre ?? 'Sin responsable';
+  const cuando = (t: number) =>
+    `${fechaCorta(new Date(t).toISOString())}, ${hora(new Date(t).toISOString())}`;
+  const etiquetaNodo = (p: (typeof visibles)[number]) =>
+    `T-${String(p.tarea.codigo).padStart(2, '0')} ${p.tarea.titulo}. Completada por ${persona(p.tarea)} el ${cuando(p.t)}. Abrir el detalle.`;
+
+  const plural = (n: number, una: string, varias: string) => (n === 1 ? una : varias);
+  const notas = [
+    !d.porFotos && {
+      texto: 'El color de cada punto identifica al responsable de la tarea completada.',
+    },
+    d.porFotos && {
+      texto:
+        'Este sprint no guarda cuándo se completó cada tarea: el Avance sale de la foto de cada día y no tiene puntos por tarea.',
+    },
+    d.sinFecha > 0 && {
+      texto: `${plural(d.sinFecha, '1 tarea no tenía', `${d.sinFecha} tareas no tenían`)} fecha de entrega al iniciar el sprint: la Expectativa ${plural(d.sinFecha, 'la', 'las')} cuenta para el último día.`,
+    },
+    d.despuesDelFin > 0 && {
+      texto: `${plural(d.despuesDelFin, '1 tarea tenía', `${d.despuesDelFin} tareas tenían`)} su entrega después del fin del sprint: la Expectativa ${plural(d.despuesDelFin, 'la', 'las')} cuenta para el último día.`,
+      aviso: true,
+    },
+    !d.conPlan && {
+      texto:
+        'Este sprint no guardó su plan al iniciar: la Expectativa es una recta de las tareas iniciales a cero.',
+    },
+    d.agregadas > 0 && {
+      texto: `${plural(d.agregadas, 'Se agregó 1 tarea', `Se agregaron ${d.agregadas} tareas`)} después de iniciar el sprint: el Avance ${plural(d.agregadas, 'la', 'las')} cuenta desde el inicio; la Expectativa no.`,
+    },
+  ].filter((n): n is { texto: string; aviso?: boolean } => !!n);
+  const avisos = notas.filter((n) => n.aviso).length;
 
   return (
     <figure className={className} data-name="NX/EQ-09-Burndown">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label={`Burndown del sprint. ${resumen}`}
-      >
-        {marcasY.map((v) => (
-          <g key={v}>
-            <line x1={pad.izq} x2={W - pad.der} y1={y(v)} y2={y(v)} stroke="var(--border-subtle)" />
-            <text
-              x={pad.izq - 8}
-              y={y(v) + 4}
-              textAnchor="end"
-              className="fill-[var(--text-secondary)] text-[11px] tabular"
-            >
-              {v}
-            </text>
-          </g>
-        ))}
-        {dias.length > 0 && (
-          <>
-            <text
-              x={x(0)}
-              y={H - 8}
-              className="fill-[var(--text-secondary)] text-[11px]"
-              textAnchor="start"
-            >
-              {fechaDia(dias[0]?.dia ?? inicio)}
-            </text>
-            <text
-              x={x(dias.length - 1)}
-              y={H - 8}
-              className="fill-[var(--text-secondary)] text-[11px]"
-              textAnchor="end"
-            >
-              {fechaDia(dias.at(-1)?.dia ?? fin)}
-            </text>
-          </>
+      <div ref={ref} className="relative">
+        {w > 0 && (
+          <svg
+            width={W}
+            height={ALTO}
+            role="group"
+            aria-labelledby={`${id}-titulo`}
+            aria-describedby={`${id}-resumen`}
+            className="block"
+          >
+            <title id={`${id}-titulo`}>Burndown del sprint: Avance contra Expectativa</title>
+            <g aria-hidden>
+              {marcasEnteras(maximo).map((v) => (
+                <g key={v}>
+                  <line
+                    x1={PAD.izq}
+                    x2={W - PAD.der}
+                    y1={y(v)}
+                    y2={y(v)}
+                    stroke="var(--border-subtle)"
+                  />
+                  <text
+                    x={PAD.izq - 8}
+                    y={y(v) + 4}
+                    textAnchor="end"
+                    className="fill-[var(--text-secondary)] text-[11px] tabular"
+                  >
+                    {v}
+                  </text>
+                </g>
+              ))}
+              {/* Eje X: una marca por día y, si hay espacio, el número del día. */}
+              {Array.from({ length: dias + 1 }, (_, k) => (
+                <line
+                  key={k}
+                  x1={x(d.t0 + k * MS_DIA)}
+                  x2={x(d.t0 + k * MS_DIA)}
+                  y1={ALTO - PAD.aba}
+                  y2={ALTO - PAD.aba + 4}
+                  stroke="var(--border-strong)"
+                />
+              ))}
+              {anchoDia >= 22 &&
+                Array.from({ length: dias }, (_, k) => (
+                  <text
+                    key={k}
+                    x={x(d.t0 + (k + 0.5) * MS_DIA)}
+                    y={ALTO - PAD.aba + 15}
+                    textAnchor="middle"
+                    className="fill-[var(--text-secondary)] text-[10px] tabular"
+                  >
+                    {new Date(d.t0 + (k + 0.5) * MS_DIA).getDate()}
+                  </text>
+                ))}
+              <text
+                x={PAD.izq}
+                y={ALTO - PAD.aba + 30}
+                className="fill-[var(--text-secondary)] text-[11px]"
+              >
+                Inicio {fechaDia(inicio)}
+              </text>
+              <text
+                x={W - PAD.der}
+                y={ALTO - PAD.aba + 30}
+                textAnchor="end"
+                className="fill-[var(--text-secondary)] text-[11px]"
+              >
+                Fin {fechaDia(fin)}
+              </text>
+              <text
+                x={PAD.izq + ancho / 2}
+                y={ALTO - 6}
+                textAnchor="middle"
+                className="fill-[var(--text-primary)] text-[11px] font-medium"
+              >
+                Duración del sprint (días)
+              </text>
+              <text
+                transform={`translate(14 ${PAD.arr + (ALTO - PAD.arr - PAD.aba) / 2}) rotate(-90)`}
+                textAnchor="middle"
+                className="fill-[var(--text-primary)] text-[11px] font-medium"
+              >
+                Tareas pendientes del sprint
+              </text>
+              {/* Expectativa: completa desde el primer día, de la fecha de inicio a la de fin;
+                  escalonada con el plan congelado, recta si el sprint no lo tiene. */}
+              <path
+                d={caminoExpectativa}
+                fill="none"
+                stroke="var(--border-strong)"
+                strokeDasharray="6 5"
+                strokeWidth={2}
+              />
+              {/* Avance: crece hasta ahora; sin nodo al final. */}
+              <path
+                d={camino}
+                fill="none"
+                stroke="var(--brand-primary)"
+                strokeWidth={3}
+                strokeLinejoin="round"
+              />
+              {/* Nodo inicial (inicio del sprint, N pendientes) en color neutro. */}
+              <circle
+                cx={x(d.t0)}
+                cy={y(d.total)}
+                r={RADIO - 1}
+                fill="var(--text-secondary)"
+                stroke="var(--bg-raised)"
+                strokeWidth={2}
+              />
+            </g>
+            {visibles.map((p, i) => (
+              <g
+                key={p.tarea.id}
+                role="button"
+                tabIndex={0}
+                aria-label={etiquetaNodo(p)}
+                className="cursor-pointer outline-none"
+                onMouseEnter={() => setActivo(i)}
+                onMouseLeave={() => foco !== i && setActivo(null)}
+                onFocus={() => {
+                  setFoco(i);
+                  setActivo(i);
+                }}
+                onBlur={() => {
+                  setFoco(null);
+                  setActivo(null);
+                }}
+                onClick={() => onAbrir?.(p.tarea.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onAbrir?.(p.tarea.id);
+                  }
+                }}
+              >
+                {/* Área de clic más grande que el punto. */}
+                <circle cx={p.px} cy={p.py} r={RADIO + 6} fill="transparent" />
+                {foco === i && (
+                  <circle
+                    cx={p.px}
+                    cy={p.py}
+                    r={RADIO + 4}
+                    fill="none"
+                    stroke="var(--brand-primary)"
+                    strokeWidth={2}
+                  />
+                )}
+                <circle
+                  cx={p.px}
+                  cy={p.py}
+                  r={activo === i ? RADIO + 1 : RADIO}
+                  fill={colorDe(p.tarea.responsable?.color_idx).color}
+                  // Contorno para que los colores claros se distingan del fondo (tema claro y oscuro).
+                  stroke="var(--text-secondary)"
+                  strokeWidth={1.5}
+                />
+              </g>
+            ))}
+          </svg>
         )}
-        <polyline
-          fill="none"
-          stroke="var(--border-strong)"
-          strokeDasharray="6 5"
-          strokeWidth={2}
-          points={dias.map((d, i) => `${x(i)},${y(d.ideal)}`).join(' ')}
-        />
-        {reales.length > 0 && (
-          <polyline
-            fill="none"
-            stroke="var(--brand-primary)"
-            strokeWidth={3}
-            strokeLinejoin="round"
-            points={reales.map((p) => `${x(p.i)},${y(p.v)}`).join(' ')}
-          />
+        {sel && (
+          <div
+            role="tooltip"
+            className="anim-fade pointer-events-none absolute z-10 w-60 rounded-[12px] border border-line bg-raised p-3 text-sm shadow-modal"
+            style={{
+              left: Math.min(Math.max(8, sel.px - 120), Math.max(8, W - 248)),
+              top: sel.py > ALTO / 2 ? sel.py - 104 : sel.py + 14,
+            }}
+          >
+            <p className="text-xs text-muted tabular">
+              T-{String(sel.tarea.codigo).padStart(2, '0')}
+            </p>
+            <p className="leading-snug font-medium">{sel.tarea.titulo}</p>
+            <p className="mt-1 text-xs text-muted">
+              {persona(sel.tarea)} · completada el <span className="tabular">{cuando(sel.t)}</span>
+            </p>
+          </div>
         )}
-        {reales.map((p) => (
-          <circle key={p.i} cx={x(p.i)} cy={y(p.v)} r={4} fill="var(--brand-primary)" />
-        ))}
-      </svg>
-      <figcaption className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-5 rounded bg-brand" aria-hidden /> Tareas por terminar
+      </div>
+      <figcaption className="mt-2 space-y-1.5 text-xs text-muted">
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-5 rounded bg-brand" aria-hidden /> Avance
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0 w-5 border-t-2 border-dashed border-line-strong" aria-hidden />
+            Expectativa
+          </span>
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-0 w-5 border-t-2 border-dashed border-line-strong" aria-hidden /> Ritmo
-          ideal
+        <span id={`${id}-resumen`} className="block text-sm text-fg">
+          {resumen}
         </span>
-        <span>{resumen}</span>
+        {notas.length > 0 && (
+          // Notas plegadas: solo aparecen las que aplican a este sprint. El título dice cuántas son
+          // y cuántos avisos hay, para que el aviso de entregas fuera del sprint no pase inadvertido.
+          <details className="group">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-[6px] py-0.5 font-medium text-fg hover:underline focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+              <ChevronRight
+                className="size-3.5 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
+                aria-hidden
+              />
+              Notas de la gráfica ({notas.length})
+              {avisos > 0 && (
+                <span className="font-medium text-warn-text">
+                  · {avisos === 1 ? '1 aviso' : `${avisos} avisos`}
+                </span>
+              )}
+            </summary>
+            <ul className="mt-1.5 space-y-1 pl-[18px]">
+              {notas.map((n) => (
+                <li key={n.texto} className={n.aviso ? 'font-medium text-warn-text' : undefined}>
+                  {n.texto}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </figcaption>
-      <table className="sr-only">
-        <caption>Tareas por terminar por día</caption>
-        <thead>
-          <tr>
-            <th>Día</th>
-            <th>Por terminar</th>
-            <th>Ideal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dias.map((d) => (
-            <tr key={d.dia}>
-              <td>{fechaDia(d.dia)}</td>
-              <td>{d.restantes ?? 'sin dato'}</td>
-              <td>{d.ideal}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </figure>
   );
 }

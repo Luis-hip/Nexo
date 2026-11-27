@@ -517,38 +517,73 @@ export function Menu({
   );
 }
 
+/**
+ * Acordeón de las FAQ y de Características. Sin `abierto` maneja su propio estado; con `abierto` y
+ * `onCambiar` lo controla quien lo usa (por ejemplo, para dejar uno solo abierto a la vez). `id`
+ * sirve de ancla (`#id`) y `nivel` envuelve el botón en un encabezado.
+ */
 export function Acordeon({
   titulo,
   children,
   abiertoInicial = false,
   className,
+  abierto: abiertoControlado,
+  onCambiar,
+  id: ancla,
+  icono,
+  nivel,
 }: {
   titulo: ReactNode;
   children: ReactNode;
   abiertoInicial?: boolean;
   className?: string;
+  abierto?: boolean;
+  onCambiar?: (abierto: boolean) => void;
+  id?: string;
+  icono?: ReactNode;
+  nivel?: 'h2' | 'h3';
 }) {
-  const [abierto, setAbierto] = useState(abiertoInicial);
+  const [abiertoPropio, setAbiertoPropio] = useState(abiertoInicial);
+  const abierto = abiertoControlado ?? abiertoPropio;
   const id = useId();
+  const idBoton = `${id}-boton`;
+  const cambiar = () => {
+    if (abiertoControlado === undefined) setAbiertoPropio(!abierto);
+    onCambiar?.(!abierto);
+  };
+  const boton = (
+    <button
+      id={idBoton}
+      type="button"
+      aria-expanded={abierto}
+      aria-controls={id}
+      onClick={cambiar}
+      className="flex min-h-14 w-full items-center justify-between gap-4 py-3 text-left font-medium"
+    >
+      <span className="flex items-center gap-3">
+        {icono}
+        {titulo}
+      </span>
+      <ChevronDown
+        className={cx(
+          'size-5 shrink-0 text-muted transition-transform duration-200 motion-reduce:transition-none',
+          abierto && 'rotate-180',
+        )}
+        aria-hidden
+      />
+    </button>
+  );
+  const Nivel = nivel;
   return (
-    <div className={cx('border-b border-line', className)}>
-      <button
-        type="button"
-        aria-expanded={abierto}
-        aria-controls={id}
-        onClick={() => setAbierto(!abierto)}
-        className="flex min-h-14 w-full items-center justify-between gap-4 py-3 text-left font-medium"
+    <div id={ancla} className={cx('border-b border-line', ancla && 'scroll-mt-24', className)}>
+      {Nivel ? <Nivel className="text-base">{boton}</Nivel> : boton}
+      <div
+        id={id}
+        role="region"
+        aria-labelledby={idBoton}
+        hidden={!abierto}
+        className="pb-4 text-muted"
       >
-        <span>{titulo}</span>
-        <ChevronDown
-          className={cx(
-            'size-5 shrink-0 text-muted transition-transform duration-200',
-            abierto && 'rotate-180',
-          )}
-          aria-hidden
-        />
-      </button>
-      <div id={id} hidden={!abierto} className="pb-4 text-muted">
         {children}
       </div>
     </div>

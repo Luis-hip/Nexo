@@ -16,6 +16,7 @@ const ESPERADAS = [
   ...rango(210, 219), // Pendientes tras la Fase 5 (0032, desde P210)
   ...rango(220, 255), // Spike WhatsApp 1 a 1 (0033, reservado P220–P249)
   ...rango(260, 263), // Tareas asignadas del líder (0041, DEC-040)
+  ...rango(264, 266), // Plan del sprint congelado al iniciar (0042, DEC-042)
 ];
 
 await ejecutarPruebasSql('tests/pruebas_procesos.sql', ESPERADAS);

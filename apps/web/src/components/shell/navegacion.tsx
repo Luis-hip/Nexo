@@ -1,6 +1,5 @@
 import { puede, type Accion, type Perfil } from '@nexo/shared';
 import {
-  Activity,
   BarChart3,
   Bell,
   Calendar,
@@ -8,6 +7,7 @@ import {
   Flag,
   Folder,
   HelpCircle,
+  History,
   Home,
   LayoutDashboard,
   LayoutTemplate,
@@ -135,7 +135,8 @@ export function navegacion(perfil: Perfil, equipoId: string | null): Navegacion 
     },
     {
       clave: 'whatsapp',
-      etiqueta: 'WhatsApp',
+      // Antes «WhatsApp»: el nombre deja «Chat» libre; la página sigue hablando de WhatsApp.
+      etiqueta: 'Notificaciones',
       ruta: `${b}/whatsapp`,
       icono: MessageSquareShare,
       // El integrante entra al historial (WA-04); el panel es del líder.
@@ -160,9 +161,10 @@ export function navegacion(perfil: Perfil, equipoId: string | null): Navegacion 
     },
     {
       clave: 'actividad',
-      etiqueta: 'Actividad',
+      // Antes «Actividad». «Historial» y no «Registro», que se confunde con crear cuenta.
+      etiqueta: 'Historial',
       ruta: `${b}/actividad`,
-      icono: Activity,
+      icono: History,
       permiso: 'ver_actividad',
       grupo: 'Gestión',
     },

@@ -225,12 +225,13 @@ describe.skipIf(!DATABASE_URL)('tareas de equipo', () => {
   });
 
   describe('ver tareas', () => {
-    it('líder e integrante ven tablero, backlog y votación; conteos incluidos', async () => {
+    it('líder e integrante ven tablero y votación; el backlog solo el líder; conteos incluidos', async () => {
       await enBacklog('Para conteos');
       await propuesta('Para el conteo de votación');
       for (const quien of [lider, carlos]) {
         for (const vista of ['tablero', 'backlog', 'votacion', 'mias', 'todas']) {
-          expect((await get(quien, `/tareas?vista=${vista}`)).estado, vista).toBe(200);
+          const esperado = vista === 'backlog' && quien === carlos ? 403 : 200;
+          expect((await get(quien, `/tareas?vista=${vista}`)).estado, vista).toBe(esperado);
         }
         const conteos = (await get(quien, '/tareas/conteos')).cuerpo;
         expect(conteos.backlog).toBeGreaterThan(0);

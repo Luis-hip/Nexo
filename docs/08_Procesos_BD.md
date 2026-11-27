@@ -98,7 +98,7 @@
 | `proc_sprint_obtener` | Sprints (lectura) | `0009_procesos_sprints.sql` | Vigente |
 | `proc_sprint_disponibles` | Sprints (lectura) | `0009_procesos_sprints.sql` | Vigente |
 | `proc_sprint_planear` | Sprints | `0009_procesos_sprints.sql` | Vigente |
-| `proc_sprint_iniciar` | Sprints | `0009_procesos_sprints.sql` | Vigente |
+| `proc_sprint_iniciar` | Sprints | `0009_procesos_sprints.sql`, `0042_sprint_plan.sql` | Vigente |
 | `proc_sprint_cerrar` | Sprints | `0009_procesos_sprints.sql` | Vigente |
 | `proc_sprint_eliminar` | Sprints | `0009_procesos_sprints.sql` | Vigente |
 | `proc_retro_iniciar` | Retrospectiva | `0009_procesos_sprints.sql` | Vigente |
@@ -911,15 +911,15 @@
 - **Migración:** `0009_procesos_sprints.sql`
 - **Propósito:** Detalle de un sprint; sin `p_sprint_id`, el sprint activo (EQ-09).
 - **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint (opcional; `NULL` = el activo).
-- **Retorno:** `jsonb` `SprintDetalle` (el resumen más `capacidad[]` por miembro activo con `horas` y `tareas`, `serie[]` del burndown con `dia`, `total` y `completadas`, y `tareas[]` como `TareaEquipo`), o `null` si se pidió el activo y no hay.
+- **Retorno:** `jsonb` `SprintDetalle` (el resumen más `capacidad[]` por miembro activo con `horas` y `tareas`, `serie[]` del burndown con `dia`, `total` y `completadas`, `expectativa` y `tareas[]` como `TareaEquipo`), o `null` si se pidió el activo y no hay. `expectativa` (desde la `0042`, `fn_sprint_expectativa`) es `{ inicial, sin_fecha, despues_del_fin, pasos: [{ momento, tareas }] }` calculada del plan congelado al iniciar (`sprint_plan_tareas`), o `null` si el sprint no tiene plan.
 - **Reglas y validaciones:** los invitados no ven los sprints. Mientras el sprint está activo, el último punto de `serie` es el de hoy calculado en vivo (no espera a la instantánea nocturna). «Hoy» es la fecha en la zona horaria del equipo.
 - **Errores:** `NX005` · un invitado. `NX006` · el sprint no es del equipo, o el actor no pertenece al equipo (404).
-- **Tablas que toca:** lectura `sprints`, `sprint_capacidad`, `sprint_instantaneas`, `tareas`, `v_tareas_semaforo`, `retrospectivas`, `membresias`, `usuarios`, `equipos`.
+- **Tablas que toca:** lectura `sprints`, `sprint_capacidad`, `sprint_instantaneas`, `sprint_plan_tareas`, `tareas`, `v_tareas_semaforo`, `retrospectivas`, `membresias`, `usuarios`, `equipos`.
 - **Eventos que genera:** ninguno (lectura).
 - **Lo llama:** `repositorios/sprints.ts` → `obtenerSprint()`; `GET /equipos/:equipoId/sprints/activo` y `GET /equipos/:equipoId/sprints/:sprintId`.
-- **Pruebas:** `pruebas_procesos.sql` P56; `sprints.test.ts`.
+- **Pruebas:** `pruebas_procesos.sql` P56, P264 y P266; `sprints.test.ts`.
 - **Ejemplo de llamada:** `select proc_sprint_obtener($1, $2, null)`
-- **Historial:** 2026-11-17 · creación · `0009`.
+- **Historial:** 2026-11-17 · creación · `0009`. 2026-11-26 · `expectativa` en el detalle (Expectativa escalonada del burndown, DEC-042) · `0042`.
 
 ### proc_sprint_disponibles
 - **Migración:** `0009_procesos_sprints.sql`
@@ -950,18 +950,18 @@
 - **Historial:** 2026-11-17 · creación · `0009`.
 
 ### proc_sprint_iniciar
-- **Migración:** `0009_procesos_sprints.sql`
-- **Propósito:** Inicia un sprint planificado (EQ-09).
+- **Migración:** `0009_procesos_sprints.sql`; reemplazado en `0042_sprint_plan.sql`.
+- **Propósito:** Inicia un sprint planificado (EQ-09) y congela su plan.
 - **Parámetros:** `p_actor_id uuid` · quién ejecuta. `p_equipo_id uuid` · equipo. `p_sprint_id uuid` · sprint.
 - **Retorno:** `jsonb` `SprintDetalle`.
-- **Reglas y validaciones:** solo el líder, con el equipo activo; el sprint debe estar planificado y no puede haber otro activo (además lo garantiza el índice `ux_un_sprint_activo`). Si se inicia **antes** de su fecha, se recorre a hoy y conserva su duración (así el burndown empieza hoy); si se inicia tarde, conserva sus fechas; si su fin ya pasó, hay que cambiar las fechas primero. Guarda la instantánea del día de inicio.
+- **Reglas y validaciones:** solo el líder, con el equipo activo; el sprint debe estar planificado y no puede haber otro activo (además lo garantiza el índice `ux_un_sprint_activo`). Si se inicia **antes** de su fecha, se recorre a hoy y conserva su duración (así el burndown empieza hoy); si se inicia tarde, conserva sus fechas; si su fin ya pasó, hay que cambiar las fechas primero. Guarda la instantánea del día de inicio. Desde la `0042` **congela el plan** (`fn_sprint_plan_congelar`): una fila en `sprint_plan_tareas` por tarea del sprint con su `vence_en` de ese momento (o `NULL` si no tiene fecha). Editar fechas o agregar tareas después no cambia el plan.
 - **Errores:** `NX005` · no es el líder. `NX009` · equipo archivado. `NX006` · el sprint no es del equipo. `NX007` · el sprint ya no está planificado. `NX010` · el plazo del sprint ya pasó (`fechas_vencidas`). `NX012` · hay otro sprint activo.
-- **Tablas que toca:** escritura `sprints`, `sprint_instantaneas`, `eventos_dominio`, `actividad`.
+- **Tablas que toca:** escritura `sprints`, `sprint_instantaneas`, `sprint_plan_tareas`, `eventos_dominio`, `actividad`.
 - **Eventos que genera:** `sprint.iniciado` («Valeria inició el Sprint 4»).
 - **Lo llama:** `repositorios/sprints.ts` → `iniciar()`; `POST /equipos/:equipoId/sprints/:sprintId/iniciar`.
-- **Pruebas:** `pruebas_procesos.sql` P55; `sprints.test.ts`.
+- **Pruebas:** `pruebas_procesos.sql` P55, P264, P265 y P266; `sprints.test.ts`.
 - **Ejemplo de llamada:** `select proc_sprint_iniciar($1, $2, $3)`
-- **Historial:** 2026-11-17 · creación · `0009`.
+- **Historial:** 2026-11-17 · creación · `0009`. 2026-11-26 · congela el plan para la Expectativa del burndown (DEC-042) · `0042`.
 
 ### proc_sprint_cerrar
 - **Migración:** `0009_procesos_sprints.sql`

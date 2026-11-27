@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { EstadoTarea, TareaEquipo } from '@nexo/shared';
-import { Inbox, Rows3, Rows4, Search } from 'lucide-react';
+import { Inbox, Rows3, Rows4, Search, UserCheck } from 'lucide-react';
 import { useState, useSyncExternalStore } from 'react';
 import { useAcciones } from '@/components/shell/contexto';
 import {
@@ -28,7 +28,6 @@ import {
   Chip,
   EsqueletoTarjetas,
   EstadosDatos,
-  Selector,
   Vacio,
   cx,
   useConfirmar,
@@ -38,6 +37,13 @@ import { COLUMNAS_TABLERO, NOMBRE_ESTADO } from '@/lib/tareas';
 import { toast } from '@/lib/toasts';
 import { useEquipoActual } from '../contexto';
 import { avisarError, TarjetaTarea, useTransiciones } from './comunes';
+import {
+  aplicarFiltros,
+  cuantosFiltros,
+  FiltrosTareas,
+  SIN_FILTROS_TAREA,
+  type FiltrosTarea,
+} from './filtros';
 
 const esColumna = (id: string) => id.startsWith('col:');
 const idColumna = (estado: EstadoTarea) => `col:${estado}`;
@@ -51,13 +57,6 @@ function useEsMovil() {
     () => window.innerWidth < 640,
   );
 }
-
-interface Filtros {
-  q: string;
-  responsable: string;
-  prioridad: string;
-}
-const SIN_FILTROS: Filtros = { q: '', responsable: '', prioridad: '' };
 
 /** Tarjeta arrastrable (dnd-kit): el asa también funciona con teclado (Espacio y flechas). */
 function TarjetaArrastrable({
@@ -141,19 +140,28 @@ function Columna({
 
 /** EQ-02: tablero con columnas por estado. */
 export function Tablero() {
-  const { equipo } = useEquipoActual();
+  const { equipo, usuarioId } = useEquipoActual();
   const consulta = useTareasEquipo(equipo.id, 'tablero');
   const { mover } = useAccionesTarea(equipo.id);
   const { validas, motivo: motivoDe } = useTransiciones();
   const confirmar = useConfirmar();
   const acc = useAcciones();
   const movil = useEsMovil();
-  const [f, setF] = useState(SIN_FILTROS);
+  // Vista inicial según el rol (no es un permiso): el integrante empieza viendo solo lo suyo; el
+  // líder (y el invitado, que no tiene tablero) ve todo. No se guarda entre sesiones.
+  const esIntegrante = equipo.mi_rol === 'integrante';
+  const porDefecto: FiltrosTarea = esIntegrante
+    ? { ...SIN_FILTROS_TAREA, responsable: usuarioId }
+    : SIN_FILTROS_TAREA;
+  const [q, setQ] = useState('');
+  const [f, setF] = useState<FiltrosTarea>(porDefecto);
   const [compacta, setCompacta] = useState(false);
   const [columna, setColumna] = useState<EstadoTarea>('en_curso');
   const [arrastrando, setArrastrando] = useState<TareaEquipo | null>(null);
   const esLider = equipo.mi_rol === 'lider';
-  const filtrando = !!(f.q || f.responsable || f.prioridad);
+  const filtrando = !!q || cuantosFiltros(f) > 0;
+  /** Solo está puesto el filtro por defecto del integrante («Responsable: Yo»). */
+  const soloLoMio = esIntegrante && !q && f.responsable === usuarioId && !f.prioridad && !f.plazo;
 
   const sensores = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -161,11 +169,9 @@ export function Tablero() {
   );
 
   const aplicar = (ts: TareaEquipo[]) =>
-    ts.filter(
-      (t) =>
-        (!f.q || `T-${t.codigo} ${t.titulo}`.toLowerCase().includes(f.q.toLowerCase())) &&
-        (!f.responsable || t.responsable?.usuario_id === f.responsable) &&
-        (!f.prioridad || t.prioridad === f.prioridad),
+    aplicarFiltros(
+      ts.filter((t) => !q || `T-${t.codigo} ${t.titulo}`.toLowerCase().includes(q.toLowerCase())),
+      f,
     );
 
   /** Al soltar: «mover la tarea entre A y B»; el servidor calcula el orden y valida el estado. */
@@ -237,37 +243,17 @@ export function Tablero() {
     <div className="space-y-3" data-name="NX/EQ-02-Tablero">
       <div className="flex flex-wrap items-center gap-2">
         <Buscador
-          valor={f.q}
-          onChange={(q) => setF({ ...f, q })}
+          valor={q}
+          onChange={setQ}
           etiqueta="Buscar en tareas"
           className="min-w-0 flex-1 basis-48"
         />
-        <Selector
-          aria-label="Responsable"
-          className="h-10 w-48"
-          value={f.responsable}
-          onChange={(e) => setF({ ...f, responsable: e.target.value })}
-        >
-          <option value="">Cualquier responsable</option>
-          {equipo.miembros
-            .filter((m) => m.rol !== 'invitado')
-            .map((m) => (
-              <option key={m.usuario_id} value={m.usuario_id}>
-                {m.nombre}
-              </option>
-            ))}
-        </Selector>
-        <Selector
-          aria-label="Prioridad"
-          className="h-10 w-40"
-          value={f.prioridad}
-          onChange={(e) => setF({ ...f, prioridad: e.target.value })}
-        >
-          <option value="">Cualquier prioridad</option>
-          <option value="alta">Alta</option>
-          <option value="media">Media</option>
-          <option value="baja">Baja</option>
-        </Selector>
+        <FiltrosTareas
+          valor={f}
+          onCambiar={setF}
+          miembros={equipo.miembros}
+          usuarioId={usuarioId}
+        />
         <Chip
           activo={compacta}
           onClick={() => setCompacta(!compacta)}
@@ -303,13 +289,36 @@ export function Tablero() {
         {(tareas) => {
           const filtradas = aplicar(tareas);
           const deCol = (e: EstadoTarea) => filtradas.filter((t) => t.estado === e);
+          if (filtradas.length === 0 && soloLoMio) {
+            return (
+              <Vacio
+                icono={<UserCheck />}
+                titulo="No tienes tareas asignadas en este sprint"
+                texto="Puedes ver las del resto del equipo."
+                accion={
+                  <Boton onClick={() => setF({ ...f, responsable: '' })}>
+                    Ver todas las tareas
+                  </Boton>
+                }
+              />
+            );
+          }
           if (filtradas.length === 0) {
             return (
               <Vacio
                 icono={<Search />}
                 titulo="Sin resultados con estos filtros"
                 texto="Prueba con otros criterios."
-                accion={<Boton onClick={() => setF(SIN_FILTROS)}>Limpiar filtros</Boton>}
+                accion={
+                  <Boton
+                    onClick={() => {
+                      setQ('');
+                      setF(SIN_FILTROS_TAREA);
+                    }}
+                  >
+                    Limpiar filtros
+                  </Boton>
+                }
               />
             );
           }

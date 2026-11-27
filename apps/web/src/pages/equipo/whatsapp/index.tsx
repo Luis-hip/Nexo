@@ -88,16 +88,16 @@ export function WhatsAppLayout() {
   return (
     <div className="space-y-4" data-name="NX/WA-whatsapp">
       <Encabezado
-        titulo="WhatsApp"
+        titulo="Notificaciones"
         descripcion={
           esLider
-            ? 'Avisos del equipo en su grupo de WhatsApp: qué se avisa, cuándo y qué ya salió.'
-            : 'Los avisos que el equipo mandó al grupo de WhatsApp.'
+            ? 'Avisos del equipo por WhatsApp: qué se avisa, cuándo y qué ya salió.'
+            : 'Los avisos que el equipo mandó por WhatsApp.'
         }
       />
       {esLider && (
         <Segmentado
-          etiqueta="Vista de WhatsApp"
+          etiqueta="Vista de notificaciones"
           valor={vista}
           onChange={(v) => nav(v === 'panel' ? ruta : `${ruta}/${v}`)}
           opciones={[

@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@nexo/shared": "workspace:*",
     "@tanstack/react-query": "^5.107.1",
+    "libphonenumber-js": "^1.13.17",
     "lucide-react": "^1.72.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

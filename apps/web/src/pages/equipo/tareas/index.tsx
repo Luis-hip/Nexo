@@ -1,6 +1,16 @@
 import type { TareaEquipo } from '@nexo/shared';
-import { Archive, ArrowDown, ArrowUp, Inbox, Lock, MessageSquarePlus, Plus } from 'lucide-react';
-import { Outlet, useLocation, useNavigate, useParams } from 'react-router';
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  Inbox,
+  Lock,
+  MessageSquarePlus,
+  Plus,
+  Search,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useAcciones } from '@/components/shell/contexto';
 import {
   Banner,
@@ -18,11 +28,12 @@ import {
   useColorDe,
 } from '@/components/ui';
 import { useAccionesTarea, useConteosTareas, useTareasEquipo } from '@/lib/consultasEquipo';
-import { formaDeEstado, NOMBRE_ESTADO, PRIORIDADES } from '@/lib/tareas';
+import { formaDeEstado, NOMBRE_ESTADO, PRIORIDADES, semaforo } from '@/lib/tareas';
 import { toast } from '@/lib/toasts';
 import { useEquipoActual } from '../contexto';
 import { avisarError, codigoTarea } from './comunes';
 import { DetalleTareaEquipo } from './DetalleTareaEquipo';
+import { aplicarFiltros, FiltrosTareas, SIN_FILTROS_TAREA } from './filtros';
 import { Tablero } from './Tablero';
 import { Votacion } from './Votacion';
 
@@ -30,12 +41,20 @@ export { Tablero, Votacion };
 
 /** Layout de Tareas: pestañas Tablero · Lista · Backlog · Votación. El invitado ve IN-02. */
 export function TareasLayout() {
-  const { equipo, base } = useEquipoActual();
+  const { equipo, base, puede } = useEquipoActual();
   const loc = useLocation();
   const nav = useNavigate();
   const acc = useAcciones();
   const esInvitado = equipo.mi_rol === 'invitado';
   const conteos = useConteosTareas(equipo.id, !esInvitado);
+  // Aviso de una redirección (por ejemplo, del backlog): se muestra hasta cambiar de pestaña y se
+  // quita del historial para que no reaparezca al recargar.
+  const avisoRuta = (loc.state as { aviso?: string } | null)?.aviso;
+  const [aviso, setAviso] = useState(avisoRuta);
+  if (avisoRuta && avisoRuta !== aviso) setAviso(avisoRuta);
+  useEffect(() => {
+    if (avisoRuta) void nav(loc.pathname + loc.search, { replace: true, state: null });
+  }, [avisoRuta, loc.pathname, loc.search, nav]);
 
   if (esInvitado) {
     return (
@@ -55,6 +74,8 @@ export function TareasLayout() {
   );
   const esLider = equipo.mi_rol === 'lider';
   const sprint = equipo.sprints.find((s) => s.estado === 'activo');
+  // El backlog solo lo ve el líder (retroalimentación, bloque 5a); la ruta también lo impide.
+  const veBacklog = puede('ver_backlog').permitido;
   return (
     <div className="space-y-4">
       <Encabezado
@@ -75,14 +96,22 @@ export function TareasLayout() {
           ) : undefined
         }
       />
+      {aviso && (
+        <Banner tono="info" icono={<Lock />}>
+          {aviso}
+        </Banner>
+      )}
       <Segmentado
         etiqueta="Vista de tareas"
         valor={seg ?? 'tablero'}
-        onChange={(v) => nav(v === 'tablero' ? ruta : `${ruta}/${v}`)}
+        onChange={(v) => {
+          setAviso(undefined);
+          void nav(v === 'tablero' ? ruta : `${ruta}/${v}`);
+        }}
         opciones={[
           { valor: 'tablero', etiqueta: 'Tablero' },
           { valor: 'lista', etiqueta: 'Lista' },
-          { valor: 'backlog', etiqueta: 'Backlog' },
+          ...(veBacklog ? [{ valor: 'backlog' as const, etiqueta: 'Backlog' }] : []),
           { valor: 'votacion', etiqueta: 'Votación', contador: conteos.data?.votacion },
         ]}
       />
@@ -142,20 +171,35 @@ export function TareasCompartidas() {
   );
 }
 
-/** EQ-03: lista de tareas (todo menos lo que está o estuvo en votación sin prosperar). */
+const PESO_PRIORIDAD = { alta: 0, media: 1, baja: 2 } as const;
+const ORDEN_ESTADO = Object.keys(NOMBRE_ESTADO);
+const venceEn = (t: TareaEquipo) => (t.vence_en ? Date.parse(t.vence_en) : Infinity);
+
+/**
+ * EQ-03: las tareas del tablero (sprint en curso) en una tabla, ordenable por columna para
+ * revisarlas rápido. Usa el mismo filtro que el Tablero, con su propio estado y sin vista por rol.
+ */
 export function ListaTareas() {
-  const { equipo } = useEquipoActual();
-  const consulta = useTareasEquipo(equipo.id, 'todas');
+  const { equipo, usuarioId } = useEquipoActual();
+  const consulta = useTareasEquipo(equipo.id, 'tablero');
   const acc = useAcciones();
+  const [f, setF] = useState(SIN_FILTROS_TAREA);
   return (
-    <div data-name="NX/EQ-03-Lista">
+    <div className="space-y-3" data-name="NX/EQ-03-Lista">
+      <p className="text-sm text-muted">
+        Las mismas tareas del Tablero en una tabla: ordénalas por cualquier columna para revisarlas
+        rápido.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <FiltrosTareas
+          valor={f}
+          onCambiar={setF}
+          miembros={equipo.miembros}
+          usuarioId={usuarioId}
+        />
+      </div>
       <EstadosDatos
-        consulta={{
-          ...consulta,
-          data: consulta.data?.filter(
-            (t) => !['propuesta', 'rechazada', 'cancelada'].includes(t.estado),
-          ),
-        }}
+        consulta={consulta}
         vacio={
           <Vacio
             icono={<Inbox />}
@@ -175,57 +219,110 @@ export function ListaTareas() {
           />
         }
       >
-        {(tareas) => (
-          <Tabla
-            titulo="Tareas del equipo"
-            filas={tareas}
-            idFila={(t) => t.id}
-            columnas={[
-              {
-                clave: 'codigo',
-                titulo: 'Código',
-                celda: (t: TareaEquipo) => codigoTarea(t.codigo),
-              },
-              {
-                clave: 'titulo',
-                titulo: 'Tarea',
-                celda: (t) => (
-                  <button
-                    type="button"
-                    onClick={() => acc.abrirTarea(t.id)}
-                    className="max-w-72 truncate text-left font-medium hover:underline"
-                  >
-                    {t.titulo}
-                  </button>
-                ),
-              },
-              {
-                clave: 'estado',
-                titulo: 'Estado',
-                celda: (t) => <InsigniaEstado estado={t.estado} />,
-              },
-              {
-                clave: 'responsable',
-                titulo: 'Responsable',
-                celda: (t) => t.responsable?.nombre ?? 'Sin asignar',
-              },
-              {
-                clave: 'avance',
-                titulo: 'Avance',
-                numerica: true,
-                celda: (t) => `${t.progreso} %`,
-              },
-              { clave: 'entrega', titulo: 'Entrega', celda: (t) => <InsigniaSemaforo tarea={t} /> },
-              { clave: 'prioridad', titulo: 'Prioridad', celda: (t) => PRIORIDADES[t.prioridad] },
-            ]}
-          />
-        )}
+        {(todas) => {
+          const tareas = aplicarFiltros(todas, f);
+          if (!tareas.length) {
+            return (
+              <Vacio
+                icono={<Search />}
+                titulo="Sin resultados con estos filtros"
+                texto="Prueba con otros criterios."
+                accion={<Boton onClick={() => setF(SIN_FILTROS_TAREA)}>Limpiar filtros</Boton>}
+              />
+            );
+          }
+          return (
+            <Tabla
+              titulo="Tareas del equipo"
+              filas={tareas}
+              idFila={(t) => t.id}
+              columnas={[
+                {
+                  clave: 'codigo',
+                  titulo: 'Código',
+                  celda: (t: TareaEquipo) => codigoTarea(t.codigo),
+                  orden: (a, b) => a.codigo - b.codigo,
+                },
+                {
+                  clave: 'titulo',
+                  titulo: 'Tarea',
+                  celda: (t) => (
+                    <button
+                      type="button"
+                      onClick={() => acc.abrirTarea(t.id)}
+                      className="max-w-72 truncate text-left font-medium hover:underline"
+                    >
+                      {t.titulo}
+                    </button>
+                  ),
+                  orden: (a, b) => a.titulo.localeCompare(b.titulo, 'es'),
+                },
+                {
+                  clave: 'estado',
+                  titulo: 'Estado',
+                  celda: (t) => <InsigniaEstado estado={t.estado} />,
+                  orden: (a, b) => ORDEN_ESTADO.indexOf(a.estado) - ORDEN_ESTADO.indexOf(b.estado),
+                },
+                {
+                  clave: 'responsable',
+                  titulo: 'Responsable',
+                  celda: (t) => t.responsable?.nombre ?? 'Sin asignar',
+                  orden: (a, b) =>
+                    (a.responsable?.nombre ?? '~').localeCompare(
+                      b.responsable?.nombre ?? '~',
+                      'es',
+                    ),
+                },
+                {
+                  clave: 'avance',
+                  titulo: 'Avance',
+                  numerica: true,
+                  celda: (t) => `${t.progreso} %`,
+                  orden: (a, b) => a.progreso - b.progreso,
+                },
+                {
+                  clave: 'entrega',
+                  titulo: 'Entrega',
+                  celda: (t) => <InsigniaSemaforo tarea={t} />,
+                  orden: (a, b) =>
+                    venceEn(a) - venceEn(b) ||
+                    Number(!!semaforo(b)?.urgente) - Number(!!semaforo(a)?.urgente),
+                },
+                {
+                  clave: 'prioridad',
+                  titulo: 'Prioridad',
+                  celda: (t) => PRIORIDADES[t.prioridad],
+                  orden: (a, b) => PESO_PRIORIDAD[a.prioridad] - PESO_PRIORIDAD[b.prioridad],
+                },
+              ]}
+            />
+          );
+        }}
       </EstadosDatos>
     </div>
   );
 }
 
-/** EQ-04: backlog priorizable (solo el líder reordena y sube tareas al tablero). */
+/**
+ * Ruta del backlog: solo el líder (`ver_backlog`). A quien llega por un enlace directo se le
+ * lleva al tablero con un aviso que explica por qué.
+ */
+export function BacklogRuta() {
+  const { puede, base } = useEquipoActual();
+  const r = puede('ver_backlog');
+  if (!r.permitido) {
+    return (
+      <Navigate
+        to={`${base}/tareas`}
+        replace
+        state={{ aviso: `${r.motivo} Te mostramos el tablero.` }}
+      />
+    );
+  }
+  return <Backlog />;
+}
+
+/** EQ-04: backlog priorizable. Solo lo ve el líder: reordena y sube tareas al tablero. */
 export function Backlog() {
   const { equipo } = useEquipoActual();
   const consulta = useTareasEquipo(equipo.id, 'backlog');
@@ -262,11 +359,10 @@ export function Backlog() {
 
   return (
     <div className="space-y-3" data-name="NX/EQ-04-Backlog">
-      {!esLider && (
-        <Banner tono="info" icono={<Lock />}>
-          Solo el líder prioriza el backlog y pasa tareas al tablero.
-        </Banner>
-      )}
+      <p className="text-sm text-muted">
+        Trabajo pendiente que aún no entra a un sprint, ordenado por prioridad: de aquí eliges qué
+        pasa al siguiente.
+      </p>
       <EstadosDatos
         consulta={consulta}
         vacio={
