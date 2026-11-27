@@ -16,7 +16,7 @@ import { useEquipoActual } from '../contexto';
 
 type Filtro = TipoActividad | 'todo';
 
-/** EQ-18: registro de actividad del equipo, filtrable por tipo y por páginas. */
+/** EQ-18 · Historial (antes «Actividad»): cambios del equipo, filtrable por tipo y por páginas. */
 export function Actividad() {
   const { equipo } = useEquipoActual();
   const [filtro, setFiltro] = useState<Filtro>('todo');
@@ -25,11 +25,11 @@ export function Actividad() {
   return (
     <div className="space-y-4" data-name="NX/EQ-18-Actividad">
       <Encabezado
-        titulo="Actividad"
+        titulo="Historial"
         descripcion="Todo lo que pasa en el equipo, del más reciente al más antiguo."
       />
       <Segmentado
-        etiqueta="Tipo de actividad"
+        etiqueta="Tipo de cambio"
         valor={filtro}
         onChange={setFiltro}
         opciones={[
@@ -46,7 +46,7 @@ export function Actividad() {
         vacio={
           <Vacio
             icono={<Activity />}
-            titulo="Sin actividad"
+            titulo="Sin historial todavía"
             texto="Aquí aparecerá cada cambio del equipo."
           />
         }

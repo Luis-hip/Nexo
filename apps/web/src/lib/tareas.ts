@@ -77,6 +77,16 @@ export function semaforo(t: TareaConPlazo): Semaforo | null {
   return { nivel: 'ok', texto: 'A tiempo', urgente: false };
 }
 
+/** Plazo de una tarea para el filtro del tablero: el mismo semáforo que se ve en la tarjeta. */
+export type Plazo = 'a_tiempo' | 'con_retraso' | 'vencida';
+export function plazoDe(t: TareaConPlazo): Plazo | null {
+  const s = semaforo(t);
+  if (!s) return null;
+  if (s.nivel === 'danger') return 'vencida';
+  if (t.estado === 'completada' && t.resultado === 'con_retraso') return 'con_retraso';
+  return 'a_tiempo';
+}
+
 export function esUrgente24h(t: TareaConPlazo) {
   return (
     !!t.vence_en &&

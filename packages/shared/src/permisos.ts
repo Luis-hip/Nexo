@@ -188,6 +188,15 @@ export const MATRIZ_PERMISOS = {
   ver_calendario: fila('si', 'si', 'si', 'no', 'Los invitados no ven el calendario completo.'),
   ver_archivos: fila('na', 'si', 'si', 'no', 'Los invitados no ven los archivos del equipo.'),
   ver_sprints: fila('na', 'si', 'si', 'no', 'Los invitados no ven los sprints.'),
+  // Retroalimentación (bloque 5a): el backlog es la lista con la que el líder planea el siguiente
+  // sprint; a integrantes e invitados no les sirve en su trabajo diario.
+  ver_backlog: fila(
+    'na',
+    'si',
+    'no',
+    'no',
+    'El backlog solo lo ve el líder: es la lista con la que planea el siguiente sprint.',
+  ),
   configurar_equipo: fila('na', 'si', 'no', 'no', 'Solo el líder configura el equipo.'),
   canal_invitados: fila('na', 'si', 'si', 'si', SIN_ACCESO),
 } as const satisfies Record<string, Fila>;
